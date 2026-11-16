@@ -191,6 +191,158 @@ class DownloadTaskState:
         return asdict(self)
 
 
+MIN_COMPUTE_GPU_VRAM_GB = 8.0
+
+
+def _detect_system_ram_gb() -> float:
+    try:
+        sys_name = platform.system()
+        if sys_name == "Windows":
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                return round(stat.ullTotalPhys / (1024**3), 1)
+        elif sys_name == "Darwin":
+            mem_bytes = int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip())
+            return round(mem_bytes / (1024**3), 1)
+        elif Path("/proc/meminfo").exists():
+            for line in Path("/proc/meminfo").read_text().splitlines():
+                if line.startswith("MemTotal:"):
+                    kb = int(line.split()[1])
+                    return round(kb / (1024**2), 1)
+    except Exception:
+        pass
+    return 64.0
+
+
+def recommend_hardware_profile(
+    detected_gpus: List[dict],
+    cuda_visible_devices: Optional[str] = None,
+) -> dict:
+    """
+    Filter out display/low-VRAM (< 8 GB) or severely asymmetric secondary GPUs and
+    recommend the safest, fastest Strata hardware profile + CUDA_VISIBLE_DEVICES mask.
+    """
+    visible_filter: Optional[List[int]] = None
+    if cuda_visible_devices is not None:
+        raw = cuda_visible_devices.strip()
+        if raw in ("-1", "none", "None"):
+            visible_filter = []
+        elif raw != "":
+            parsed: List[int] = []
+            for tok in raw.split(","):
+                tok = tok.strip()
+                if tok.isdigit():
+                    parsed.append(int(tok))
+            if parsed:
+                visible_filter = parsed
+
+    ignored_gpus: List[dict] = []
+    compute_candidates: List[dict] = []
+
+    for g in detected_gpus:
+        if visible_filter is not None and g["index"] not in visible_filter:
+            ignored_gpus.append({**g, "reason": "Excluded by CUDA_VISIBLE_DEVICES"})
+            continue
+        if g["vram_gb"] < MIN_COMPUTE_GPU_VRAM_GB:
+            ignored_gpus.append(
+                {**g, "reason": f"VRAM < {MIN_COMPUTE_GPU_VRAM_GB:.0f} GB (display/utility GPU excluded from compute)"}
+            )
+            continue
+        compute_candidates.append(g)
+
+    # Sort compute candidates by VRAM descending (tie-break by GPU index ascending)
+    ranked = sorted(compute_candidates, key=lambda x: (-x["vram_gb"], x["index"]))
+
+    selected_gpus: List[dict] = []
+    if len(ranked) >= 2:
+        g0, g1 = ranked[0], ranked[1]
+        if g0["vram_gb"] >= 28.0 and g1["vram_gb"] < 24.0:
+            # A single flagship >= 28 GB card (e.g. RTX 5090) outperforms splitting across an asymmetric secondary GPU
+            selected_gpus = [g0]
+            for extra in ranked[1:]:
+                ignored_gpus.append(
+                    {
+                        **extra,
+                        "reason": "Single flagship GPU (>= 28 GB) preferred over asymmetric secondary GPU",
+                    }
+                )
+        elif g1["vram_gb"] >= 10.0:
+            selected_gpus = sorted([g0, g1], key=lambda x: x["index"])
+            for extra in ranked[2:]:
+                ignored_gpus.append({**extra, "reason": "Not needed for 2-GPU pipeline sharding"})
+        else:
+            selected_gpus = [g0]
+            for extra in ranked[1:]:
+                ignored_gpus.append(
+                    {**extra, "reason": "VRAM < 10 GB for dual-GPU sharding; using primary GPU only"}
+                )
+    elif len(ranked) == 1:
+        selected_gpus = [ranked[0]]
+
+    compute_num_gpus = len(selected_gpus)
+    compute_vram = round(sum(g["vram_gb"] for g in selected_gpus), 1)
+
+    if compute_num_gpus >= 2:
+        pair_min_vram = min(g["vram_gb"] for g in selected_gpus)
+        if pair_min_vram >= 14.0 and compute_vram >= 28.0:
+            rec_profile = "dual_5060ti_32gb"
+            rec_quant = "fp8_e4m3"
+        elif pair_min_vram >= 10.0 and compute_vram >= 20.0:
+            rec_profile = "dual_5060ti_24gb"
+            rec_quant = "int4_awq"
+        else:
+            rec_profile = "single_12gb_minimum"
+            rec_quant = "int4_awq"
+    elif compute_num_gpus == 1:
+        vram = selected_gpus[0]["vram_gb"]
+        if vram >= 28.0:
+            rec_profile = "single_5090_32gb"
+            rec_quant = "fp8_e4m3"
+        elif vram >= 21.0:
+            rec_profile = "single_4090_24gb"
+            rec_quant = "fp8_e4m3"
+        elif vram >= 14.0:
+            rec_profile = "single_16gb_lowvram"
+            rec_quant = "int4_awq"
+        else:
+            rec_profile = "single_12gb_minimum"
+            rec_quant = "int4_awq"
+    else:
+        # No CUDA GPUs detected (e.g. macOS / CPU dev host)
+        rec_profile = "dual_5060ti_32gb"
+        rec_quant = "fp8_e4m3"
+
+    rec_cuda_visible = ",".join(str(g["index"]) for g in selected_gpus) if selected_gpus else None
+
+    return {
+        "selected_compute_gpus": selected_gpus,
+        "ignored_gpus": ignored_gpus,
+        "num_gpus": compute_num_gpus,
+        "total_vram_gb": compute_vram,
+        "raw_num_gpus": len(detected_gpus),
+        "raw_total_vram_gb": round(sum(g["vram_gb"] for g in detected_gpus), 1),
+        "recommended_cuda_visible_devices": rec_cuda_visible,
+        "recommended_profile_id": rec_profile,
+        "recommended_quantization": rec_quant,
+    }
+
+
 class StrataModelManager:
     """
     Manages Hugging Face weight downloads, hardware auto-detection, and Strata 50-block
@@ -246,53 +398,20 @@ class StrataModelManager:
         disk_usage = shutil.disk_usage(self.weights_dir)
         free_disk_gb = round(disk_usage.free / (1024**3), 1)
         total_disk_gb = round(disk_usage.total / (1024**3), 1)
+        sys_ram_gb = _detect_system_ram_gb()
 
-        sys_ram_gb = 64.0
-        try:
-            if platform.system() == "Darwin":
-                mem_bytes = int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip())
-                sys_ram_gb = round(mem_bytes / (1024**3), 1)
-            elif Path("/proc/meminfo").exists():
-                for line in Path("/proc/meminfo").read_text().splitlines():
-                    if line.startswith("MemTotal:"):
-                        kb = int(line.split()[1])
-                        sys_ram_gb = round(kb / (1024**2), 1)
-                        break
-        except Exception:
-            pass
-
-        total_vram = sum(g["vram_gb"] for g in gpus)
-        num_gpus = len(gpus)
-
-        if num_gpus >= 2 and total_vram >= 28.0:
-            rec_profile = "dual_5060ti_32gb"
-            rec_quant = "fp8_e4m3"
-        elif num_gpus >= 2 and total_vram >= 20.0:
-            rec_profile = "dual_5060ti_24gb"
-            rec_quant = "int4_awq"
-        elif num_gpus == 1 and total_vram >= 28.0:
-            rec_profile = "single_5090_32gb"
-            rec_quant = "fp8_e4m3"
-        elif num_gpus == 1 and total_vram >= 22.0:
-            rec_profile = "single_4090_24gb"
-            rec_quant = "fp8_e4m3"
-        elif num_gpus == 1 and total_vram >= 14.0:
-            rec_profile = "single_16gb_lowvram"
-            rec_quant = "int4_awq"
-        else:
-            rec_profile = "dual_5060ti_32gb"
-            rec_quant = "fp8_e4m3"
+        rec = recommend_hardware_profile(
+            detected_gpus=gpus,
+            cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES"),
+        )
 
         return {
             "platform": f"{platform.system()} {platform.machine()}",
             "detected_gpus": gpus,
-            "num_gpus": num_gpus,
-            "total_vram_gb": round(total_vram, 1),
+            **rec,
             "system_ram_gb": sys_ram_gb,
             "free_nvme_gb": free_disk_gb,
             "total_nvme_gb": total_disk_gb,
-            "recommended_profile_id": rec_profile,
-            "recommended_quantization": rec_quant,
         }
 
     def get_component_status(self, component_id: str) -> dict:

@@ -652,12 +652,15 @@ There are **two differences** between those two commands: **which DiT partitions
 
 ### Q8: I have multiple GPUs on my machine — how does `openfal` detect or select the specific ones I want to use?
 1. **How Auto-Detection Works (`openfal detect` / `/v1/models/hardware-detect`):**
-   * `StrataModelManager.detect_hardware()` queries `nvidia-smi` (falling back to `torch.cuda.device_count()`) to read each GPU's index, model name, and VRAM, sums the total available VRAM, and recommends the matching profile:
-     * `2+ GPUs, >= 28 GB VRAM` -> `dual_5060ti_32gb` (`fp8_e4m3`)
-     * `2+ GPUs, >= 20 GB VRAM` -> `dual_5060ti_24gb` (`int4_awq`)
-     * `1 GPU, >= 28 GB VRAM` -> `single_5090_32gb` (`fp8_e4m3`)
-     * `1 GPU, >= 22 GB VRAM` -> `single_4090_24gb` (`fp8_e4m3`)
-     * `1 GPU, >= 14 GB VRAM` -> `single_16gb_lowvram` (`int4_awq`)
+   * `StrataModelManager.detect_hardware()` queries `nvidia-smi` (falling back to `torch.cuda.device_count()`), honors `CUDA_VISIBLE_DEVICES` if set, and **automatically excludes secondary display/low-VRAM GPUs (`< 8 GB`, such as an `NVIDIA T400 4GB` paired with an `RTX 5090`)** as well as weak asymmetric secondary cards when a `>= 28 GB` flagship GPU is present.
+   * Based on the eligible compute GPUs (`selected_compute_gpus`), it reports `recommended_cuda_visible_devices` and selects the matching profile:
+     * `2+ symmetric compute GPUs (min >= 14 GB, total >= 28 GB)` -> `dual_5060ti_32gb` (`fp8_e4m3`)
+     * `2+ symmetric compute GPUs (min >= 10 GB, total >= 20 GB)` -> `dual_5060ti_24gb` (`int4_awq`)
+     * `1 GPU >= 28 GB` -> `single_5090_32gb` (`fp8_e4m3`)
+     * `1 GPU >= 21 GB` -> `single_4090_24gb` (`fp8_e4m3`)
+     * `1 GPU >= 14 GB` -> `single_16gb_lowvram` (`int4_awq`)
+     * `1 GPU >= 8 GB` -> `single_12gb_minimum` (`int4_awq`)
+   * Running `openfal serve` (default `--profile auto`) automatically uses `recommended_profile_id` and pins `CUDA_VISIBLE_DEVICES` to `recommended_cuda_visible_devices`!
 2. **How to Pin `openfal` to Specific GPUs (e.g., use GPUs 1 & 2, leave GPU 0 for display/gaming):**
    * **Use `CUDA_VISIBLE_DEVICES`** when launching `openfal` so CUDA/PyTorch only sees the GPUs you choose, and pair it with `--profile`:
      ```bash

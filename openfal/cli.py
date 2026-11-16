@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -18,22 +19,39 @@ from openfal.engine.runner import OpenFalRunner
 
 
 def cmd_serve(args: argparse.Namespace) -> None:
-    cfg = get_default_config(profile_id=args.profile)
+    weights_path = Path(args.weights_dir) if args.weights_dir else Path("./weights/MiniMax-H3")
+    selected_profile = args.profile
+    hw_info = None
+
+    if selected_profile == "auto":
+        mgr = StrataModelManager(weights_path)
+        hw_info = mgr.detect_hardware()
+        selected_profile = hw_info["recommended_profile_id"]
+        if hw_info.get("recommended_cuda_visible_devices") and not os.environ.get("CUDA_VISIBLE_DEVICES"):
+            os.environ["CUDA_VISIBLE_DEVICES"] = hw_info["recommended_cuda_visible_devices"]
+
+    cfg = get_default_config(profile_id=selected_profile)
     cfg.host = args.host
     cfg.port = args.port
     if args.weights_dir:
-        cfg.weights_dir = Path(args.weights_dir)
+        cfg.weights_dir = weights_path
 
     from openfal.server.app import create_app
 
     app = create_app(cfg)
     print("==========================================================================")
-    print("  openfal v0.1.0 — Strata-DiT Offload Inference Engine for MiniMax H3")
-    print(f"  Hardware Profile : {cfg.profile.display_name}")
+    print("  openfal v0.1.0 — Strata-DiT Offload Engine (Wan 2.2 MoE / Qwen-Image-2.1 / MiniMax H3)")
+    print(f"  Hardware Profile : {cfg.profile.display_name} ({cfg.profile_id})")
+    if hw_info and hw_info.get("selected_compute_gpus"):
+        gpu_desc = ", ".join(f"GPU {g['index']}: {g['name']} ({g['vram_gb']} GB)" for g in hw_info["selected_compute_gpus"])
+        print(f"  Compute GPU(s)   : {gpu_desc}")
+    if hw_info and hw_info.get("ignored_gpus"):
+        ign_desc = ", ".join(f"GPU {g['index']}: {g['name']} [{g['reason']}]" for g in hw_info["ignored_gpus"])
+        print(f"  Ignored GPU(s)   : {ign_desc}")
     print(f"  VRAM Counter     : {cfg.profile.resident_vram_blocks}/50 DiT blocks ({cfg.profile.quantization.value})")
     print(f"  Host RAM Pantry  : {50 - cfg.profile.resident_vram_blocks}/50 DiT blocks (Async PCIe DMA)")
     print(f"  Studio Web UI    : http://{cfg.host if cfg.host != '0.0.0.0' else 'localhost'}:{cfg.port}/")
-    print(f"  fal.ai REST API  : http://{cfg.host if cfg.host != '0.0.0.0' else 'localhost'}:{cfg.port}/minimax/h3/text-to-video")
+    print(f"  fal.ai REST API  : http://{cfg.host if cfg.host != '0.0.0.0' else 'localhost'}:{cfg.port}/wan/v2.2/text-to-video")
     print("==========================================================================")
     uvicorn.run(app, host=cfg.host, port=cfg.port, log_level="info")
 
@@ -121,9 +139,9 @@ def main() -> None:
     p_serve.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
     p_serve.add_argument(
         "--profile",
-        choices=list(HARDWARE_PROFILES.keys()),
-        default="dual_5060ti_32gb",
-        help="Consumer GPU offload profile",
+        choices=["auto"] + list(HARDWARE_PROFILES.keys()),
+        default="auto",
+        help="Consumer GPU offload profile (default: auto-detect compute GPUs)",
     )
     p_serve.add_argument("--weights-dir", default=None, help="Path to MiniMax-H3 weights directory")
     p_serve.set_defaults(func=cmd_serve)

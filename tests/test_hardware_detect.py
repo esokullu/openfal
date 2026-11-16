@@ -1,0 +1,63 @@
+from openfal.engine.downloader import recommend_hardware_profile
+
+
+def test_rtx_5090_plus_t400_4gb_excludes_display_gpu() -> None:
+    """Reproduces real Windows rig: GPU 0 = RTX 5090 (31.8 GB), GPU 1 = T400 (4.0 GB)."""
+    gpus = [
+        {"index": 0, "name": "NVIDIA GeForce RTX 5090", "vram_gb": 31.8},
+        {"index": 1, "name": "NVIDIA T400 4GB", "vram_gb": 4.0},
+    ]
+    rec = recommend_hardware_profile(gpus)
+    assert rec["recommended_profile_id"] == "single_5090_32gb"
+    assert rec["recommended_quantization"] == "fp8_e4m3"
+    assert rec["num_gpus"] == 1
+    assert rec["total_vram_gb"] == 31.8
+    assert rec["recommended_cuda_visible_devices"] == "0"
+    assert len(rec["ignored_gpus"]) == 1
+    assert rec["ignored_gpus"][0]["index"] == 1
+
+
+def test_rtx_5090_plus_asymmetric_12gb_prefers_flagship_single_gpu() -> None:
+    gpus = [
+        {"index": 0, "name": "NVIDIA GeForce RTX 3060", "vram_gb": 12.0},
+        {"index": 1, "name": "NVIDIA GeForce RTX 5090", "vram_gb": 31.8},
+    ]
+    rec = recommend_hardware_profile(gpus)
+    assert rec["recommended_profile_id"] == "single_5090_32gb"
+    assert rec["recommended_cuda_visible_devices"] == "1"
+    assert rec["num_gpus"] == 1
+
+
+def test_dual_5060ti_16gb_and_dual_12gb_detection() -> None:
+    dual_16 = [
+        {"index": 0, "name": "NVIDIA GeForce RTX 5060 Ti", "vram_gb": 16.0},
+        {"index": 1, "name": "NVIDIA GeForce RTX 5060 Ti", "vram_gb": 16.0},
+    ]
+    rec32 = recommend_hardware_profile(dual_16)
+    assert rec32["recommended_profile_id"] == "dual_5060ti_32gb"
+    assert rec32["recommended_quantization"] == "fp8_e4m3"
+    assert rec32["recommended_cuda_visible_devices"] == "0,1"
+
+    dual_12 = [
+        {"index": 0, "name": "NVIDIA GeForce RTX 4070", "vram_gb": 12.0},
+        {"index": 1, "name": "NVIDIA GeForce RTX 3060", "vram_gb": 12.0},
+    ]
+    rec24 = recommend_hardware_profile(dual_12)
+    assert rec24["recommended_profile_id"] == "dual_5060ti_24gb"
+    assert rec24["recommended_quantization"] == "int4_awq"
+    assert rec24["recommended_cuda_visible_devices"] == "0,1"
+
+
+def test_single_12gb_and_cuda_visible_devices_mask() -> None:
+    single_12 = [{"index": 0, "name": "NVIDIA GeForce RTX 3060", "vram_gb": 12.0}]
+    rec12 = recommend_hardware_profile(single_12)
+    assert rec12["recommended_profile_id"] == "single_12gb_minimum"
+    assert rec12["recommended_quantization"] == "int4_awq"
+
+    dual_16 = [
+        {"index": 0, "name": "NVIDIA GeForce RTX 5060 Ti", "vram_gb": 16.0},
+        {"index": 1, "name": "NVIDIA GeForce RTX 5060 Ti", "vram_gb": 16.0},
+    ]
+    masked = recommend_hardware_profile(dual_16, cuda_visible_devices="1")
+    assert masked["recommended_profile_id"] == "single_16gb_lowvram"
+    assert masked["recommended_cuda_visible_devices"] == "1"
