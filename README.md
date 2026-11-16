@@ -188,53 +188,339 @@ Open **`http://localhost:8000/`** in your browser to use the interactive **openf
 
 ## API Usage Examples
 
-### JavaScript / TypeScript (`@fal-ai/client`)
+`openfal` supports **three ways** to call every endpoint:
+1. **Official JavaScript/TypeScript `@fal-ai/client`** (set `fal.config({ proxyUrl: "http://localhost:8000" })`)
+2. **Python `openfal` SDK** (`openfal.run(...)`, `openfal.subscribe(...)`, `openfal.upload_file(...)`)
+3. **Direct REST / `curl`** (both synchronous `POST /{endpoint}` and queued `POST /queue/{endpoint}`)
 
-```javascript
-import { fal } from "@fal-ai/client";
+---
 
-// Point @fal-ai/client to your local openfal server
-fal.config({ proxyUrl: "http://localhost:8000" });
+### 1. Basic Text-to-Image (`minimax/h3/text-to-image`)
 
-const result = await fal.subscribe("minimax/h3-max/recast", {
-  input: {
-    prompt: "Cinematic close-up shot in studio lighting, natural expressions",
-    face_image_url: "https://example.com/my-reference-face.png",
-    target_video_url: "https://example.com/input-video.mp4",
-    duration: 5,
-    resolution: "768P",
-  },
-  logs: true,
-  onQueueUpdate: (update) => {
-    if (update.status === "IN_PROGRESS") {
-      update.logs.forEach((l) => console.log(l.message));
-    }
-  },
-});
+Generate native high-resolution images (`480P` up to `4K` / `4096x4096`) using the `H3-Image` partition:
 
-console.log("Generated Video:", result.data.video.url);
+**curl (Synchronous):**
+```bash
+curl -X POST http://localhost:8000/minimax/h3/text-to-image \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Minimalist glass pavilion on a Nordic fjord at golden hour, architectural photography, 8k",
+    "resolution": "2K",
+    "aspect_ratio": "16:9",
+    "num_images": 1,
+    "num_inference_steps": 8,
+    "seed": 42
+  }'
 ```
 
-### Python (`openfal` SDK)
+**Python (`openfal` SDK):**
+```python
+import openfal
+
+res = openfal.run(
+    "minimax/h3/text-to-image",
+    arguments={
+        "prompt": "Minimalist glass pavilion on a Nordic fjord at golden hour",
+        "resolution": "2K",
+        "aspect_ratio": "16:9",
+        "num_images": 1,
+        "seed": 42,
+    },
+    base_url="http://localhost:8000",
+)
+print("Image URL:", res["images"][0]["url"])
+```
+
+**JavaScript (`@fal-ai/client`):**
+```javascript
+import { fal } from "@fal-ai/client";
+fal.config({ proxyUrl: "http://localhost:8000" });
+
+const result = await fal.subscribe("minimax/h3/text-to-image", {
+  input: {
+    prompt: "Minimalist glass pavilion on a Nordic fjord at golden hour",
+    resolution: "2K",
+    aspect_ratio: "16:9",
+  },
+});
+console.log(result.data.images[0].url);
+```
+
+---
+
+### 2. Image-to-Image & Portrait / Face Edit (`minimax/h3/image-to-image`)
+
+Edit an existing image or transfer a reference face/identity onto a new portrait:
 
 ```python
 import openfal
 
-# Upload a local reference face image
-face_url = openfal.upload_file("./my_face.png", base_url="http://localhost:8000")
+# Upload input image and optional reference face image
+input_url = openfal.upload_file("./portrait_input.png", base_url="http://localhost:8000")
+face_url = openfal.upload_file("./reference_face.png", base_url="http://localhost:8000")
 
-# Run Video Face Swap / Recast (Ref2VA partition)
+res = openfal.run(
+    "minimax/h3/image-to-image",
+    arguments={
+        "prompt": "Cinematic oil painting portrait in Renaissance lighting, keeping exact facial identity",
+        "image_url": input_url,
+        "face_image_url": face_url,
+        "resolution": "2K",
+        "aspect_ratio": "1:1",
+        "num_inference_steps": 8,
+    },
+    base_url="http://localhost:8000",
+)
+print("Edited Image URL:", res["images"][0]["url"])
+```
+
+---
+
+### 3. Basic Text-to-Video with Synchronized Stereo Audio (`minimax/h3/text-to-video` & `minimax/h3-max/text-to-video`)
+
+Generate 5–15 second videos (`480P`, `768P`, `1080P`, `2K`) with native stereo soundscapes (`FL2VA` partition):
+
+**curl:**
+```bash
+curl -X POST http://localhost:8000/minimax/h3-max/text-to-video \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Cinematic drone shot rolling over a misty mountain ridge at dawn, wind howling and distant eagle cry.",
+    "duration": 5,
+    "resolution": "768P",
+    "aspect_ratio": "16:9",
+    "fps": 24,
+    "prompt_expansion_mode": "balanced",
+    "enable_audio": true
+  }'
+```
+
+**JavaScript (`@fal-ai/client` with live Strata logs):**
+```javascript
+const t2v = await fal.subscribe("minimax/h3-max/text-to-video", {
+  input: {
+    prompt: "Steam locomotive crossing a snowy viaduct at twilight, chugging engine and whistle stereo audio",
+    duration: 5,
+    resolution: "1080P",
+    aspect_ratio: "21:9",
+    prompt_expansion_mode: "balanced",
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.forEach((l) => console.log("[Strata]", l.message));
+    }
+  },
+});
+console.log("MP4 URL:", t2v.data.video.url);
+```
+
+---
+
+### 4. Image-to-Video: First-Frame & First/Last-Frame Conditioning (`minimax/h3-max/image-to-video`)
+
+Animate a single starting frame (`start_image_url`), or interpolate smoothly between a starting frame and an ending frame (`end_image_url`):
+
+```python
+import openfal
+
+start_frame = openfal.upload_file("./opening_shot.png", base_url="http://localhost:8000")
+end_frame = openfal.upload_file("./closing_shot.png", base_url="http://localhost:8000")
+
+res = openfal.subscribe(
+    "minimax/h3-max/image-to-video",
+    arguments={
+        "prompt": "Camera dollies forward as neon signs flicker to life in the rain, ambient rain audio",
+        "start_image_url": start_frame,
+        "end_image_url": end_frame,  # Optional closing keyframe for FL2VA interpolation
+        "duration": 5.0,
+        "resolution": "768P",
+        "aspect_ratio": "16:9",
+    },
+    base_url="http://localhost:8000",
+)
+print("Animated Video URL:", res["video"]["url"])
+```
+
+---
+
+### 5. Video Face Swap / Character Recast (`minimax/h3-max/recast`)
+
+Swap a face or replace a character in a target video while preserving original head motion, expressions, and scene lighting (`Ref2VA` partition):
+
+**Python (`openfal` SDK):**
+```python
+import openfal
+
+face_url = openfal.upload_file("./my_face.png", base_url="http://localhost:8000")
+target_vid_url = openfal.upload_file("./actor_clip.mp4", base_url="http://localhost:8000")
+
 res = openfal.subscribe(
     "minimax/h3-max/recast",
     arguments={
-        "prompt": "Cyberpunk detective talking in neon rain, stereo rain audio",
+        "prompt": "Character speaking naturally in warm studio lighting, preserving target expressions and motion",
         "face_image_url": face_url,
+        "target_video_url": target_vid_url,
         "duration": 5.0,
         "resolution": "768P",
     },
     base_url="http://localhost:8000",
 )
-print("Output MP4:", res["video"]["url"])
+print("Face-Swapped MP4:", res["video"]["url"])
+```
+
+**curl:**
+```bash
+curl -X POST http://localhost:8000/minimax/h3-max/recast \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Close-up interview shot in cinematic lighting, natural lip and eye movement",
+    "face_image_url": "http://localhost:8000/files/my_face.png",
+    "target_video_url": "http://localhost:8000/files/actor_clip.mp4",
+    "duration": 5,
+    "resolution": "768P"
+  }'
+```
+
+---
+
+### 6. Omni Reference-to-Video (`minimax/h3-max/reference-to-video`)
+
+Combine up to **9 reference images** (character face, outfit, environment, props), **3 reference videos** (camera trajectory / motion), and **3 reference audio clips** in a single unified context window:
+
+```javascript
+const omni = await fal.subscribe("minimax/h3-max/reference-to-video", {
+  input: {
+    prompt: "The detective from @image_1 wearing the coat from @image_2 walks through the alley in @image_3, matching the camera pan of @video_1",
+    reference_image_urls: [
+      "http://localhost:8000/files/detective_face.png",
+      "http://localhost:8000/files/trenchcoat.png",
+      "http://localhost:8000/files/cyberpunk_alley.png",
+    ],
+    reference_video_urls: [
+      "http://localhost:8000/files/camera_pan_ref.mp4",
+    ],
+    reference_audio_urls: [
+      "http://localhost:8000/files/voice_timbre_ref.wav",
+    ],
+    duration: 6,
+    resolution: "768P",
+    aspect_ratio: "16:9",
+  },
+});
+console.log("Omni-Reference Video:", omni.data.video.url);
+```
+
+---
+
+### 7. Video Editing: Relight & Insert-Video (`minimax/h3-max/relight` & `minimax/h3-max/insert-video`)
+
+**Relight an existing video (`minimax/h3-max/relight`):**
+```bash
+curl -X POST http://localhost:8000/minimax/h3-max/relight \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Relight scene with dramatic cyberpunk magenta and cyan neon rim lighting from the left",
+    "target_video_url": "http://localhost:8000/files/daylight_portrait.mp4",
+    "reference_image_urls": ["http://localhost:8000/files/neon_lighting_ref.png"],
+    "duration": 5,
+    "resolution": "768P"
+  }'
+```
+
+**Insert a character or object into a video (`minimax/h3-max/insert-video`):**
+```bash
+curl -X POST http://localhost:8000/minimax/h3-max/insert-video \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Insert the vintage red sports car from the reference image driving along the coastal road",
+    "target_video_url": "http://localhost:8000/files/coastal_road.mp4",
+    "reference_image_urls": ["http://localhost:8000/files/red_sports_car.png"],
+    "duration": 5,
+    "resolution": "768P"
+  }'
+```
+
+---
+
+### 8. Stylized Video Endpoints (`styles/hand-drawn` & `styles/16bit-pixel`)
+
+```bash
+# Hand-Drawn Anime / 2D Cel Animation Style
+curl -X POST http://localhost:8000/minimax/h3-max/styles/hand-drawn \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A young mage riding a clockwork owl over a floating library, Ghibli-inspired hand-drawn cel animation",
+    "duration": 5,
+    "resolution": "768P"
+  }'
+
+# 16-Bit Retro Pixel Art Style with Chiptune Stereo Audio
+curl -X POST http://localhost:8000/minimax/h3-max/styles/16bit-pixel \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "16-bit pixel art boss battle in a lava cavern, retro synth chiptune audio",
+    "duration": 5,
+    "resolution": "480P"
+  }'
+```
+
+---
+
+### 9. Queue Lifecycle & Server-Sent Events (SSE) Streaming
+
+If you are integrating without an SDK, you can drive the `fal.ai` queue lifecycle directly:
+
+```bash
+# 1. Enqueue a job asynchronously (returns request_id, status_url, response_url, cancel_url)
+REQ_ID=$(curl -s -X POST http://localhost:8000/queue/minimax/h3-max/text-to-video \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Aurora borealis dancing over an ice cave", "duration": 4}' | python3 -c "import sys,json; print(json.load(sys.stdin)['request_id'])")
+
+# 2. Stream real-time queue & Strata block-offload logs via SSE
+curl -N "http://localhost:8000/minimax/h3-max/text-to-video/requests/${REQ_ID}/status/stream?logs=1"
+
+# 3. Fetch final completed payload
+curl -s "http://localhost:8000/minimax/h3-max/text-to-video/requests/${REQ_ID}" | python3 -m json.tool
+
+# 4. Or cancel an in-flight job
+curl -X PUT "http://localhost:8000/minimax/h3-max/text-to-video/requests/${REQ_ID}/cancel"
+```
+
+---
+
+### 10. Strata Engine Control, VRAM Sleep/Wake & Model Installer API
+
+Manage your GPUs, switch hardware profiles on the fly, evict VRAM to Pinned RAM (`0 MB` idle VRAM), or trigger Hugging Face model downloads via REST:
+
+```bash
+# Inspect live 3-Tier Memory (VRAM Counter / Pinned RAM Pantry / NVMe Storeroom) & 50-block map
+curl -s http://localhost:8000/v1/engine/status | python3 -m json.tool
+
+# Hot-switch hardware profile (e.g. dual_5060ti_32gb, dual_5060ti_24gb, single_5090_32gb, single_12gb_minimum)
+# Optional: override exact number of DiT blocks pinned in VRAM Counter
+curl -X POST http://localhost:8000/v1/engine/profile \
+  -H "Content-Type: application/json" \
+  -d '{"profile_id": "dual_5060ti_24gb", "resident_vram_blocks": 24}'
+
+# Evict all resident GPU weights to Pinned Host RAM (0.0 GB GPU VRAM used while idle!)
+curl -X POST http://localhost:8000/v1/engine/sleep
+
+# Wake engine and restore pinned resident DiT blocks back to GPU VRAM Counter
+curl -X POST http://localhost:8000/v1/engine/wake
+
+# Auto-detect host GPUs, System RAM, and free NVMe space
+curl -s http://localhost:8000/v1/models/hardware-detect | python3 -m json.tool
+
+# Trigger Hugging Face model download + 50-block Strata shard packing via API
+curl -X POST http://localhost:8000/v1/models/download \
+  -H "Content-Type: application/json" \
+  -d '{
+    "component_id": "fl2va",
+    "quantization": "fp8_e4m3",
+    "mode": "hf_hub",
+    "run_async": true
+  }'
 ```
 
 ---
