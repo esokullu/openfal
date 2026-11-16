@@ -129,7 +129,13 @@ You do **not** need to download both model families! You can install **ONLY Mini
 | :--- | :--- | :---: | :---: | :--- |
 | **`minimax-omni-compact`** | **`Ref2VA` + `Qwen3-VL` + `VAE` only** *(0 bytes of Alibaba)* | **~36 GB** | **~67 GB** | **Ultimate Disk-Saver:** 1 single DiT handles Video, Face Swap, Omni-Ref, Stereo Audio & Frame/Image extraction! |
 | **`minimax-only`** | **`FL2VA` + `Ref2VA` + `H3-Image` + `Qwen3-VL` + `VAE`** *(0 bytes of Alibaba)* | **~69 GB** | **~131 GB** | Complete MiniMax-H3 suite (no Alibaba models downloaded) |
-| **`alibaba-only`** | **`Wan2.2-T2V` + `Wan2.2-I2V` + `Wan2.2-Animate` + `Qwen-Image-2.1`** *(0 bytes of MiniMax DiT)* | **~58 GB** | **~94 GB** | Complete Fast MoE Alibaba suite (no MiniMax DiT downloaded) |
+| **`alibaba-only`** | **`Wan2.2-T2V` + `Wan2.2-I2V` + `Wan2.2-Animate` + `Qwen-Image-2.1`** + shared `Qwen3-VL` + `VAE` | **~58 GB** | **~94 GB** | Complete Fast MoE Alibaba suite (no MiniMax DiT downloaded) |
+| **`all`** | **All 4 Alibaba models + all 3 MiniMax-H3 DiTs + `Qwen3-VL` + `VAE`** | **~108 GB** | **~196 GB** | Full multi-backend installation (every endpoint ready) |
+
+**Individual `--component` IDs** (if you want to pick a single model or shared module):
+* **Alibaba Fast Stack:** `wan22_t2v_moe` (~14.4GB INT4 / 27.5GB FP8), `wan22_i2v_moe` (~14.4GB / 27.5GB), `wan22_animate` (~7.2GB / 14.0GB), `qwen_image_21` (~3.8GB / 7.0GB)
+* **MiniMax-H3 Stack:** `fl2va` (~17.0GB / 33.0GB), `ref2va` (~17.0GB / 33.0GB), `h3-image` (~16.0GB / 31.0GB)
+* **Shared Components:** `qwen3_vl` (~16.5GB / 32.0GB), `vae` (~2.4GB)
 
 ```bash
 # Option A — Disk-Saver "Single Model Does Everything" (ONLY MiniMax-H3 Compact ~36GB in INT4):
@@ -141,7 +147,10 @@ openfal download --component minimax-only --quant fp8_e4m3
 # Option C — Fast Alibaba MoE Family ONLY (0 bytes of MiniMax DiT downloaded):
 openfal download --component alibaba-only --quant fp8_e4m3
 
-# Option D — Or pick any single component individually:
+# Option D — Download EVERYTHING (both Alibaba MoE + MiniMax-H3):
+openfal download --component all --quant fp8_e4m3
+
+# Option E — Or pick any single component individually:
 openfal download --component qwen_image_21 --quant fp8_e4m3    # Only 3.8 GB (INT4) / 7.0 GB (FP8)!
 openfal download --component wan22_animate --quant int4_awq    # Only 7.2 GB (INT4) for Video Face Swap!
 openfal download --component fl2va --quant int4_awq            # Only MiniMax FL2VA DiT
