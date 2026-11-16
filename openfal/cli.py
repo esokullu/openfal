@@ -108,6 +108,47 @@ def cmd_download(args: argparse.Namespace) -> None:
     print(f"[openfal download] SUCCESS ({task.downloaded_mb} MB processed at {task.speed_mbps} MB/s)")
 
 
+def cmd_cleanup(args: argparse.Namespace) -> None:
+    mgr = StrataModelManager(Path(args.weights_dir))
+    cache_path = Path(args.cache_dir) if args.cache else None
+    output_path = Path(args.output_dir) if args.outputs else None
+
+    preview = mgr.cleanup(
+        component_id=args.component,
+        incomplete_only=(args.component is None),
+        cache_dir=cache_path,
+        output_dir=output_path,
+        dry_run=True,
+    )
+
+    if preview["removed_count"] == 0:
+        print("[openfal cleanup] Nothing to clean up.")
+        return
+
+    print(f"[openfal cleanup] Found {preview['removed_count']} target(s) totaling {preview['freed_mb']} MB ({preview['freed_gb']} GB):")
+    for item in preview["removed"]:
+        print(f"  - {item['path']} ({item['freed_mb']} MB) [{item['reason']}]")
+
+    if args.dry_run:
+        print("[openfal cleanup] Dry run complete (no files deleted).")
+        return
+
+    if not args.yes:
+        reply = input("Proceed with deletion? [y/N]: ").strip().lower()
+        if reply not in ("y", "yes"):
+            print("[openfal cleanup] Aborted.")
+            return
+
+    res = mgr.cleanup(
+        component_id=args.component,
+        incomplete_only=(args.component is None),
+        cache_dir=cache_path,
+        output_dir=output_path,
+        dry_run=False,
+    )
+    print(json.dumps(res, indent=2))
+
+
 def cmd_benchmark(args: argparse.Namespace) -> None:
     cfg = get_default_config(profile_id=args.profile)
     runner = OpenFalRunner(cfg)
@@ -188,6 +229,25 @@ def main() -> None:
     p_dl.add_argument("--hf-token", default=None, help="Hugging Face token (or set HF_TOKEN env var)")
     p_dl.add_argument("--repo-id", default=None, help="Optional custom Hugging Face repo ID override")
     p_dl.set_defaults(func=cmd_download)
+
+    p_clean = sub.add_parser(
+        "cleanup",
+        help="Clean up partial/aborted Hugging Face downloads, specific model components, or caches",
+    )
+    p_clean.add_argument("--weights-dir", default="./weights/MiniMax-H3", help="Weights directory to clean")
+    p_clean.add_argument(
+        "--component",
+        choices=list(COMPONENT_BUNDLES.keys()) + list(MODEL_COMPONENTS.keys()),
+        default=None,
+        help="Remove a specific component or bundle completely (e.g. 'all', 'wan22_t2v_moe', 'minimax-only')",
+    )
+    p_clean.add_argument("--cache", action="store_true", help="Also clear openfal Layer-50 text encoder cache")
+    p_clean.add_argument("--cache-dir", default="./.cache/openfal")
+    p_clean.add_argument("--outputs", action="store_true", help="Also clear generated outputs directory")
+    p_clean.add_argument("--output-dir", default="./outputs")
+    p_clean.add_argument("--dry-run", action="store_true", help="Show what would be deleted without removing files")
+    p_clean.add_argument("-y", "--yes", action="store_true", help="Skip interactive confirmation prompt")
+    p_clean.set_defaults(func=cmd_cleanup)
 
     p_bench = sub.add_parser("benchmark", help="Run a local Strata-DiT pipeline benchmark")
     p_bench.add_argument("--profile", choices=list(HARDWARE_PROFILES.keys()), default="dual_5060ti_32gb")

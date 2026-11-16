@@ -161,6 +161,12 @@ openfal download --component fl2va --quant int4_awq            # ~10.6 GB Q4_K G
 
 # Inspect installed partitions and Strata shard readiness:
 openfal models
+
+# Clean up partial/aborted HF downloads (prompts for confirmation; add --dry-run or -y):
+openfal cleanup --dry-run                       # Preview incomplete HF download caches
+openfal cleanup                                 # Delete incomplete HF caches after [y/N] confirmation
+openfal cleanup --component wan22_t2v_moe       # Remove a single model folder (with confirmation)
+openfal cleanup --component all -y              # Remove all downloaded weights without prompt
 ```
 
 ---

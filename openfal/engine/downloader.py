@@ -872,3 +872,86 @@ class StrataModelManager:
         if comp_dir.exists():
             shutil.rmtree(comp_dir)
         return self.get_component_status(cid)
+
+    @staticmethod
+    def _dir_size_bytes(path: Path) -> int:
+        if not path.exists():
+            return 0
+        if path.is_file():
+            return path.stat().st_size
+        return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+
+    def cleanup(
+        self,
+        component_id: Optional[str] = None,
+        incomplete_only: bool = True,
+        cache_dir: Optional[Path] = None,
+        output_dir: Optional[Path] = None,
+        dry_run: bool = False,
+    ) -> dict:
+        """
+        Clean up partial/aborted Hugging Face download caches (`*.incomplete`, `*.lock`,
+        `.cache/huggingface/download`), specific component/bundle directories, or
+        openfal runtime cache/output directories.
+        """
+        removed_paths: List[dict] = []
+        freed_bytes = 0
+
+        def _delete_target(target: Path, reason: str) -> None:
+            nonlocal freed_bytes
+            if not target.exists():
+                return
+            size = self._dir_size_bytes(target)
+            freed_bytes += size
+            removed_paths.append(
+                {
+                    "path": str(target),
+                    "reason": reason,
+                    "freed_mb": round(size / (1024 * 1024), 2),
+                }
+            )
+            if not dry_run:
+                if target.is_dir():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+
+        if component_id:
+            comp_key = component_id.lower()
+            if comp_key in COMPONENT_BUNDLES:
+                target_ids = COMPONENT_BUNDLES[comp_key]
+            elif comp_key in MODEL_COMPONENTS:
+                target_ids = [comp_key]
+            else:
+                valid = list(COMPONENT_BUNDLES.keys()) + list(MODEL_COMPONENTS.keys())
+                raise ValueError(f"Unknown component or bundle '{component_id}'. Valid: {valid}")
+
+            for cid in target_ids:
+                spec = MODEL_COMPONENTS[cid]
+                _delete_target(self.weights_dir / spec.subdir, f"Removed component '{cid}'")
+
+            # If `--component all`, also clear any leftover `.cache` under weights_dir
+            if comp_key == "all":
+                _delete_target(self.weights_dir / ".cache", "Removed weights cache")
+        elif incomplete_only and self.weights_dir.exists():
+            # Clean Hugging Face incomplete download staging dirs and stray incomplete/lock files
+            for dl_cache in list(self.weights_dir.rglob(".cache/huggingface/download")):
+                _delete_target(dl_cache, "Incomplete Hugging Face download cache")
+            for pattern, label in (("*.incomplete", "Incomplete HF shard"), ("*.lock", "Stale HF lock file")):
+                for f in list(self.weights_dir.rglob(pattern)):
+                    _delete_target(f, label)
+
+        if cache_dir is not None and cache_dir.exists():
+            _delete_target(cache_dir, "Cleared openfal Layer-50 text encoder cache")
+
+        if output_dir is not None and output_dir.exists():
+            _delete_target(output_dir, "Cleared generated media outputs")
+
+        return {
+            "weights_dir": str(self.weights_dir.resolve()),
+            "dry_run": dry_run,
+            "removed_count": len(removed_paths),
+            "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+            "freed_gb": round(freed_bytes / (1024**3), 3),
+            "removed": removed_paths,
+        }

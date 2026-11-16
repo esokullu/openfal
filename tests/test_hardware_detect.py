@@ -1,3 +1,6 @@
+from pathlib import Path
+import argparse
+from openfal.cli import cmd_cleanup
 from openfal.engine.downloader import MODEL_COMPONENTS, StrataModelManager, recommend_hardware_profile
 
 
@@ -81,3 +84,46 @@ def test_single_12gb_and_cuda_visible_devices_mask() -> None:
     masked = recommend_hardware_profile(dual_16, cuda_visible_devices="1")
     assert masked["recommended_profile_id"] == "single_16gb_lowvram"
     assert masked["recommended_cuda_visible_devices"] == "1"
+
+
+def test_cleanup_incomplete_and_component_verification(tmp_path: Path, monkeypatch) -> None:
+    weights_dir = tmp_path / "weights"
+    comp_dir = weights_dir / "Wan2.2-T2V-A14B"
+    dl_cache = comp_dir / ".cache" / "huggingface" / "download"
+    dl_cache.mkdir(parents=True)
+    (dl_cache / "blob.incomplete").write_bytes(b"123456")
+    finished = comp_dir / "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
+    finished.write_bytes(b"abcdef")
+
+    mgr = StrataModelManager(weights_dir)
+
+    # Dry run keeps everything
+    dry = mgr.cleanup(dry_run=True)
+    assert dry["removed_count"] >= 1
+    assert dl_cache.exists()
+    assert finished.exists()
+
+    # Incomplete cleanup deletes partial HF cache but preserves finished safetensors
+    res_inc = mgr.cleanup(incomplete_only=True, dry_run=False)
+    assert res_inc["removed_count"] >= 1
+    assert not dl_cache.exists()
+    assert finished.exists()
+
+    # CLI verification prompt rejects on "n", deletes on "y"
+    args_no = argparse.Namespace(
+        weights_dir=str(weights_dir),
+        component="wan22_t2v_moe",
+        cache=False,
+        cache_dir=str(tmp_path / "cache"),
+        outputs=False,
+        output_dir=str(tmp_path / "out"),
+        dry_run=False,
+        yes=False,
+    )
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    cmd_cleanup(args_no)
+    assert finished.exists()
+
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    cmd_cleanup(args_no)
+    assert not comp_dir.exists()
