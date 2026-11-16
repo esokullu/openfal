@@ -627,6 +627,28 @@ There are **two differences** between those two commands: **which DiT partitions
 
 ---
 
+### Q8: I have multiple GPUs on my machine — how does `openfal` detect or select the specific ones I want to use?
+1. **How Auto-Detection Works (`openfal detect` / `/v1/models/hardware-detect`):**
+   * `StrataModelManager.detect_hardware()` queries `nvidia-smi` (falling back to `torch.cuda.device_count()`) to read each GPU's index, model name, and VRAM, sums the total available VRAM, and recommends the matching profile:
+     * `2+ GPUs, >= 28 GB VRAM` -> `dual_5060ti_32gb` (`fp8_e4m3`)
+     * `2+ GPUs, >= 20 GB VRAM` -> `dual_5060ti_24gb` (`int4_awq`)
+     * `1 GPU, >= 28 GB VRAM` -> `single_5090_32gb` (`fp8_e4m3`)
+     * `1 GPU, >= 22 GB VRAM` -> `single_4090_24gb` (`fp8_e4m3`)
+     * `1 GPU, >= 14 GB VRAM` -> `single_16gb_lowvram` (`int4_awq`)
+2. **How to Pin `openfal` to Specific GPUs (e.g., use GPUs 1 & 2, leave GPU 0 for display/gaming):**
+   * **Use `CUDA_VISIBLE_DEVICES`** when launching `openfal` so CUDA/PyTorch only sees the GPUs you choose, and pair it with `--profile`:
+     ```bash
+     # Example: Machine has 3 GPUs (0=Display, 1=RTX 5060 Ti, 2=RTX 5060 Ti)
+     # Expose only GPUs 1 and 2 to openfal as logical device 0 and device 1:
+     CUDA_VISIBLE_DEVICES=1,2 openfal serve --profile dual_5060ti_32gb --port 8000
+
+     # Example: Expose only GPU 1 (e.g. a single RTX 5090) and leave GPU 0 untouched:
+     CUDA_VISIBLE_DEVICES=1 openfal serve --profile single_5090_32gb --port 8000
+     ```
+   * **In Docker (`docker-compose.yml`):** Replace `count: all` under `deploy.resources.reservations.devices` with `device_ids: ['1', '2']` to bind only those specific GPUs into the container.
+
+---
+
 ## License
 
 Released under the [MIT License](LICENSE).
