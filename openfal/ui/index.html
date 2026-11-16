@@ -306,7 +306,7 @@
     <div class="brand">
       <div class="logo-badge">of</div>
       <div>
-        <h1>openfal <span class="pill">MiniMax-H3 33B</span></h1>
+        <h1>openfal <span class="pill">Wan 2.2 MoE &bull; Qwen-Image-2.1 &bull; MiniMax-H3</span></h1>
         <span class="sub">Strata-Inspired 3-Tier Offload Engine &bull; fal.ai Compatible API &bull; MIT License</span>
       </div>
     </div>
@@ -343,34 +343,42 @@
 
       <div class="card">
         <div class="card-title">
-          <span>MiniMax H3 Multimodal Endpoint</span>
-          <span id="activePartitionBadge" class="pill">Partition: FL2VA</span>
+          <span>Multimodal Endpoint (Wan 2.2 MoE + Qwen-Image-2.1 + MiniMax-H3)</span>
+          <span id="activePartitionBadge" class="pill">Partition: Wan2.2-T2V-A14B</span>
         </div>
 
         <div class="task-tabs" id="taskTabs">
-          <button class="task-tab active" data-ep="minimax/h3-max/text-to-video" data-part="FL2VA" onclick="selectTask(this)">
-            🎬 Text to Video
-            <small>minimax/h3-max/text-to-video</small>
+          <button class="task-tab active" data-ep="wan/v2.2/text-to-video" data-part="Wan2.2-T2V-A14B" onclick="selectTask(this)">
+            ⚡ Wan 2.2 MoE Text-to-Video
+            <small>wan/v2.2/text-to-video (27B-A14B)</small>
           </button>
-          <button class="task-tab" data-ep="minimax/h3-max/image-to-video" data-part="FL2VA" onclick="selectTask(this)">
-            🖼️ Image to Video
-            <small>minimax/h3-max/image-to-video</small>
+          <button class="task-tab" data-ep="wan/v2.2/image-to-video" data-part="Wan2.2-I2V-A14B" onclick="selectTask(this)">
+            ⚡ Wan 2.2 MoE Image-to-Video
+            <small>wan/v2.2/image-to-video (27B-A14B)</small>
+          </button>
+          <button class="task-tab" data-ep="wan/v2.2/animate" data-part="Wan2.2-Animate-14B" onclick="selectTask(this)">
+            🎭 Wan 2.2 Video Face Swap
+            <small>wan/v2.2/animate (14B Fast Recast)</small>
+          </button>
+          <button class="task-tab" data-ep="qwen/image-2.1/text-to-image" data-part="Qwen-Image-2.1" onclick="selectTask(this)">
+            ✨ Qwen-Image-2.1 Turbo (T2I)
+            <small>qwen/image-2.1/text-to-image (7B)</small>
+          </button>
+          <button class="task-tab" data-ep="qwen/image-2.1/edit" data-part="Qwen-Image-2.1" onclick="selectTask(this)">
+            🪄 Qwen-Image-2.1 Face/Ref Edit
+            <small>qwen/image-2.1/edit (10-Ref 7B)</small>
+          </button>
+          <button class="task-tab" data-ep="minimax/h3-max/text-to-video" data-part="FL2VA" onclick="selectTask(this)">
+            🎵 MiniMax-H3 Video + Stereo
+            <small>minimax/h3-max/text-to-video (33B)</small>
           </button>
           <button class="task-tab" data-ep="minimax/h3-max/recast" data-part="Ref2VA" onclick="selectTask(this)">
-            🎭 Video Face Swap / Recast
-            <small>minimax/h3-max/recast</small>
+            🎭 MiniMax-H3 Omni Face Swap
+            <small>minimax/h3-max/recast (33B Ref2VA)</small>
           </button>
           <button class="task-tab" data-ep="minimax/h3-max/reference-to-video" data-part="Ref2VA" onclick="selectTask(this)">
-            🧬 Omni Reference Video
+            🧬 MiniMax-H3 9-Ref Omni Video
             <small>minimax/h3-max/reference-to-video</small>
-          </button>
-          <button class="task-tab" data-ep="minimax/h3/text-to-image" data-part="H3-Image" onclick="selectTask(this)">
-            ✨ Text to Image (4K)
-            <small>minimax/h3/text-to-image</small>
-          </button>
-          <button class="task-tab" data-ep="minimax/h3/image-to-image" data-part="H3-Image" onclick="selectTask(this)">
-            🪄 Image / Face Edit
-            <small>minimax/h3/image-to-image</small>
           </button>
         </div>
 
@@ -513,8 +521,8 @@
   </main>
 
   <script>
-    let currentEndpoint = "minimax/h3-max/text-to-video";
-    let currentPartition = "FL2VA";
+    let currentEndpoint = "wan/v2.2/text-to-video";
+    let currentPartition = "Wan2.2-T2V-A14B";
     let isSleeping = false;
 
     async function initStudio() {
@@ -549,7 +557,7 @@
         refContainer.style.display = "none";
       } else {
         refContainer.style.display = "block";
-        if (currentEndpoint.includes("recast")) {
+        if (currentEndpoint.includes("recast") || currentEndpoint.includes("animate")) {
           refLabel.textContent = "Source Face / Character Identity Image (URL or Upload)";
           targetVideoGroup.style.display = "block";
           document.getElementById("promptInput").value = "Character speaking naturally in cinematic studio lighting, preserving target head motion and expressions.";
@@ -557,7 +565,7 @@
           refLabel.textContent = "Omni Reference Image URL (Subject / Style Consistency)";
           targetVideoGroup.style.display = "none";
         } else {
-          refLabel.textContent = "Start Frame / Input Image (URL or Upload)";
+          refLabel.textContent = "Start Frame / Reference Face Image (URL or Upload)";
           targetVideoGroup.style.display = "none";
         }
       }

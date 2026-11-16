@@ -27,7 +27,7 @@ def test_model_downloader_and_strata_shard_packer(tmp_path: Path) -> None:
     assert "recommended_profile_id" in hw_resp.json()
 
     st0 = client.get("/v1/models/status").json()
-    assert len(st0["components"]) == 5
+    assert len(st0["components"]) == 9
 
     # Pack 50-block Strata safetensors shards for Ref2VA (Video Face Swap partition)
     dl_resp = client.post(

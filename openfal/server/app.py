@@ -25,81 +25,138 @@ from openfal.server.schemas import MiniMaxH3Input, ModelDownloadRequest, Profile
 
 
 SUPPORTED_ENDPOINTS = [
+    # -------------------------------------------------------------------------
+    # Primary Fast MoE Stack: Alibaba Wan 2.2 MoE (27B-A14B) + Qwen-Image-2.1 (7B)
+    # -------------------------------------------------------------------------
+    {
+        "id": "wan/v2.2/text-to-video",
+        "alias": "fal-ai/wan/v2.2-a14b/text-to-video",
+        "backend": "wan22_moe",
+        "partition": "Wan2.2-T2V-A14B",
+        "category": "Text-to-Video (Fast MoE)",
+        "description": "Alibaba Wan 2.2 Two-Expert MoE (27B total, 14B active/step). Zero per-step PCIe streaming on 2x 5060 Ti!",
+    },
+    {
+        "id": "wan/v2.2/image-to-video",
+        "alias": "fal-ai/wan/v2.2-a14b/image-to-video",
+        "backend": "wan22_moe",
+        "partition": "Wan2.2-I2V-A14B",
+        "category": "Image-to-Video (Fast MoE)",
+        "description": "Alibaba Wan 2.2 Two-Expert MoE Image-to-Video (14B active per step).",
+    },
+    {
+        "id": "wan/v2.2/animate",
+        "alias": "fal-ai/wan/v2.2/recast",
+        "backend": "wan22_moe",
+        "partition": "Wan2.2-Animate-14B",
+        "category": "Video Face Swap / Character Animate (Fast 14B)",
+        "description": "Wan 2.2 14B Video Face Swap, character replacement & expression transfer. Fits 100% in 16GB VRAM!",
+    },
+    {
+        "id": "qwen/image-2.1/text-to-image",
+        "alias": "fal-ai/qwen-image-2.1/turbo",
+        "backend": "qwen_image_21",
+        "partition": "Qwen-Image-2.1",
+        "category": "Text-to-Image (Fast 7B Turbo)",
+        "description": "Alibaba Qwen-Image-2.1-Turbo (7B, 8 steps, 100% in VRAM, elite typography & RGBA support).",
+    },
+    {
+        "id": "qwen/image-2.1/edit",
+        "alias": "fal-ai/qwen-image-2.1/edit",
+        "backend": "qwen_image_21",
+        "partition": "Qwen-Image-2.1",
+        "category": "Image / Face Edit (10-Ref 7B Turbo)",
+        "description": "Qwen-Image-2.1 identity-preserving portrait face swap & multi-reference editing (up to 10 images).",
+    },
+    # -------------------------------------------------------------------------
+    # Optional Omni + Stereo Audio Stack: MiniMax H3 (33B Dense Single-Stream DiT)
+    # -------------------------------------------------------------------------
     {
         "id": "minimax/h3/text-to-video",
         "alias": "fal-ai/minimax/h3/text-to-video",
+        "backend": "minimax_h3",
         "partition": "FL2VA",
-        "category": "Text-to-Video",
+        "category": "Text-to-Video (MiniMax H3 Omni)",
         "description": "Generate 768P-2K video with synchronized native stereo audio from text prompt.",
     },
     {
         "id": "minimax/h3-max/text-to-video",
         "alias": "fal-ai/minimax/h3-max/text-to-video",
+        "backend": "minimax_h3",
         "partition": "FL2VA",
-        "category": "Text-to-Video",
+        "category": "Text-to-Video (MiniMax H3 Max)",
         "description": "Post-trained MiniMax H3 Max text-to-video with prompt expansion & stereo audio.",
     },
     {
         "id": "minimax/h3/image-to-video",
         "alias": "fal-ai/minimax/h3/image-to-video",
+        "backend": "minimax_h3",
         "partition": "FL2VA",
-        "category": "Image-to-Video",
+        "category": "Image-to-Video (MiniMax H3 Omni)",
         "description": "Animate a starting (and optional ending) image into a video with stereo audio.",
     },
     {
         "id": "minimax/h3-max/image-to-video",
         "alias": "fal-ai/minimax/h3-max/image-to-video",
+        "backend": "minimax_h3",
         "partition": "FL2VA",
-        "category": "Image-to-Video",
+        "category": "Image-to-Video (MiniMax H3 Max)",
         "description": "High-fidelity H3 Max first/last-frame conditioned image-to-video.",
     },
     {
         "id": "minimax/h3/reference-to-video",
         "alias": "fal-ai/minimax/h3/reference-to-video",
+        "backend": "minimax_h3",
         "partition": "Ref2VA",
-        "category": "Reference-to-Video",
+        "category": "Reference-to-Video (MiniMax H3 Omni)",
         "description": "Omni-reference video generation using up to 9 reference images, 3 videos & audio.",
     },
     {
         "id": "minimax/h3-max/reference-to-video",
         "alias": "fal-ai/minimax/h3-max/reference-to-video",
+        "backend": "minimax_h3",
         "partition": "Ref2VA",
-        "category": "Reference-to-Video",
+        "category": "Reference-to-Video (MiniMax H3 Max)",
         "description": "H3 Max subject/identity-consistent multi-reference video generation.",
     },
     {
         "id": "minimax/h3-max/recast",
         "alias": "fal-ai/minimax/h3-max/recast",
+        "backend": "minimax_h3",
         "partition": "Ref2VA",
-        "category": "Video Face Swap / Recast",
+        "category": "Video Face Swap / Recast (MiniMax H3 Max)",
         "description": "Video face swap & character identity replacement preserving target motion and lighting.",
     },
     {
         "id": "minimax/h3-max/relight",
         "alias": "fal-ai/minimax/h3-max/relight",
+        "backend": "minimax_h3",
         "partition": "Ref2VA",
-        "category": "Video Editing",
+        "category": "Video Editing (MiniMax H3 Max)",
         "description": "Relight existing video footage with text & reference lighting conditions.",
     },
     {
         "id": "minimax/h3-max/insert-video",
         "alias": "fal-ai/minimax/h3-max/insert-video",
+        "backend": "minimax_h3",
         "partition": "Ref2VA",
-        "category": "Video Editing",
+        "category": "Video Editing (MiniMax H3 Max)",
         "description": "Insert reference characters or objects seamlessly into a target video scene.",
     },
     {
         "id": "minimax/h3/text-to-image",
         "alias": "fal-ai/minimax/h3/text-to-image",
+        "backend": "minimax_h3",
         "partition": "H3-Image",
-        "category": "Text-to-Image",
+        "category": "Text-to-Image (MiniMax H3-Image 33B)",
         "description": "Multi-megapixel (up to 4096x4096) native image generation using MiniMax-H3-Image.",
     },
     {
         "id": "minimax/h3/image-to-image",
         "alias": "fal-ai/minimax/h3/image-to-image",
+        "backend": "minimax_h3",
         "partition": "H3-Image",
-        "category": "Image-to-Image / Face Edit",
+        "category": "Image-to-Image / Face Edit (MiniMax H3-Image)",
         "description": "Reference-guided image editing, style transfer, and portrait face swap.",
     },
 ]
@@ -397,10 +454,10 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
         queue: bool = Query(default=False, description="Set true to enqueue and return request_id immediately."),
     ) -> Any:
         norm_ep = _normalize_endpoint_id(endpoint_id)
-        if not norm_ep.startswith("minimax/"):
+        if not norm_ep.startswith(("wan/", "qwen/", "qwen-image", "minimax/")):
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown endpoint '{endpoint_id}'. See GET /v1/endpoints for supported MiniMax H3 routes.",
+                detail=f"Unknown endpoint '{endpoint_id}'. See GET /v1/endpoints for supported Wan 2.2 MoE, Qwen-Image-2.1, and MiniMax H3 routes.",
             )
 
         raw_body = await request.json()
