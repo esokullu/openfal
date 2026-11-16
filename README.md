@@ -120,40 +120,44 @@ openfal detect
 ```
 Probes `nvidia-smi` / `torch.cuda`, System RAM, and free NVMe disk space, returning your optimal profile (`dual_5060ti_32gb`, `dual_5060ti_24gb`, `single_5090_32gb`, etc.) and quantization (`fp8_e4m3` vs `int4_awq`).
 
-### 2. Download Models from Hugging Face & Pack 50-Block Strata Shards
-`openfal download` pulls directly from `Wan-AI/*`, `Qwen/*`, and `MiniMaxAI/*` on Hugging Face via `huggingface_hub` (with resume support) and automatically packs the weights into page-aligned per-block `.safetensors` shards (`block_00.safetensors`..`block_49.safetensors` + `strata_manifest.json`).
+### 2. Download Pre-Quantized Models Directly from Hugging Face (No Local Quantization Needed)
+`openfal download` resolves `--quant` (`fp8_e4m3`, `int4_awq`, or `bf16`) to **direct pre-quantized Hugging Face repositories**—so you do **not** download 400+ GB of raw BF16 weights or spend time quantizing locally:
+* **Alibaba (`fp8_e4m3` / `int8`):** Pulls directly from `Comfy-Org/Wan_2.2_ComfyUI_Repackaged` (`*_fp8_scaled.safetensors`, `*_int8_convrot.safetensors`) and `Comfy-Org/Qwen-Image-2.1` (`*_int8_convrot.safetensors` / `w4a8`).
+* **MiniMax-H3 (`fp8_e4m3`):** Pulls directly from `Comfy-Org/MiniMax-H3` (`*_pruned_fp8_scaled.safetensors`, `qwen3vl_32b_*_int8_convrot.safetensors`) & `Comfy-Org/MiniMax-H3-Image`.
+* **MiniMax-H3 (`int4_awq`):** Pulls directly from `unsloth/MiniMax-H3-GGUF` (`*-Q4_K.gguf`), `Comfy-Org/MiniMax-H3` (`qwen3vl_32b_*_nvfp4_awq.safetensors`), and `Comfy-Org/MiniMax-H3-Image` (`*_w4a8.safetensors`).
+* **Full Precision (`bf16`):** Pass `--quant bf16` to pull full unquantized weights from `Wan-AI/*`, `Qwen/*`, and `MiniMaxAI/*`.
 
-You do **not** need to download both model families! You can install **ONLY MiniMax-H3** (to do everything—T2V, I2V, Face Swap, T2I, and Stereo Audio—with a single model family and save disk space) or **ONLY the Alibaba Stack** (for maximum MoE speed):
+All weights are saved under `./weights/MiniMax-H3/` (or `--weights-dir <path>`). You do **not** need to download both model families:
 
-| Install Bundle (`--component`) | What Gets Downloaded | Disk Space (`INT4_AWQ`) | Disk Space (`FP8_E4M3`) | Use Case |
+| Install Bundle (`--component`) | What Gets Downloaded | Direct Download (`int4_awq` / GGUF) | Direct Download (`fp8_e4m3` / INT8) | Use Case |
 | :--- | :--- | :---: | :---: | :--- |
-| **`minimax-omni-compact`** | **`Ref2VA` + `Qwen3-VL` + `VAE` only** *(0 bytes of Alibaba)* | **~36 GB** | **~67 GB** | **Ultimate Disk-Saver:** 1 single DiT handles Video, Face Swap, Omni-Ref, Stereo Audio & Frame/Image extraction! |
-| **`minimax-only`** | **`FL2VA` + `Ref2VA` + `H3-Image` + `Qwen3-VL` + `VAE`** *(0 bytes of Alibaba)* | **~69 GB** | **~131 GB** | Complete MiniMax-H3 suite (no Alibaba models downloaded) |
-| **`alibaba-only`** | **`Wan2.2-T2V` + `Wan2.2-I2V` + `Wan2.2-Animate` + `Qwen-Image-2.1`** + shared `Qwen3-VL` + `VAE` | **~58 GB** | **~94 GB** | Complete Fast MoE Alibaba suite (no MiniMax DiT downloaded) |
-| **`all`** | **All 4 Alibaba models + all 3 MiniMax-H3 DiTs + `Qwen3-VL` + `VAE`** | **~108 GB** | **~196 GB** | Full multi-backend installation (every endpoint ready) |
+| **`minimax-omni-compact`** | **`Ref2VA` + `Qwen3-VL` + `VAE` only** *(0 bytes of Alibaba)* | **~28.4 GB** | **~48.0 GB** | **Ultimate Disk-Saver:** 1 single DiT handles Video, Face Swap, Omni-Ref, Stereo Audio & Frame/Image extraction! |
+| **`minimax-only`** | **`FL2VA` + `Ref2VA` + `H3-Image` + `Qwen3-VL` + `VAE`** *(0 bytes of Alibaba)* | **~51.8 GB** | **~88.1 GB** | Complete MiniMax-H3 suite (no Alibaba models downloaded) |
+| **`alibaba-only`** | **`Wan2.2-T2V` + `Wan2.2-I2V` + `Wan2.2-Animate` + `Qwen-Image-2.1`** *(with UMT5-FP8 & Qwen3-VL-8B)* | **~91.3 GB** | **~94.1 GB** | Complete Fast MoE Alibaba suite (no MiniMax weights downloaded) |
+| **`all`** | **All 4 Alibaba models + all 3 MiniMax-H3 DiTs + `Qwen3-VL-32B` + `VAE`** | **~143.1 GB** | **~182.2 GB** | Full multi-backend installation (every endpoint ready) |
 
-**Individual `--component` IDs** (if you want to pick a single model or shared module):
-* **Alibaba Fast Stack:** `wan22_t2v_moe` (~14.4GB INT4 / 27.5GB FP8), `wan22_i2v_moe` (~14.4GB / 27.5GB), `wan22_animate` (~7.2GB / 14.0GB), `qwen_image_21` (~3.8GB / 7.0GB)
-* **MiniMax-H3 Stack:** `fl2va` (~17.0GB / 33.0GB), `ref2va` (~17.0GB / 33.0GB), `h3-image` (~16.0GB / 31.0GB)
-* **Shared Components:** `qwen3_vl` (~16.5GB / 32.0GB), `vae` (~2.4GB)
+**Individual `--component` IDs** (pre-quantized direct HF download sizes):
+* **Alibaba Fast Stack:** `wan22_t2v_moe` (~34.2 GB FP8 incl. UMT5-FP8 + VAE), `wan22_i2v_moe` (~26.6 GB FP8), `wan22_animate` (~17.2 GB INT8), `qwen_image_21` (~13.3 GB W4A8 / 16.1 GB INT8 incl. Qwen3-VL-8B + VAE)
+* **MiniMax-H3 Stack:** `fl2va` (~10.6 GB Q4_K / 19.5 GB FP8), `ref2va` (~10.6 GB Q4_K / 19.5 GB FP8), `h3-image` (~12.8 GB W4A8 / 20.6 GB INT8 incl. VAE)
+* **MiniMax Shared Components:** `qwen3_vl` (~14.6 GB NVFP4 / 25.3 GB INT8), `vae` (~3.2 GB INT8 Video + Audio VAE)
 
 ```bash
-# Option A — Disk-Saver "Single Model Does Everything" (ONLY MiniMax-H3 Compact ~36GB in INT4):
+# Option A — Disk-Saver "Single Model Does Everything" (ONLY MiniMax-H3 Compact ~28.4 GB in Q4_K/NVFP4!):
 openfal download --component minimax-omni-compact --quant int4_awq
 
-# Option B — Full MiniMax-H3 Family ONLY (0 bytes of Alibaba Wan/Qwen-Image downloaded):
+# Option B — Full MiniMax-H3 Family ONLY (~88.1 GB FP8/INT8, 0 bytes of Alibaba):
 openfal download --component minimax-only --quant fp8_e4m3
 
-# Option C — Fast Alibaba MoE Family ONLY (0 bytes of MiniMax DiT downloaded):
+# Option C — Fast Alibaba MoE Family ONLY (~94.1 GB FP8/INT8, 0 bytes of MiniMax):
 openfal download --component alibaba-only --quant fp8_e4m3
 
-# Option D — Download EVERYTHING (both Alibaba MoE + MiniMax-H3):
+# Option D — Download EVERYTHING pre-quantized (~182.2 GB FP8/INT8):
 openfal download --component all --quant fp8_e4m3
 
-# Option E — Or pick any single component individually:
-openfal download --component qwen_image_21 --quant fp8_e4m3    # Only 3.8 GB (INT4) / 7.0 GB (FP8)!
-openfal download --component wan22_animate --quant int4_awq    # Only 7.2 GB (INT4) for Video Face Swap!
-openfal download --component fl2va --quant int4_awq            # Only MiniMax FL2VA DiT
+# Option E — Or pick any single component individually (or specify --weights-dir D:\openfal-weights):
+openfal download --component qwen_image_21 --quant fp8_e4m3    # ~16.1 GB (DiT + Qwen3-VL-8B + VAE)
+openfal download --component wan22_animate --quant fp8_e4m3    # ~17.2 GB for Video Face Swap
+openfal download --component fl2va --quant int4_awq            # ~10.6 GB Q4_K GGUF
 
 # Inspect installed partitions and Strata shard readiness:
 openfal models
@@ -619,23 +623,23 @@ It depends on whether you are on **Consumer GPUs (`12GB–32GB VRAM`)** or **Dat
 ---
 
 ### Q5: Can I install ONLY `MiniMax-H3` to save disk space and do everything (Video + Stereo Audio + Face Swap + Image) with a single model?
-**Yes!** You don't have to download the Alibaba models at all if you prefer a single all-in-one model family on disk:
-* **Ultimate Disk-Saver (`~36 GB` in `INT4_AWQ` / `~67 GB` in `FP8_E4M3`):**
+**Yes!** You don't have to download the Alibaba models at all if you prefer a single all-in-one model family on disk, and `openfal download` pulls **pre-quantized Hugging Face files directly** (no need to download BF16 or quantize locally):
+* **Ultimate Disk-Saver (`~28.4 GB` in `int4_awq` / `~48.0 GB` in `fp8_e4m3`):**
   ```bash
   openfal download --component minimax-omni-compact --quant int4_awq
   ```
-  This downloads **only** `MiniMax-H3 Ref2VA` + `Qwen3-VL` + `VAE` (`0 bytes` of Alibaba models). Because `Ref2VA` is omni-modal, that single 50-block DiT handles Text-to-Video (+ Stereo Audio), Image-to-Video, Video Face Swap (`recast`), 9-Ref Omni-Video, and single-frame Image generation!
-* **Full MiniMax-H3 Only (`minimax-only`):** `openfal download --component minimax-only --quant fp8_e4m3`
-* **Full Alibaba Fast MoE Only (`alibaba-only`):** `openfal download --component alibaba-only --quant fp8_e4m3`
+  This downloads **only** pre-quantized `MiniMax-H3 Ref2VA` (`10.6 GB` Q4_K GGUF) + `Qwen3-VL-32B` (`14.6 GB` NVFP4) + `VAE` (`3.2 GB`) (`0 bytes` of Alibaba models). Because `Ref2VA` is omni-modal, that single DiT handles Text-to-Video (+ Stereo Audio), Image-to-Video, Video Face Swap (`recast`), 9-Ref Omni-Video, and single-frame Image generation!
+* **Full MiniMax-H3 Only (`minimax-only` — ~51.8 GB INT4 / ~88.1 GB FP8):** `openfal download --component minimax-only --quant fp8_e4m3`
+* **Full Alibaba Fast MoE Only (`alibaba-only` — ~94.1 GB FP8):** `openfal download --component alibaba-only --quant fp8_e4m3`
 
 ---
 
 ### Q6: What is the difference between `minimax-omni-compact` (`int4_awq`) and `minimax-only` (`fp8_e4m3`), and does `INT4` significantly lower quality?
-There are **two differences** between those two commands: **which DiT partitions are downloaded** and **which quantization precision is used**:
+There are **two differences** between those two commands: **which DiT partitions are downloaded** and **which pre-quantized weights are pulled from Hugging Face**:
 
 1. **Model Partitions (`minimax-omni-compact` vs. `minimax-only`):**
-   * **`minimax-omni-compact`** downloads **only 1 DiT (`Ref2VA`)** + shared `Qwen3-VL` + `VAE` (**~36 GB** in INT4 / **~67 GB** in FP8). Because `Ref2VA` is omni-modal, it handles Video Face Swap (`recast`), 9-Ref Omni-Video, Text/Image-to-Video (+ Stereo Audio), and single-frame images with a single 50-block DiT.
-   * **`minimax-only`** downloads **all 3 MiniMax-H3 DiT partitions** (`FL2VA` + `Ref2VA` + `H3-Image`) + `Qwen3-VL` + `VAE` (**~69 GB** in INT4 / **~131 GB** in FP8). Having `FL2VA` dedicated to T2V/I2V yields slightly cleaner baseline motion/audio coherence than `Ref2VA` alone, and `H3-Image` is purpose-tuned for 4K still images without audio branches.
+   * **`minimax-omni-compact`** downloads **only 1 DiT (`Ref2VA`)** + shared `Qwen3-VL` + `VAE` (**~28.4 GB** in Q4_K/NVFP4 / **~48.0 GB** in FP8/INT8). Because `Ref2VA` is omni-modal, it handles Video Face Swap (`recast`), 9-Ref Omni-Video, Text/Image-to-Video (+ Stereo Audio), and single-frame images with a single DiT.
+   * **`minimax-only`** downloads **all 3 MiniMax-H3 DiT partitions** (`FL2VA` + `Ref2VA` + `H3-Image`) + `Qwen3-VL` + `VAE` (**~51.8 GB** in INT4/GGUF / **~88.1 GB** in FP8/INT8). Having `FL2VA` dedicated to T2V/I2V yields slightly cleaner baseline motion/audio coherence than `Ref2VA` alone, and `H3-Image` is purpose-tuned for 4K still images without audio branches.
 2. **Does `INT4_AWQ` significantly lower quality compared to `FP8_E4M3` / `BF16`?**
    * **On large 33B DiT models, no — the drop is small (~2–4% perceptual difference), not a drastic collapse.** Unlike small 1B–3B models that degrade noticeably at 4-bit, a **33B parameter DiT** has high weight redundancy, and `openfal` keeps sensitive layers (attention projections, `adaLN_modulation` timestep/conditioning layers, `Qwen3-VL` Layer-50 embeddings, and the Hybrid CNN-ViT VAE) in higher precision (`BF16`/`FP16`) while quantizing only the bulk linear FFN/QKV weights via group-wise **INT4-AWQ**.
    * **Where you *will* notice `FP8_E4M3` vs `INT4_AWQ`:**

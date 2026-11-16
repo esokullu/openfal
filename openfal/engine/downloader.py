@@ -33,6 +33,13 @@ from safetensors.numpy import save_file as save_safetensors_numpy
 
 
 @dataclass
+class QuantSourceSpec:
+    repo_id: str
+    allow_patterns: List[str]
+    approx_gb: float
+
+
+@dataclass
 class ModelComponentSpec:
     component_id: str
     display_name: str
@@ -44,116 +51,285 @@ class ModelComponentSpec:
     approx_int4_gb: float
     description: str
     is_dit_partition: bool = True
+    quant_sources: Dict[str, QuantSourceSpec] = field(default_factory=dict)
 
 
 MODEL_COMPONENTS: Dict[str, ModelComponentSpec] = {
     "wan22_t2v_moe": ModelComponentSpec(
         component_id="wan22_t2v_moe",
         display_name="Wan2.2-T2V-A14B MoE (Primary Fast Text-to-Video: 27B Total / 14B Active)",
-        hf_repo_id="Wan-AI/Wan2.2-T2V-A14B",
+        hf_repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
         subdir="Wan2.2-T2V-A14B",
-        allow_patterns=["*.safetensors", "*.json", "high_noise_model/*", "low_noise_model/*"],
-        approx_bf16_gb=54.0,
-        approx_fp8_gb=27.5,
-        approx_int4_gb=14.4,
-        description="Two-Expert Temporal MoE (14B High-Noise + 14B Low-Noise). Zero per-step PCIe streaming on 2x 5060 Ti!",
+        allow_patterns=[
+            "split_files/diffusion_models/wan2.2_t2v_*_fp8_scaled.safetensors",
+            "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "split_files/vae/wan2.2_vae.safetensors",
+        ],
+        approx_bf16_gb=65.1,
+        approx_fp8_gb=34.2,
+        approx_int4_gb=34.2,
+        description="Two-Expert Temporal MoE (14B High-Noise + 14B Low-Noise). Pre-quantized FP8 weights direct from Hugging Face.",
         is_dit_partition=True,
+        quant_sources={
+            "fp8_e4m3": QuantSourceSpec(
+                repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+                allow_patterns=[
+                    "split_files/diffusion_models/wan2.2_t2v_*_fp8_scaled.safetensors",
+                    "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+                    "split_files/vae/wan2.2_vae.safetensors",
+                ],
+                approx_gb=34.2,
+            ),
+            "bf16": QuantSourceSpec(
+                repo_id="Wan-AI/Wan2.2-T2V-A14B",
+                allow_patterns=["*.safetensors", "*.json", "high_noise_model/*", "low_noise_model/*"],
+                approx_gb=65.1,
+            ),
+        },
     ),
     "wan22_i2v_moe": ModelComponentSpec(
         component_id="wan22_i2v_moe",
         display_name="Wan2.2-I2V-A14B MoE (Primary Fast Image-to-Video: 27B Total / 14B Active)",
-        hf_repo_id="Wan-AI/Wan2.2-I2V-A14B",
+        hf_repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
         subdir="Wan2.2-I2V-A14B",
-        allow_patterns=["*.safetensors", "*.json", "high_noise_model/*", "low_noise_model/*"],
-        approx_bf16_gb=54.0,
-        approx_fp8_gb=27.5,
-        approx_int4_gb=14.4,
-        description="Two-Expert Temporal MoE for Image-to-Video & Keyframe Interpolation (14B active per step).",
+        allow_patterns=["split_files/diffusion_models/wan2.2_i2v_*_fp8_scaled.safetensors"],
+        approx_bf16_gb=53.2,
+        approx_fp8_gb=26.6,
+        approx_int4_gb=26.6,
+        description="Two-Expert Temporal MoE for Image-to-Video. Pre-quantized FP8 weights direct from Hugging Face.",
         is_dit_partition=True,
+        quant_sources={
+            "fp8_e4m3": QuantSourceSpec(
+                repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+                allow_patterns=["split_files/diffusion_models/wan2.2_i2v_*_fp8_scaled.safetensors"],
+                approx_gb=26.6,
+            ),
+            "bf16": QuantSourceSpec(
+                repo_id="Wan-AI/Wan2.2-I2V-A14B",
+                allow_patterns=["*.safetensors", "*.json", "high_noise_model/*", "low_noise_model/*"],
+                approx_gb=53.2,
+            ),
+        },
     ),
     "wan22_animate": ModelComponentSpec(
         component_id="wan22_animate",
         display_name="Wan2.2-Animate-14B (Primary Fast Video Face Swap / Character Recast)",
-        hf_repo_id="Wan-AI/Wan2.2-Animate-14B",
+        hf_repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
         subdir="Wan2.2-Animate-14B",
-        allow_patterns=["*.safetensors", "*.json"],
-        approx_bf16_gb=28.0,
-        approx_fp8_gb=14.0,
-        approx_int4_gb=7.2,
-        description="14B character replacement & video face/expression swap model. Fits 100% in a single 16GB GPU in FP8/INT4!",
+        allow_patterns=["split_files/diffusion_models/wan2.2_animate_14B_int8_convrot.safetensors"],
+        approx_bf16_gb=32.2,
+        approx_fp8_gb=17.2,
+        approx_int4_gb=17.2,
+        description="14B character replacement & video face/expression swap model (pre-quantized INT8 direct from Hugging Face).",
         is_dit_partition=True,
+        quant_sources={
+            "fp8_e4m3": QuantSourceSpec(
+                repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+                allow_patterns=["split_files/diffusion_models/wan2.2_animate_14B_int8_convrot.safetensors"],
+                approx_gb=17.2,
+            ),
+            "bf16": QuantSourceSpec(
+                repo_id="Wan-AI/Wan2.2-Animate-14B",
+                allow_patterns=["*.safetensors", "*.json"],
+                approx_gb=32.2,
+            ),
+        },
     ),
     "qwen_image_21": ModelComponentSpec(
         component_id="qwen_image_21",
         display_name="Qwen-Image-2.1-Turbo (Primary 7B 8-Step T2I & 10-Ref Image/Face Edit)",
-        hf_repo_id="Qwen/Qwen-Image-2.1-Turbo",
+        hf_repo_id="Comfy-Org/Qwen-Image-2.1",
         subdir="Qwen-Image-2.1-Turbo",
-        allow_patterns=["*.safetensors", "*.json", "transformer/*"],
-        approx_bf16_gb=14.0,
-        approx_fp8_gb=7.0,
-        approx_int4_gb=3.8,
-        description="32-block 7B Single-Stream MMDiT with native RGBA, elite text rendering, and 10-image reference editing.",
+        allow_patterns=[
+            "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+            "text_encoders/qwen3vl_8b_int8_convrot.safetensors",
+            "vae/qwen_image_2.1_vae_bf16.safetensors",
+        ],
+        approx_bf16_gb=30.2,
+        approx_fp8_gb=16.1,
+        approx_int4_gb=13.3,
+        description="7B Single-Stream MMDiT + Qwen3-VL-8B + VAE (pre-quantized INT8/W4A8 direct from Hugging Face).",
         is_dit_partition=True,
+        quant_sources={
+            "fp8_e4m3": QuantSourceSpec(
+                repo_id="Comfy-Org/Qwen-Image-2.1",
+                allow_patterns=[
+                    "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+                    "text_encoders/qwen3vl_8b_int8_convrot.safetensors",
+                    "vae/qwen_image_2.1_vae_bf16.safetensors",
+                ],
+                approx_gb=16.1,
+            ),
+            "int4_awq": QuantSourceSpec(
+                repo_id="Comfy-Org/Qwen-Image-2.1",
+                allow_patterns=[
+                    "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+                    "text_encoders/qwen3vl_8b_w4a8.safetensors",
+                    "vae/qwen_image_2.1_vae_bf16.safetensors",
+                ],
+                approx_gb=13.3,
+            ),
+            "bf16": QuantSourceSpec(
+                repo_id="Qwen/Qwen-Image-2.1-Turbo",
+                allow_patterns=["*.safetensors", "*.json", "transformer/*"],
+                approx_gb=30.2,
+            ),
+        },
     ),
     "fl2va": ModelComponentSpec(
         component_id="fl2va",
-        display_name="[MiniMax-H3] H3-Base-FL2VA (33B Dense DiT + Native Stereo Audio)",
-        hf_repo_id="MiniMaxAI/MiniMax-H3",
+        display_name="[MiniMax-H3] H3-Base-FL2VA (Pre-Quantized Pruned FP8 / Q4_K GGUF)",
+        hf_repo_id="Comfy-Org/MiniMax-H3",
         subdir="FL2VA",
-        allow_patterns=["FL2VA/*", "*fl2va*", "config.json", "model_index.json"],
-        approx_bf16_gb=66.0,
-        approx_fp8_gb=33.0,
-        approx_int4_gb=17.0,
-        description="50-block 33B Single-Stream DiT for joint video + native synchronized stereo audio generation.",
+        allow_patterns=["diffusion_models/minimax_h3_fl2va_pruned_fp8_scaled.safetensors"],
+        approx_bf16_gb=61.7,
+        approx_fp8_gb=19.5,
+        approx_int4_gb=10.6,
+        description="MiniMax-H3 FL2VA DiT for joint video + synchronized stereo audio (direct pre-quantized FP8 / Q4_K).",
         is_dit_partition=True,
+        quant_sources={
+            "fp8_e4m3": QuantSourceSpec(
+                repo_id="Comfy-Org/MiniMax-H3",
+                allow_patterns=["diffusion_models/minimax_h3_fl2va_pruned_fp8_scaled.safetensors"],
+                approx_gb=19.5,
+            ),
+            "int4_awq": QuantSourceSpec(
+                repo_id="unsloth/MiniMax-H3-GGUF",
+                allow_patterns=["minimax_h3_fl2va_pruned-Q4_K.gguf"],
+                approx_gb=10.6,
+            ),
+            "bf16": QuantSourceSpec(
+                repo_id="MiniMaxAI/MiniMax-H3",
+                allow_patterns=["FL2VA/*", "*fl2va*", "config.json", "model_index.json"],
+                approx_gb=61.7,
+            ),
+        },
     ),
     "ref2va": ModelComponentSpec(
         component_id="ref2va",
-        display_name="[MiniMax-H3] H3-Base-Ref2VA (33B All-in-One Omni-Reference, Face Swap & Stereo Audio)",
-        hf_repo_id="MiniMaxAI/MiniMax-H3",
+        display_name="[MiniMax-H3] H3-Base-Ref2VA (Pre-Quantized Pruned FP8 / Q4_K GGUF)",
+        hf_repo_id="Comfy-Org/MiniMax-H3",
         subdir="Ref2VA",
-        allow_patterns=["Ref2VA/*", "*ref2va*", "config.json"],
-        approx_bf16_gb=66.0,
-        approx_fp8_gb=33.0,
-        approx_int4_gb=17.0,
-        description="50-block 33B DiT capable of T2V, I2V, 9-Image/3-Video/3-Audio Omni-Reference, Video Face Swap & Stereo Audio.",
+        allow_patterns=["diffusion_models/minimax_h3_ref2va_pruned_fp8_scaled.safetensors"],
+        approx_bf16_gb=61.7,
+        approx_fp8_gb=19.5,
+        approx_int4_gb=10.6,
+        description="MiniMax-H3 Ref2VA DiT for Video Face Swap, 9-Image/3-Video/3-Audio Omni-Ref & Stereo Audio (direct pre-quantized).",
         is_dit_partition=True,
+        quant_sources={
+            "fp8_e4m3": QuantSourceSpec(
+                repo_id="Comfy-Org/MiniMax-H3",
+                allow_patterns=["diffusion_models/minimax_h3_ref2va_pruned_fp8_scaled.safetensors"],
+                approx_gb=19.5,
+            ),
+            "int4_awq": QuantSourceSpec(
+                repo_id="unsloth/MiniMax-H3-GGUF",
+                allow_patterns=["minimax_h3_ref2va_pruned-Q4_K.gguf"],
+                approx_gb=10.6,
+            ),
+            "bf16": QuantSourceSpec(
+                repo_id="MiniMaxAI/MiniMax-H3",
+                allow_patterns=["Ref2VA/*", "*ref2va*", "config.json"],
+                approx_gb=61.7,
+            ),
+        },
     ),
     "h3-image": ModelComponentSpec(
         component_id="h3-image",
-        display_name="[MiniMax-H3] MiniMax-H3-Image (33B 4K Text-to-Image DiT)",
-        hf_repo_id="MiniMaxAI/MiniMax-H3-Image",
+        display_name="[MiniMax-H3] MiniMax-H3-Image (Pre-Quantized INT8 / W4A8)",
+        hf_repo_id="Comfy-Org/MiniMax-H3-Image",
         subdir="H3-Image",
-        allow_patterns=["*.safetensors", "*.json", "transformer/*"],
-        approx_bf16_gb=62.0,
-        approx_fp8_gb=31.0,
-        approx_int4_gb=16.0,
-        description="Audio-detached 50-block H3 DiT for multi-megapixel image generation.",
+        allow_patterns=[
+            "diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors",
+            "vae/minimax_h3_image_vae_fp16.safetensors",
+        ],
+        approx_bf16_gb=38.6,
+        approx_fp8_gb=20.6,
+        approx_int4_gb=12.8,
+        description="MiniMax-H3-Image DiT + Image VAE (direct pre-quantized INT8 / W4A8).",
         is_dit_partition=True,
+        quant_sources={
+            "fp8_e4m3": QuantSourceSpec(
+                repo_id="Comfy-Org/MiniMax-H3-Image",
+                allow_patterns=[
+                    "diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors",
+                    "vae/minimax_h3_image_vae_fp16.safetensors",
+                ],
+                approx_gb=20.6,
+            ),
+            "int4_awq": QuantSourceSpec(
+                repo_id="Comfy-Org/MiniMax-H3-Image",
+                allow_patterns=[
+                    "diffusion_models/minimax_h3_image_pruned_w4a8.safetensors",
+                    "vae/minimax_h3_image_vae_fp16.safetensors",
+                ],
+                approx_gb=12.8,
+            ),
+            "bf16": QuantSourceSpec(
+                repo_id="MiniMaxAI/MiniMax-H3-Image",
+                allow_patterns=["*.safetensors", "*.json", "transformer/*"],
+                approx_gb=38.6,
+            ),
+        },
     ),
     "qwen3_vl": ModelComponentSpec(
         component_id="qwen3_vl",
-        display_name="Qwen3-VL-32B Shared Text & Multimodal Encoder",
-        hf_repo_id="MiniMaxAI/MiniMax-H3",
+        display_name="Qwen3-VL-32B Shared Encoder (Pre-Quantized INT8 / Blackwell NVFP4)",
+        hf_repo_id="Comfy-Org/MiniMax-H3",
         subdir="text_encoder",
-        allow_patterns=["text_encoder/*", "tokenizer/*", "*qwen*"],
-        approx_bf16_gb=64.0,
-        approx_fp8_gb=32.0,
-        approx_int4_gb=16.5,
-        description="Streamed vision-language encoder with LRU embedding cache and immediate VRAM eviction.",
+        allow_patterns=["text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors"],
+        approx_bf16_gb=48.0,
+        approx_fp8_gb=25.3,
+        approx_int4_gb=14.6,
+        description="Qwen3-VL-32B encoder (pre-quantized INT8 25.3GB or native Blackwell NVFP4 14.6GB).",
         is_dit_partition=False,
+        quant_sources={
+            "fp8_e4m3": QuantSourceSpec(
+                repo_id="Comfy-Org/MiniMax-H3",
+                allow_patterns=["text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors"],
+                approx_gb=25.3,
+            ),
+            "int4_awq": QuantSourceSpec(
+                repo_id="Comfy-Org/MiniMax-H3",
+                allow_patterns=["text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"],
+                approx_gb=14.6,
+            ),
+            "bf16": QuantSourceSpec(
+                repo_id="MiniMaxAI/MiniMax-H3",
+                allow_patterns=["text_encoder/*", "tokenizer/*", "*qwen*"],
+                approx_gb=48.0,
+            ),
+        },
     ),
     "vae": ModelComponentSpec(
         component_id="vae",
-        display_name="Hybrid CNN-ViT Video VAE + Stereo Audio VAE",
-        hf_repo_id="MiniMaxAI/MiniMax-H3",
+        display_name="MiniMax-H3 Video VAE (INT8) + Stereo Audio VAE",
+        hf_repo_id="Comfy-Org/MiniMax-H3",
         subdir="vae",
-        allow_patterns=["vae/*", "video_vae/*", "audio_vae/*", "*vae*"],
-        approx_bf16_gb=4.2,
-        approx_fp8_gb=2.4,
-        approx_int4_gb=2.4,
-        description="16x spatial compression 24-ch Hybrid CNN-ViT decoder + stereo audio vocoder.",
+        allow_patterns=[
+            "vae/minimax_h3_video_vae_int8_convrot.safetensors",
+            "vae/minimax_h3_audio_vae_fp32.safetensors",
+        ],
+        approx_bf16_gb=5.4,
+        approx_fp8_gb=3.2,
+        approx_int4_gb=3.2,
+        description="Pre-quantized INT8 Video VAE (2.6GB) + Stereo Audio VAE (0.56GB).",
         is_dit_partition=False,
+        quant_sources={
+            "fp8_e4m3": QuantSourceSpec(
+                repo_id="Comfy-Org/MiniMax-H3",
+                allow_patterns=[
+                    "vae/minimax_h3_video_vae_int8_convrot.safetensors",
+                    "vae/minimax_h3_audio_vae_fp32.safetensors",
+                ],
+                approx_gb=3.2,
+            ),
+            "bf16": QuantSourceSpec(
+                repo_id="MiniMaxAI/MiniMax-H3",
+                allow_patterns=["vae/minimax_h3_video_vae_fp16.safetensors", "vae/minimax_h3_audio_vae_fp32.safetensors"],
+                approx_gb=5.4,
+            ),
+        },
     ),
 }
 
@@ -161,7 +337,7 @@ COMPONENT_BUNDLES: Dict[str, List[str]] = {
     "all": list(MODEL_COMPONENTS.keys()),
     "minimax-only": ["fl2va", "ref2va", "h3-image", "qwen3_vl", "vae"],
     "minimax-omni-compact": ["ref2va", "qwen3_vl", "vae"],
-    "alibaba-only": ["wan22_t2v_moe", "wan22_i2v_moe", "wan22_animate", "qwen_image_21", "qwen3_vl", "vae"],
+    "alibaba-only": ["wan22_t2v_moe", "wan22_i2v_moe", "wan22_animate", "qwen_image_21"],
 }
 
 
@@ -418,6 +594,8 @@ class StrataModelManager:
         spec = MODEL_COMPONENTS[component_id]
         comp_dir = self.weights_dir / spec.subdir
         safetensor_files = list(comp_dir.rglob("*.safetensors")) if comp_dir.exists() else []
+        gguf_files = list(comp_dir.rglob("*.gguf")) if comp_dir.exists() else []
+        weight_files = safetensor_files + gguf_files
         block_shards = list(comp_dir.glob("strata_blocks/block_*.safetensors")) if comp_dir.exists() else []
         manifest_path = comp_dir / "strata_blocks" / "strata_manifest.json"
         manifest = None
@@ -427,19 +605,45 @@ class StrataModelManager:
             except Exception:
                 manifest = None
 
-        disk_bytes = sum(f.stat().st_size for f in safetensor_files) if safetensor_files else 0
-        installed = len(safetensor_files) > 0 or len(block_shards) == 50
+        disk_bytes = sum(f.stat().st_size for f in weight_files) if weight_files else 0
+        installed = len(weight_files) > 0 or len(block_shards) == 50
 
         return {
             **asdict(spec),
             "local_dir": str(comp_dir),
             "installed": installed,
             "safetensors_count": len(safetensor_files),
+            "gguf_count": len(gguf_files),
             "strata_50_blocks_ready": len(block_shards) == 50,
             "strata_blocks_count": len(block_shards),
             "disk_size_mb": round(disk_bytes / (1024 * 1024), 2),
             "manifest": manifest,
         }
+
+    @staticmethod
+    def resolve_download_source(
+        spec: ModelComponentSpec,
+        quantization: str,
+        custom_repo_id: Optional[str] = None,
+    ) -> QuantSourceSpec:
+        if custom_repo_id:
+            return QuantSourceSpec(
+                repo_id=custom_repo_id,
+                allow_patterns=spec.allow_patterns,
+                approx_gb=spec.approx_fp8_gb,
+            )
+        q = quantization.lower()
+        if q in spec.quant_sources:
+            return spec.quant_sources[q]
+        if q == "nf4" and "int4_awq" in spec.quant_sources:
+            return spec.quant_sources["int4_awq"]
+        if "fp8_e4m3" in spec.quant_sources:
+            return spec.quant_sources["fp8_e4m3"]
+        return QuantSourceSpec(
+            repo_id=spec.hf_repo_id,
+            allow_patterns=spec.allow_patterns,
+            approx_gb=spec.approx_fp8_gb,
+        )
 
     def get_all_status(self) -> dict:
         with self._lock:
@@ -474,11 +678,15 @@ class StrataModelManager:
                 raise ValueError(f"Unknown model component or bundle '{cid}'. Valid: {valid}")
 
         task_id = f"dl_{int(time.time() * 1000)}_{component_id}"
-        repo_label = custom_repo_id or MODEL_COMPONENTS[target_ids[0]].hf_repo_id
+        first_source = self.resolve_download_source(
+            MODEL_COMPONENTS[target_ids[0]],
+            quantization=quantization,
+            custom_repo_id=custom_repo_id,
+        )
         task = DownloadTaskState(
             task_id=task_id,
             component_id=component_id,
-            repo_id=repo_label,
+            repo_id=first_source.repo_id,
             quantization=quantization,
             mode=mode,
         )
@@ -490,7 +698,11 @@ class StrataModelManager:
                 total_targets = len(target_ids)
                 for idx, cid in enumerate(target_ids):
                     spec = MODEL_COMPONENTS[cid]
-                    repo_to_use = custom_repo_id or spec.hf_repo_id
+                    src = self.resolve_download_source(
+                        spec=spec,
+                        quantization=quantization,
+                        custom_repo_id=custom_repo_id,
+                    )
 
                     def _emit(msg: str) -> None:
                         task.add_log(msg)
@@ -500,7 +712,7 @@ class StrataModelManager:
                     if mode == "hf_hub":
                         self._download_from_hf_hub(
                             spec=spec,
-                            repo_id=repo_to_use,
+                            source=src,
                             hf_token=hf_token or os.environ.get("HF_TOKEN"),
                             quantization=quantization,
                             task=task,
@@ -542,7 +754,7 @@ class StrataModelManager:
     def _download_from_hf_hub(
         self,
         spec: ModelComponentSpec,
-        repo_id: str,
+        source: QuantSourceSpec,
         hf_token: Optional[str],
         quantization: str,
         task: DownloadTaskState,
@@ -552,8 +764,12 @@ class StrataModelManager:
 
         target_dir = self.weights_dir / spec.subdir
         target_dir.mkdir(parents=True, exist_ok=True)
+        repo_id = source.repo_id
 
-        emit(f"[HF-Hub] Connecting to Hugging Face repository '{repo_id}' for component '{spec.component_id}'...")
+        emit(
+            f"[HF-Hub] Connecting to pre-quantized repo '{repo_id}' for '{spec.component_id}' "
+            f"(quant={quantization}, ~{source.approx_gb} GB)..."
+        )
         api = HfApi(token=hf_token)
 
         try:
@@ -567,7 +783,7 @@ class StrataModelManager:
         local_path = snapshot_download(
             repo_id=repo_id,
             local_dir=str(target_dir),
-            allow_patterns=spec.allow_patterns,
+            allow_patterns=source.allow_patterns,
             token=hf_token,
             max_workers=4,
         )

@@ -336,9 +336,9 @@
         </div>
         <div id="modelComponentsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-          <button class="btn-primary" onclick="triggerModelInstall('alibaba-only', 'hf_hub')">⚡ Install ONLY Alibaba (Fast MoE)</button>
-          <button class="btn-secondary" style="border-color:var(--accent);" onclick="triggerModelInstall('minimax-only', 'hf_hub')">🎵 Install ONLY MiniMax-H3 (All-in-One)</button>
-          <button class="btn-secondary" onclick="triggerModelInstall('minimax-omni-compact', 'strata_repack')">💾 MiniMax Compact (~36GB INT4)</button>
+          <button class="btn-primary" onclick="triggerModelInstall('alibaba-only', 'hf_hub', 'fp8_e4m3')">⚡ Install ONLY Alibaba (~94GB FP8)</button>
+          <button class="btn-secondary" style="border-color:var(--accent);" onclick="triggerModelInstall('minimax-only', 'hf_hub', 'fp8_e4m3')">🎵 Install ONLY MiniMax-H3 (~88GB FP8)</button>
+          <button class="btn-secondary" onclick="triggerModelInstall('minimax-omni-compact', 'hf_hub', 'int4_awq')">💾 MiniMax Compact (~28.4GB Q4/NVFP4)</button>
         </div>
       </div>
 
@@ -629,19 +629,23 @@
       }
     }
 
-    async function triggerModelInstall(component_id, mode) {
+    async function triggerModelInstall(component_id, mode, quantization = "fp8_e4m3") {
       const hf_token = document.getElementById("hfTokenInput").value.trim() || null;
       const logBox = document.getElementById("logBox");
-      logBox.textContent += `[Strata-Installer] Starting ${mode} for '${component_id}'...\n`;
+      const runAsync = (mode === "hf_hub");
+      logBox.textContent += `[Strata-Installer] Starting ${mode} (${quantization}) for '${component_id}'...\n`;
       const res = await fetch("/v1/models/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ component_id, mode, hf_token, run_async: false })
+        body: JSON.stringify({ component_id, mode, quantization, hf_token, run_async: runAsync })
       });
       const out = await res.json();
       if (out.task && out.task.logs) {
         out.task.logs.forEach(l => { logBox.textContent += `${l}\n`; });
         logBox.scrollTop = logBox.scrollHeight;
+      }
+      if (runAsync && out.task) {
+        logBox.textContent += `[Strata-Installer] Download running in background (task=${out.task.task_id}, repo=${out.task.repo_id}).\n`;
       }
       await refreshModelHub();
     }

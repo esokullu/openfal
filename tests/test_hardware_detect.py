@@ -1,4 +1,24 @@
-from openfal.engine.downloader import recommend_hardware_profile
+from openfal.engine.downloader import MODEL_COMPONENTS, StrataModelManager, recommend_hardware_profile
+
+
+def test_prequantized_hf_source_resolution() -> None:
+    wan_fp8 = StrataModelManager.resolve_download_source(MODEL_COMPONENTS["wan22_t2v_moe"], "fp8_e4m3")
+    assert wan_fp8.repo_id == "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+    assert any("fp8_scaled" in p for p in wan_fp8.allow_patterns)
+
+    fl2va_fp8 = StrataModelManager.resolve_download_source(MODEL_COMPONENTS["fl2va"], "fp8_e4m3")
+    assert fl2va_fp8.repo_id == "Comfy-Org/MiniMax-H3"
+    assert fl2va_fp8.approx_gb < 25.0
+
+    fl2va_int4 = StrataModelManager.resolve_download_source(MODEL_COMPONENTS["fl2va"], "int4_awq")
+    assert fl2va_int4.repo_id == "unsloth/MiniMax-H3-GGUF"
+    assert any("Q4_K.gguf" in p for p in fl2va_int4.allow_patterns)
+
+    qwen_fp8 = StrataModelManager.resolve_download_source(MODEL_COMPONENTS["qwen_image_21"], "fp8_e4m3")
+    assert qwen_fp8.repo_id == "Comfy-Org/Qwen-Image-2.1"
+
+    fl2va_bf16 = StrataModelManager.resolve_download_source(MODEL_COMPONENTS["fl2va"], "bf16")
+    assert fl2va_bf16.repo_id == "MiniMaxAI/MiniMax-H3"
 
 
 def test_rtx_5090_plus_t400_4gb_excludes_display_gpu() -> None:
