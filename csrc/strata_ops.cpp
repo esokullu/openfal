@@ -6,6 +6,8 @@
 #include "strata_dma.h"
 #include <algorithm>
 #include <cstring>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 namespace openfal {
 namespace strata {
@@ -96,3 +98,60 @@ StrataEngineStats StrataDMAScheduler::get_stats() const {
 
 } // namespace strata
 } // namespace openfal
+
+namespace py = pybind11;
+using namespace openfal::strata;
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.doc() = "Strata-DiT 3-Tier memory hierarchy and double-buffered DMA scheduler";
+    m.attr("__version__") = "0.1.0";
+
+    py::enum_<MemoryTier>(m, "MemoryTier")
+        .value("VRAM_RESIDENT", MemoryTier::VRAM_RESIDENT)
+        .value("VRAM_PREFETCH_A", MemoryTier::VRAM_PREFETCH_A)
+        .value("VRAM_PREFETCH_B", MemoryTier::VRAM_PREFETCH_B)
+        .value("HOST_PINNED_RAM", MemoryTier::HOST_PINNED_RAM)
+        .value("NVME_MMAP", MemoryTier::NVME_MMAP);
+
+    py::enum_<QuantFormat>(m, "QuantFormat")
+        .value("BF16", QuantFormat::BF16)
+        .value("FP8_E4M3", QuantFormat::FP8_E4M3)
+        .value("INT4_AWQ", QuantFormat::INT4_AWQ)
+        .value("NF4", QuantFormat::NF4);
+
+    py::class_<BlockDescriptor>(m, "BlockDescriptor")
+        .def_readonly("block_id", &BlockDescriptor::block_id)
+        .def_readonly("assigned_gpu", &BlockDescriptor::assigned_gpu)
+        .def_readonly("current_tier", &BlockDescriptor::current_tier)
+        .def_readonly("quant_format", &BlockDescriptor::quant_format)
+        .def_readonly("byte_size", &BlockDescriptor::byte_size);
+
+    py::class_<StrataEngineStats>(m, "StrataEngineStats")
+        .def_readonly("num_gpus", &StrataEngineStats::num_gpus)
+        .def_readonly("total_blocks", &StrataEngineStats::total_blocks)
+        .def_readonly("resident_vram_blocks", &StrataEngineStats::resident_vram_blocks)
+        .def_readonly("host_pinned_blocks", &StrataEngineStats::host_pinned_blocks)
+        .def_readonly("vram_counter_bytes", &StrataEngineStats::vram_counter_bytes)
+        .def_readonly("host_pantry_bytes", &StrataEngineStats::host_pantry_bytes)
+        .def_readonly("nvme_storeroom_bytes", &StrataEngineStats::nvme_storeroom_bytes)
+        .def_readonly("avg_h2d_bandwidth_gbps", &StrataEngineStats::avg_h2d_bandwidth_gbps)
+        .def_readonly("compute_overlap_ratio", &StrataEngineStats::compute_overlap_ratio)
+        .def_readonly("sleeping", &StrataEngineStats::sleeping);
+
+    py::class_<StrataDMAScheduler>(m, "StrataDMAScheduler")
+        .def(
+            py::init<int32_t, int32_t, int32_t, QuantFormat, size_t>(),
+            py::arg("num_blocks"),
+            py::arg("resident_blocks"),
+            py::arg("num_gpus"),
+            py::arg("quant"),
+            py::arg("block_bytes")
+        )
+        .def("prefetch_block_async", &StrataDMAScheduler::prefetch_block_async)
+        .def("wait_block_ready", &StrataDMAScheduler::wait_block_ready)
+        .def("sleep_to_host_ram", &StrataDMAScheduler::sleep_to_host_ram)
+        .def("wake_to_vram", &StrataDMAScheduler::wake_to_vram)
+        .def("get_stats", &StrataDMAScheduler::get_stats)
+        .def("blocks", &StrataDMAScheduler::blocks);
+}
+

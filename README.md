@@ -193,7 +193,11 @@ cd openfal
 pip install -e ".[dev]"
 ```
 
+> **Windows:** `pip` installs the `openfal` launcher into your Python **Scripts** directory (e.g. `%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\Scripts`). If `openfal` is not recognized, open a new terminal so `PATH` refreshes, or run `py -3.11 -m openfal.cli detect`. Do **not** run `.\openfal\cli.py` directly — `.py` files are often associated with your editor, and `sys.path` will not include the repository root.
+
 **Optional — Build the native C++/CUDA Strata DMA & FP8/INT4 dequantization extension (`csrc/`):**
+
+Requires an existing PyTorch install with CUDA, the CUDA Toolkit (`nvcc`), and a C++ compiler (MSVC on Windows). This step is optional — the CLI, server, downloader, and engine run in pure Python without it.
 
 * **Linux / macOS (bash / zsh):**
   ```bash
@@ -206,8 +210,14 @@ pip install -e ".[dev]"
   ```
 * **Windows (Command Prompt / cmd.exe):**
   ```bat
-  set OPENFAL_BUILD_CUDA=1 && pip install -e . --no-build-isolation
+  set "OPENFAL_BUILD_CUDA=1" && pip install -e . --no-build-isolation
   ```
+
+> Notes:
+> * `--no-build-isolation` is required because the build imports your already-installed `torch`.
+> * CUDA 12.x officially supports Visual Studio 2017–2022. If you have Visual Studio 2026 / Build Tools 18 (MSVC 19.50+), `setup.py` automatically passes `-allow-unsupported-compiler` and locates conda-style `Library/lib/cudart.lib` toolkits.
+> * On a machine with mixed GPUs, set `TORCH_CUDA_ARCH_LIST` to your target (e.g. `12.0` for RTX 50-series) to avoid compiling for every visible card: PowerShell `$env:TORCH_CUDA_ARCH_LIST = "12.0"`, cmd `set "TORCH_CUDA_ARCH_LIST=12.0"`, bash `export TORCH_CUDA_ARCH_LIST=12.0`.
+> * Verify the extension: `py -3.11 -c "import torch, openfal._strata_C; print(openfal._strata_C.__version__)"`.
 
 ### 2. Launch the Server & Studio Web UI
 
