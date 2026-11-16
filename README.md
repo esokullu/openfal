@@ -121,21 +121,30 @@ openfal detect
 Probes `nvidia-smi` / `torch.cuda`, System RAM, and free NVMe disk space, returning your optimal profile (`dual_5060ti_32gb`, `dual_5060ti_24gb`, `single_5090_32gb`, etc.) and quantization (`fp8_e4m3` vs `int4_awq`).
 
 ### 2. Download Models from Hugging Face & Pack 50-Block Strata Shards
-`openfal download` pulls directly from `Wan-AI/*`, `Qwen/*`, and `MiniMaxAI/*` on Hugging Face via `huggingface_hub` (with resume support) and automatically packs the weights into page-aligned per-block `.safetensors` shards (`block_00.safetensors`..`block_49.safetensors` + `strata_manifest.json`):
+`openfal download` pulls directly from `Wan-AI/*`, `Qwen/*`, and `MiniMaxAI/*` on Hugging Face via `huggingface_hub` (with resume support) and automatically packs the weights into page-aligned per-block `.safetensors` shards (`block_00.safetensors`..`block_49.safetensors` + `strata_manifest.json`).
+
+You do **not** need to download both model families! You can install **ONLY MiniMax-H3** (to do everything—T2V, I2V, Face Swap, T2I, and Stereo Audio—with a single model family and save disk space) or **ONLY the Alibaba Stack** (for maximum MoE speed):
+
+| Install Bundle (`--component`) | What Gets Downloaded | Disk Space (`INT4_AWQ`) | Disk Space (`FP8_E4M3`) | Use Case |
+| :--- | :--- | :---: | :---: | :--- |
+| **`minimax-omni-compact`** | **`Ref2VA` + `Qwen3-VL` + `VAE` only** *(0 bytes of Alibaba)* | **~36 GB** | **~67 GB** | **Ultimate Disk-Saver:** 1 single DiT handles Video, Face Swap, Omni-Ref, Stereo Audio & Frame/Image extraction! |
+| **`minimax-only`** | **`FL2VA` + `Ref2VA` + `H3-Image` + `Qwen3-VL` + `VAE`** *(0 bytes of Alibaba)* | **~69 GB** | **~131 GB** | Complete MiniMax-H3 suite (no Alibaba models downloaded) |
+| **`alibaba-only`** | **`Wan2.2-T2V` + `Wan2.2-I2V` + `Wan2.2-Animate` + `Qwen-Image-2.1`** *(0 bytes of MiniMax DiT)* | **~58 GB** | **~94 GB** | Complete Fast MoE Alibaba suite (no MiniMax DiT downloaded) |
 
 ```bash
-# 1. Primary Alibaba Fast MoE & Turbo Stack (Recommended first install):
-openfal download --component qwen_image_21 --quant fp8_e4m3    # 7B 8-Step Turbo T2I & 10-Ref Face/Image Edit
-openfal download --component wan22_t2v_moe --quant fp8_e4m3    # 27B-A14B Two-Expert MoE Text-to-Video
-openfal download --component wan22_i2v_moe --quant fp8_e4m3    # 27B-A14B Two-Expert MoE Image-to-Video
-openfal download --component wan22_animate --quant fp8_e4m3    # 14B Fast Video Face Swap / Character Animate
+# Option A — Disk-Saver "Single Model Does Everything" (ONLY MiniMax-H3 Compact ~36GB in INT4):
+openfal download --component minimax-omni-compact --quant int4_awq
 
-# 2. Optional MiniMax-H3 33B Omni & Native Stereo Audio Stack:
-openfal download --component fl2va --quant fp8_e4m3            # 33B Text/Image-to-Video + Native Stereo Audio
-openfal download --component ref2va --quant int4_awq           # 33B 9-Image/3-Video/3-Audio Omni-Reference
+# Option B — Full MiniMax-H3 Family ONLY (0 bytes of Alibaba Wan/Qwen-Image downloaded):
+openfal download --component minimax-only --quant fp8_e4m3
 
-# Or auto-detect GPU VRAM/RAM and download everything at once:
-openfal download --auto-detect --weights-dir ./weights/MiniMax-H3
+# Option C — Fast Alibaba MoE Family ONLY (0 bytes of MiniMax DiT downloaded):
+openfal download --component alibaba-only --quant fp8_e4m3
+
+# Option D — Or pick any single component individually:
+openfal download --component qwen_image_21 --quant fp8_e4m3    # Only 3.8 GB (INT4) / 7.0 GB (FP8)!
+openfal download --component wan22_animate --quant int4_awq    # Only 7.2 GB (INT4) for Video Face Swap!
+openfal download --component fl2va --quant int4_awq            # Only MiniMax FL2VA DiT
 
 # Inspect installed partitions and Strata shard readiness:
 openfal models

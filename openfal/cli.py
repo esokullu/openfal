@@ -13,7 +13,7 @@ from pathlib import Path
 import uvicorn
 
 from openfal.config import HARDWARE_PROFILES, get_default_config
-from openfal.engine.downloader import MODEL_COMPONENTS, StrataModelManager
+from openfal.engine.downloader import COMPONENT_BUNDLES, MODEL_COMPONENTS, StrataModelManager
 from openfal.engine.runner import OpenFalRunner
 
 
@@ -151,9 +151,9 @@ def main() -> None:
     p_dl.add_argument("--weights-dir", default="./weights/MiniMax-H3", help="Target directory for weights")
     p_dl.add_argument(
         "--component",
-        choices=["all"] + list(MODEL_COMPONENTS.keys()),
-        default="all",
-        help="Which partition/component to download (default: all)",
+        choices=list(COMPONENT_BUNDLES.keys()) + list(MODEL_COMPONENTS.keys()),
+        default="minimax-only",
+        help="Component or bundle to download (e.g. 'minimax-only', 'minimax-omni-compact', 'alibaba-only', 'all')",
     )
     p_dl.add_argument(
         "--quant",

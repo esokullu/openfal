@@ -4,10 +4,12 @@ Strata-Style Hardware Auto-Detector, Hugging Face Model Downloader & 50-Block Sh
 Just like Niko1221/Strata's built-in installer:
 1. Detects local GPUs (`nvidia-smi` / `torch.cuda` / Apple MPS), System RAM, and free NVMe disk space
    to auto-select the optimal hardware profile (`dual_5060ti_32gb`, `dual_5060ti_24gb`, `single_5090_32gb`, etc.).
-2. Downloads official open-weights directly from Hugging Face (`MiniMaxAI/MiniMax-H3` &
-   `MiniMaxAI/MiniMax-H3-Image`) via `huggingface_hub` (`snapshot_download`) with resumable HTTP Range
-   support, token authentication (`HF_TOKEN`), and selective partition filtering (`FL2VA`, `Ref2VA`,
-   `H3-Image`, `Qwen3-VL`, `VAE`).
+2. Downloads official open-weights directly from Hugging Face (`Wan-AI/*`, `Qwen/*`, `MiniMaxAI/MiniMax-H3`,
+   and `MiniMaxAI/MiniMax-H3-Image`) via `huggingface_hub` (`snapshot_download`) with resumable HTTP Range
+   support, token authentication (`HF_TOKEN`), and selective partition or bundle filtering:
+   - `minimax-only`: Downloads ONLY MiniMax-H3 (`fl2va`, `ref2va`, `h3-image`, `qwen3_vl`, `vae`)
+   - `minimax-omni-compact`: Single-DiT disk-saver (~36 GB in INT4: `ref2va` + `qwen3_vl` + `vae` handles all tasks!)
+   - `alibaba-only`: Downloads ONLY Alibaba (`wan22_t2v_moe`, `wan22_i2v_moe`, `wan22_animate`, `qwen_image_21`)
 3. Repacks / quantizes monolithic `.safetensors` weights into 50 page-aligned per-block Strata shards
    (`block_00.safetensors` .. `block_49.safetensors` in `fp8_e4m3` or `int4_awq`) so `StrataDiTBlockStreamer`
    can stream individual blocks into Pinned Host RAM and GPU VRAM Counter without loading 66GB at once.
@@ -95,43 +97,43 @@ MODEL_COMPONENTS: Dict[str, ModelComponentSpec] = {
     ),
     "fl2va": ModelComponentSpec(
         component_id="fl2va",
-        display_name="[Optional] MiniMax H3-Base-FL2VA (33B Dense DiT + Native Stereo Audio)",
+        display_name="[MiniMax-H3] H3-Base-FL2VA (33B Dense DiT + Native Stereo Audio)",
         hf_repo_id="MiniMaxAI/MiniMax-H3",
         subdir="FL2VA",
         allow_patterns=["FL2VA/*", "*fl2va*", "config.json", "model_index.json"],
         approx_bf16_gb=66.0,
         approx_fp8_gb=33.0,
         approx_int4_gb=17.0,
-        description="Optional 50-block 33B Single-Stream DiT for joint video + native synchronized stereo audio generation.",
+        description="50-block 33B Single-Stream DiT for joint video + native synchronized stereo audio generation.",
         is_dit_partition=True,
     ),
     "ref2va": ModelComponentSpec(
         component_id="ref2va",
-        display_name="[Optional] MiniMax H3-Base-Ref2VA (33B Omni-Reference & Stereo Audio Face Swap)",
+        display_name="[MiniMax-H3] H3-Base-Ref2VA (33B All-in-One Omni-Reference, Face Swap & Stereo Audio)",
         hf_repo_id="MiniMaxAI/MiniMax-H3",
         subdir="Ref2VA",
         allow_patterns=["Ref2VA/*", "*ref2va*", "config.json"],
         approx_bf16_gb=66.0,
         approx_fp8_gb=33.0,
         approx_int4_gb=17.0,
-        description="Optional 50-block 33B DiT for 9-image/3-video/3-audio omni-reference & stereo-synced video face swap.",
+        description="50-block 33B DiT capable of T2V, I2V, 9-Image/3-Video/3-Audio Omni-Reference, Video Face Swap & Stereo Audio.",
         is_dit_partition=True,
     ),
     "h3-image": ModelComponentSpec(
         component_id="h3-image",
-        display_name="[Optional] MiniMax-H3-Image (33B 4K Text-to-Image DiT)",
+        display_name="[MiniMax-H3] MiniMax-H3-Image (33B 4K Text-to-Image DiT)",
         hf_repo_id="MiniMaxAI/MiniMax-H3-Image",
         subdir="H3-Image",
         allow_patterns=["*.safetensors", "*.json", "transformer/*"],
         approx_bf16_gb=62.0,
         approx_fp8_gb=31.0,
         approx_int4_gb=16.0,
-        description="Optional audio-detached 50-block H3 DiT for multi-megapixel image generation.",
+        description="Audio-detached 50-block H3 DiT for multi-megapixel image generation.",
         is_dit_partition=True,
     ),
     "qwen3_vl": ModelComponentSpec(
         component_id="qwen3_vl",
-        display_name="Qwen3-VL / UMT5 Shared Text & Multimodal Encoder",
+        display_name="Qwen3-VL-32B Shared Text & Multimodal Encoder",
         hf_repo_id="MiniMaxAI/MiniMax-H3",
         subdir="text_encoder",
         allow_patterns=["text_encoder/*", "tokenizer/*", "*qwen*"],
@@ -143,16 +145,23 @@ MODEL_COMPONENTS: Dict[str, ModelComponentSpec] = {
     ),
     "vae": ModelComponentSpec(
         component_id="vae",
-        display_name="Wan 3D Causal VAE + MiniMax Hybrid CNN-ViT & Stereo Audio VAE",
+        display_name="Hybrid CNN-ViT Video VAE + Stereo Audio VAE",
         hf_repo_id="MiniMaxAI/MiniMax-H3",
         subdir="vae",
         allow_patterns=["vae/*", "video_vae/*", "audio_vae/*", "*vae*"],
         approx_bf16_gb=4.2,
         approx_fp8_gb=2.4,
         approx_int4_gb=2.4,
-        description="16x16x4 3D Causal Video VAE + 24-ch Hybrid CNN-ViT decoder + stereo audio vocoder.",
+        description="16x spatial compression 24-ch Hybrid CNN-ViT decoder + stereo audio vocoder.",
         is_dit_partition=False,
     ),
+}
+
+COMPONENT_BUNDLES: Dict[str, List[str]] = {
+    "all": list(MODEL_COMPONENTS.keys()),
+    "minimax-only": ["fl2va", "ref2va", "h3-image", "qwen3_vl", "vae"],
+    "minimax-omni-compact": ["ref2va", "qwen3_vl", "vae"],
+    "alibaba-only": ["wan22_t2v_moe", "wan22_i2v_moe", "wan22_animate", "qwen_image_21", "qwen3_vl", "vae"],
 }
 
 
@@ -194,9 +203,6 @@ class StrataModelManager:
         self._lock = threading.RLock()
         self._tasks: Dict[str, DownloadTaskState] = {}
 
-    # -------------------------------------------------------------------------
-    # Hardware Detection (Strata-style auto-calibration)
-    # -------------------------------------------------------------------------
     def detect_hardware(self) -> dict:
         gpus: List[dict] = []
         nvidia_smi = shutil.which("nvidia-smi")
@@ -220,7 +226,6 @@ class StrataModelManager:
             except Exception:
                 pass
 
-        # Fallback: check PyTorch CUDA if nvidia-smi didn't return rows
         if not gpus:
             try:
                 import torch
@@ -238,7 +243,6 @@ class StrataModelManager:
             except Exception:
                 pass
 
-        # System RAM & Disk Free Space
         disk_usage = shutil.disk_usage(self.weights_dir)
         free_disk_gb = round(disk_usage.free / (1024**3), 1)
         total_disk_gb = round(disk_usage.total / (1024**3), 1)
@@ -260,7 +264,6 @@ class StrataModelManager:
         total_vram = sum(g["vram_gb"] for g in gpus)
         num_gpus = len(gpus)
 
-        # Recommend optimal Strata profile
         if num_gpus >= 2 and total_vram >= 28.0:
             rec_profile = "dual_5060ti_32gb"
             rec_quant = "fp8_e4m3"
@@ -292,9 +295,6 @@ class StrataModelManager:
             "recommended_quantization": rec_quant,
         }
 
-    # -------------------------------------------------------------------------
-    # Component Inspection & Status
-    # -------------------------------------------------------------------------
     def get_component_status(self, component_id: str) -> dict:
         spec = MODEL_COMPONENTS[component_id]
         comp_dir = self.weights_dir / spec.subdir
@@ -329,27 +329,30 @@ class StrataModelManager:
             return {
                 "weights_dir": str(self.weights_dir.resolve()),
                 "hardware": self.detect_hardware(),
+                "bundles": COMPONENT_BUNDLES,
                 "components": components,
                 "active_tasks": tasks,
             }
 
-    # -------------------------------------------------------------------------
-    # Hugging Face Download + Strata 50-Block Shard Builder
-    # -------------------------------------------------------------------------
     def start_download_or_pack(
         self,
         component_id: str = "all",
         quantization: str = "fp8_e4m3",
-        mode: str = "hf_hub",  # "hf_hub" (real HuggingFace download) or "strata_repack" (build 50-block shards)
+        mode: str = "hf_hub",
         hf_token: Optional[str] = None,
         custom_repo_id: Optional[str] = None,
         run_async: bool = True,
         on_log: Optional[Callable[[str], None]] = None,
     ) -> DownloadTaskState:
-        target_ids = list(MODEL_COMPONENTS.keys()) if component_id == "all" else [component_id.lower()]
+        comp_key = component_id.lower()
+        if comp_key in COMPONENT_BUNDLES:
+            target_ids = COMPONENT_BUNDLES[comp_key]
+        else:
+            target_ids = [comp_key]
         for cid in target_ids:
             if cid not in MODEL_COMPONENTS:
-                raise ValueError(f"Unknown model component '{cid}'. Valid: {list(MODEL_COMPONENTS.keys()) + ['all']}")
+                valid = list(COMPONENT_BUNDLES.keys()) + list(MODEL_COMPONENTS.keys())
+                raise ValueError(f"Unknown model component or bundle '{cid}'. Valid: {valid}")
 
         task_id = f"dl_{int(time.time() * 1000)}_{component_id}"
         repo_label = custom_repo_id or MODEL_COMPONENTS[target_ids[0]].hf_repo_id
@@ -434,7 +437,6 @@ class StrataModelManager:
         emit(f"[HF-Hub] Connecting to Hugging Face repository '{repo_id}' for component '{spec.component_id}'...")
         api = HfApi(token=hf_token)
 
-        # Verify repo metadata / file tree first
         try:
             repo_info = api.model_info(repo_id=repo_id, token=hf_token)
             siblings = [s.rfilename for s in (repo_info.siblings or [])]
@@ -453,7 +455,6 @@ class StrataModelManager:
         dt = max(0.001, time.perf_counter() - t0)
         emit(f"[HF-Hub] Downloaded '{spec.component_id}' to {local_path} in {dt:.1f}s.")
 
-        # Automatically build Strata 50-block index/shards if this is a DiT partition
         if spec.is_dit_partition:
             self._build_strata_50_block_shards(
                 spec=spec,
@@ -469,10 +470,6 @@ class StrataModelManager:
         task: DownloadTaskState,
         emit: Callable[[str], None],
     ) -> None:
-        """
-        Build or repack the 50 page-aligned `.safetensors` DiT block shards (`block_00.safetensors`
-        .. `block_49.safetensors`) + `strata_manifest.json` for `StrataDiTBlockStreamer`.
-        """
         comp_dir = self.weights_dir / spec.subdir
         blocks_dir = comp_dir / "strata_blocks"
         blocks_dir.mkdir(parents=True, exist_ok=True)
@@ -488,7 +485,6 @@ class StrataModelManager:
 
         for blk_idx in range(num_blocks):
             shard_path = blocks_dir / f"block_{blk_idx:02d}.safetensors"
-            # Store compact quantized projection scales & norm weights in real safetensors format
             if quantization == "fp8_e4m3":
                 q_weights = rng.integers(0, 255, size=(64, 64), dtype=np.uint8)
             elif quantization in ("int4_awq", "nf4"):

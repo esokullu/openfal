@@ -335,9 +335,10 @@
           <input type="text" id="hfTokenInput" placeholder="hf_..." />
         </div>
         <div id="modelComponentsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn-primary" style="flex:1;" onclick="triggerModelInstall('all', 'hf_hub')">⬇️ Download All from HF</button>
-          <button class="btn-secondary" style="flex:1;" onclick="triggerModelInstall('all', 'strata_repack')">⚡ Pack 50-Block Strata Shards</button>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+          <button class="btn-primary" onclick="triggerModelInstall('alibaba-only', 'hf_hub')">⚡ Install ONLY Alibaba (Fast MoE)</button>
+          <button class="btn-secondary" style="border-color:var(--accent);" onclick="triggerModelInstall('minimax-only', 'hf_hub')">🎵 Install ONLY MiniMax-H3 (All-in-One)</button>
+          <button class="btn-secondary" onclick="triggerModelInstall('minimax-omni-compact', 'strata_repack')">💾 MiniMax Compact (~36GB INT4)</button>
         </div>
       </div>
 
