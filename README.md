@@ -598,7 +598,22 @@ It depends on whether you are on **Consumer GPUs (`12GB–32GB VRAM`)** or **Dat
 
 ---
 
-### Q6: Can I release 100% of GPU VRAM when `openfal` is idle without killing the server?
+### Q6: What is the difference between `minimax-omni-compact` (`int4_awq`) and `minimax-only` (`fp8_e4m3`), and does `INT4` significantly lower quality?
+There are **two differences** between those two commands: **which DiT partitions are downloaded** and **which quantization precision is used**:
+
+1. **Model Partitions (`minimax-omni-compact` vs. `minimax-only`):**
+   * **`minimax-omni-compact`** downloads **only 1 DiT (`Ref2VA`)** + shared `Qwen3-VL` + `VAE` (**~36 GB** in INT4 / **~67 GB** in FP8). Because `Ref2VA` is omni-modal, it handles Video Face Swap (`recast`), 9-Ref Omni-Video, Text/Image-to-Video (+ Stereo Audio), and single-frame images with a single 50-block DiT.
+   * **`minimax-only`** downloads **all 3 MiniMax-H3 DiT partitions** (`FL2VA` + `Ref2VA` + `H3-Image`) + `Qwen3-VL` + `VAE` (**~69 GB** in INT4 / **~131 GB** in FP8). Having `FL2VA` dedicated to T2V/I2V yields slightly cleaner baseline motion/audio coherence than `Ref2VA` alone, and `H3-Image` is purpose-tuned for 4K still images without audio branches.
+2. **Does `INT4_AWQ` significantly lower quality compared to `FP8_E4M3` / `BF16`?**
+   * **On large 33B DiT models, no — the drop is small (~2–4% perceptual difference), not a drastic collapse.** Unlike small 1B–3B models that degrade noticeably at 4-bit, a **33B parameter DiT** has high weight redundancy, and `openfal` keeps sensitive layers (attention projections, `adaLN_modulation` timestep/conditioning layers, `Qwen3-VL` Layer-50 embeddings, and the Hybrid CNN-ViT VAE) in higher precision (`BF16`/`FP16`) while quantizing only the bulk linear FFN/QKV weights via group-wise **INT4-AWQ**.
+   * **Where you *will* notice `FP8_E4M3` vs `INT4_AWQ`:**
+     * **Fine micro-textures & small text:** `FP8_E4M3` preserves slightly crisper skin pores, hair strands, water ripples, and tiny text/logos, with less temporal shimmer across 5–15s clips.
+     * **Speed & Hardware:** On RTX 50-series Blackwell GPUs (`RTX 5060 Ti`, `RTX 5090`), **`FP8_E4M3` is natively hardware-accelerated on Tensor Cores**, whereas `INT4_AWQ` requires a dequantization step to `BF16` before matrix multiply.
+   * **Rule of thumb:** Use **`fp8_e4m3`** if you have **32 GB VRAM + 64 GB RAM + 130+ GB SSD** (`dual_5060ti_32gb`, `single_5090_32gb`). Use **`int4_awq`** if you are on **12–24 GB VRAM** (`dual_5060ti_24gb`, `single_16gb_lowvram`, `single_12gb_minimum`) or want the **~36 GB** disk-saver install.
+
+---
+
+### Q7: Can I release 100% of GPU VRAM when `openfal` is idle without killing the server?
 **Yes.** Click **"🌙 VRAM Sleep (Evict to RAM)"** in the Studio Web UI or call `POST /v1/engine/sleep`. All resident DiT blocks are evicted to Pinned Host RAM (`0.0 GB` GPU VRAM used) so you can run games or other GPU workloads, and `POST /v1/engine/wake` (or the next incoming API request) restores them to VRAM Counter in milliseconds.
 
 ---
