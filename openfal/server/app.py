@@ -193,10 +193,10 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
     queue_mgr = FalQueueManager(runner)
 
     app = FastAPI(
-        title="openfal — Strata-DiT Inference Engine for MiniMax H3",
+        title="openfal — Strata-DiT Offload Engine (Wan 2.2 MoE, Qwen-Image-2.1 & MiniMax H3)",
         description=(
-            "Strata-inspired 3-tier VRAM/RAM/NVMe offload inference engine for MiniMax H3 "
-            "(Text-to-Video, Image-to-Video, Text-to-Image, Video Face Swap / Recast) "
+            "Strata-inspired 3-tier VRAM/RAM/NVMe offload inference engine for Wan 2.2 MoE (27B-A14B), "
+            "Qwen-Image-2.1-Turbo (7B), and MiniMax H3 (33B Stereo Audio & Omni-Ref) "
             "with drop-in fal.ai API compatibility and Studio Web UI."
         ),
         version="0.1.0",

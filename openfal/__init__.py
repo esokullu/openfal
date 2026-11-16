@@ -1,6 +1,6 @@
 """
 openfal — Strata-Inspired 3-Tier Offload Inference Engine & fal.ai-Compatible Server
-for Open-Source MiniMax H3 (Video, Image, Omni-Reference & Face Swap) on Consumer GPUs.
+for Wan 2.2 MoE, Qwen-Image-2.1 & MiniMax H3 (Video, Image, Omni-Ref & Face Swap) on Consumer GPUs.
 
 License: MIT
 """
