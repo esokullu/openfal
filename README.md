@@ -121,22 +121,23 @@ openfal detect
 Probes `nvidia-smi` / `torch.cuda`, System RAM, and free NVMe disk space, returning your optimal profile (`dual_5060ti_32gb`, `dual_5060ti_24gb`, `single_5090_32gb`, etc.) and quantization (`fp8_e4m3` vs `int4_awq`).
 
 ### 2. Download Models from Hugging Face & Pack 50-Block Strata Shards
-`openfal download` pulls directly from `MiniMaxAI/MiniMax-H3` and `MiniMaxAI/MiniMax-H3-Image` via `huggingface_hub` (with resume support) and automatically packs the weights into 50 page-aligned per-block `.safetensors` shards (`block_00.safetensors`..`block_49.safetensors` + `strata_manifest.json`):
+`openfal download` pulls directly from `Wan-AI/*`, `Qwen/*`, and `MiniMaxAI/*` on Hugging Face via `huggingface_hub` (with resume support) and automatically packs the weights into page-aligned per-block `.safetensors` shards (`block_00.safetensors`..`block_49.safetensors` + `strata_manifest.json`):
 
 ```bash
-# Auto-detect GPU VRAM/RAM, download all partitions from HF, and pack Strata shards:
+# 1. Primary Alibaba Fast MoE & Turbo Stack (Recommended first install):
+openfal download --component qwen_image_21 --quant fp8_e4m3    # 7B 8-Step Turbo T2I & 10-Ref Face/Image Edit
+openfal download --component wan22_t2v_moe --quant fp8_e4m3    # 27B-A14B Two-Expert MoE Text-to-Video
+openfal download --component wan22_i2v_moe --quant fp8_e4m3    # 27B-A14B Two-Expert MoE Image-to-Video
+openfal download --component wan22_animate --quant fp8_e4m3    # 14B Fast Video Face Swap / Character Animate
+
+# 2. Optional MiniMax-H3 33B Omni & Native Stereo Audio Stack:
+openfal download --component fl2va --quant fp8_e4m3            # 33B Text/Image-to-Video + Native Stereo Audio
+openfal download --component ref2va --quant int4_awq           # 33B 9-Image/3-Video/3-Audio Omni-Reference
+
+# Or auto-detect GPU VRAM/RAM and download everything at once:
 openfal download --auto-detect --weights-dir ./weights/MiniMax-H3
 
-# Or download ONLY a specific partition to save disk space:
-#   fl2va     -> Text-to-Video & First/Last-Frame I2V
-#   ref2va    -> Video Face Swap (recast) & Omni-Reference Video
-#   h3-image  -> 4K Text-to-Image & Image Face Edit
-#   qwen3_vl  -> Shared 32B Layer-50 Text/Reference Encoder
-#   vae       -> Hybrid CNN-ViT Video VAE + Stereo Audio VAE
-openfal download --component fl2va --quant fp8_e4m3
-openfal download --component ref2va --quant int4_awq
-
-# Inspect installed partitions and 50-block shard readiness:
+# Inspect installed partitions and Strata shard readiness:
 openfal models
 ```
 
@@ -204,18 +205,20 @@ Open **`http://localhost:8000/`** in your browser to use the interactive **openf
 2. **Python `openfal` SDK** (`openfal.run(...)`, `openfal.subscribe(...)`, `openfal.upload_file(...)`)
 3. **Direct REST / `curl`** (both synchronous `POST /{endpoint}` and queued `POST /queue/{endpoint}`)
 
+> The examples below start with the **Primary Fast Alibaba Stack (`Qwen-Image-2.1-Turbo` & `Wan 2.2 MoE`)**, followed by the **Optional `MiniMax-H3` Omni / Stereo Audio endpoints**, Queue/SSE streaming, and Engine Control.
+
 ---
 
-### 1. Basic Text-to-Image (`minimax/h3/text-to-image`)
+### 1. Basic Text-to-Image — Alibaba `Qwen-Image-2.1-Turbo` (`qwen/image-2.1/text-to-image`)
 
-Generate native high-resolution images (`480P` up to `4K` / `4096x4096`) using the `H3-Image` partition:
+Generate high-resolution images with elite multi-line typography and native RGBA support in **8 turbo steps** (7B model, **100% resident in VRAM Counter** with 0 MB PCIe streaming):
 
 **curl (Synchronous):**
 ```bash
-curl -X POST http://localhost:8000/minimax/h3/text-to-image \
+curl -X POST http://localhost:8000/qwen/image-2.1/text-to-image \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Minimalist glass pavilion on a Nordic fjord at golden hour, architectural photography, 8k",
+    "prompt": "Minimalist glass coffee shop in Tokyo at dusk with a glowing neon sign reading \"OPENFAL 2.1\", architectural photography",
     "resolution": "2K",
     "aspect_ratio": "16:9",
     "num_images": 1,
@@ -229,12 +232,12 @@ curl -X POST http://localhost:8000/minimax/h3/text-to-image \
 import openfal
 
 res = openfal.run(
-    "minimax/h3/text-to-image",
+    "qwen/image-2.1/text-to-image",
     arguments={
-        "prompt": "Minimalist glass pavilion on a Nordic fjord at golden hour",
+        "prompt": 'Minimalist glass coffee shop in Tokyo with a glowing neon sign reading "OPENFAL 2.1"',
         "resolution": "2K",
         "aspect_ratio": "16:9",
-        "num_images": 1,
+        "num_inference_steps": 8,
         "seed": 42,
     },
     base_url="http://localhost:8000",
@@ -247,11 +250,12 @@ print("Image URL:", res["images"][0]["url"])
 import { fal } from "@fal-ai/client";
 fal.config({ proxyUrl: "http://localhost:8000" });
 
-const result = await fal.subscribe("minimax/h3/text-to-image", {
+const result = await fal.subscribe("qwen/image-2.1/text-to-image", {
   input: {
-    prompt: "Minimalist glass pavilion on a Nordic fjord at golden hour",
+    prompt: 'Minimalist glass coffee shop in Tokyo with a glowing neon sign reading "OPENFAL 2.1"',
     resolution: "2K",
     aspect_ratio: "16:9",
+    num_inference_steps: 8,
   },
 });
 console.log(result.data.images[0].url);
@@ -259,23 +263,24 @@ console.log(result.data.images[0].url);
 
 ---
 
-### 2. Image-to-Image & Portrait / Face Edit (`minimax/h3/image-to-image`)
+### 2. Multi-Reference Image & Portrait Face Edit — Alibaba `Qwen-Image-2.1` (`qwen/image-2.1/edit`)
 
-Edit an existing image or transfer a reference face/identity onto a new portrait:
+Edit an existing image or transfer a reference face/identity onto a new scene using up to **10 reference images**:
 
 ```python
 import openfal
 
-# Upload input image and optional reference face image
+# Upload input image and reference face/style images
 input_url = openfal.upload_file("./portrait_input.png", base_url="http://localhost:8000")
 face_url = openfal.upload_file("./reference_face.png", base_url="http://localhost:8000")
 
 res = openfal.run(
-    "minimax/h3/image-to-image",
+    "qwen/image-2.1/edit",
     arguments={
-        "prompt": "Cinematic oil painting portrait in Renaissance lighting, keeping exact facial identity",
+        "prompt": "Cinematic studio portrait in cybernetic armor, preserving exact facial identity from reference",
         "image_url": input_url,
         "face_image_url": face_url,
+        "reference_image_urls": [face_url, input_url],
         "resolution": "2K",
         "aspect_ratio": "1:1",
         "num_inference_steps": 8,
@@ -287,77 +292,75 @@ print("Edited Image URL:", res["images"][0]["url"])
 
 ---
 
-### 3. Basic Text-to-Video with Synchronized Stereo Audio (`minimax/h3/text-to-video` & `minimax/h3-max/text-to-video`)
+### 3. Fast MoE Text-to-Video — Alibaba `Wan 2.2 MoE` (`wan/v2.2/text-to-video`)
 
-Generate 5–15 second videos (`480P`, `768P`, `1080P`, `2K`) with native stereo soundscapes (`FL2VA` partition):
+Runs Alibaba's `Wan2.2-T2V-A14B` Two-Expert Temporal MoE (`27B total` -> `14B High-Noise Expert` for steps $1..N/2$, `14B Low-Noise Expert` for steps $N/2+1..N$). On `2x RTX 5060 Ti (32GB)`, each GPU pins one 14B expert in VRAM Counter with **0.0 GB per-step PCIe traffic**:
 
 **curl:**
 ```bash
-curl -X POST http://localhost:8000/minimax/h3-max/text-to-video \
+curl -X POST http://localhost:8000/wan/v2.2/text-to-video \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Cinematic drone shot rolling over a misty mountain ridge at dawn, wind howling and distant eagle cry.",
+    "prompt": "Cinematic FPV drone shot flying through a bioluminescent canyon at night, waterfalls glowing blue",
     "duration": 5,
     "resolution": "768P",
     "aspect_ratio": "16:9",
     "fps": 24,
-    "prompt_expansion_mode": "balanced",
-    "enable_audio": true
+    "num_inference_steps": 8
   }'
 ```
 
-**JavaScript (`@fal-ai/client` with live Strata logs):**
+**JavaScript (`@fal-ai/client` with live MoE expert logs):**
 ```javascript
-const t2v = await fal.subscribe("minimax/h3-max/text-to-video", {
+const wanVideo = await fal.subscribe("wan/v2.2/text-to-video", {
   input: {
-    prompt: "Steam locomotive crossing a snowy viaduct at twilight, chugging engine and whistle stereo audio",
+    prompt: "High-speed bullet train gliding across a mirror-like salt flat at sunrise, cinematic 4k",
     duration: 5,
     resolution: "1080P",
-    aspect_ratio: "21:9",
-    prompt_expansion_mode: "balanced",
+    aspect_ratio: "16:9",
+    num_inference_steps: 8,
   },
   logs: true,
   onQueueUpdate: (update) => {
     if (update.status === "IN_PROGRESS") {
-      update.logs.forEach((l) => console.log("[Strata]", l.message));
+      update.logs.forEach((l) => console.log("[Wan2.2-MoE]", l.message));
     }
   },
 });
-console.log("MP4 URL:", t2v.data.video.url);
+console.log("Wan 2.2 MP4 URL:", wanVideo.data.video.url);
 ```
 
 ---
 
-### 4. Image-to-Video: First-Frame & First/Last-Frame Conditioning (`minimax/h3-max/image-to-video`)
+### 4. Fast MoE Image-to-Video — Alibaba `Wan 2.2 MoE` (`wan/v2.2/image-to-video`)
 
-Animate a single starting frame (`start_image_url`), or interpolate smoothly between a starting frame and an ending frame (`end_image_url`):
+Animate a starting keyframe image (`start_image_url`) using the 2-expert `Wan2.2-I2V-A14B` MoE backbone:
 
 ```python
 import openfal
 
 start_frame = openfal.upload_file("./opening_shot.png", base_url="http://localhost:8000")
-end_frame = openfal.upload_file("./closing_shot.png", base_url="http://localhost:8000")
 
 res = openfal.subscribe(
-    "minimax/h3-max/image-to-video",
+    "wan/v2.2/image-to-video",
     arguments={
-        "prompt": "Camera dollies forward as neon signs flicker to life in the rain, ambient rain audio",
+        "prompt": "Camera tracks forward smoothly as cherry blossoms swirl in the wind around the samurai",
         "start_image_url": start_frame,
-        "end_image_url": end_frame,  # Optional closing keyframe for FL2VA interpolation
         "duration": 5.0,
         "resolution": "768P",
         "aspect_ratio": "16:9",
+        "num_inference_steps": 8,
     },
     base_url="http://localhost:8000",
 )
-print("Animated Video URL:", res["video"]["url"])
+print("Wan 2.2 Animated Video URL:", res["video"]["url"])
 ```
 
 ---
 
-### 5. Video Face Swap / Character Recast (`minimax/h3-max/recast`)
+### 5. Fast Video Face Swap & Character Animate — Alibaba `Wan 2.2 Animate 14B` (`wan/v2.2/animate`)
 
-Swap a face or replace a character in a target video while preserving original head motion, expressions, and scene lighting (`Ref2VA` partition):
+Swap a face or replace a character in a target video using `Wan2.2-Animate-14B` (only `~14 GB` in FP8 or `~7.2 GB` in INT4—fits 100% inside a single 16GB GPU VRAM Counter!):
 
 **Python (`openfal` SDK):**
 ```python
@@ -367,22 +370,23 @@ face_url = openfal.upload_file("./my_face.png", base_url="http://localhost:8000"
 target_vid_url = openfal.upload_file("./actor_clip.mp4", base_url="http://localhost:8000")
 
 res = openfal.subscribe(
-    "minimax/h3-max/recast",
+    "wan/v2.2/animate",
     arguments={
-        "prompt": "Character speaking naturally in warm studio lighting, preserving target expressions and motion",
+        "prompt": "Character speaking naturally in studio lighting, matching target head pose and facial expressions",
         "face_image_url": face_url,
         "target_video_url": target_vid_url,
         "duration": 5.0,
         "resolution": "768P",
+        "num_inference_steps": 8,
     },
     base_url="http://localhost:8000",
 )
-print("Face-Swapped MP4:", res["video"]["url"])
+print("Wan 2.2 Face-Swapped MP4:", res["video"]["url"])
 ```
 
 **curl:**
 ```bash
-curl -X POST http://localhost:8000/minimax/h3-max/recast \
+curl -X POST http://localhost:8000/wan/v2.2/animate \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "Close-up interview shot in cinematic lighting, natural lip and eye movement",
@@ -395,11 +399,32 @@ curl -X POST http://localhost:8000/minimax/h3-max/recast \
 
 ---
 
-### 6. Omni Reference-to-Video (`minimax/h3-max/reference-to-video`)
+### 6. [Optional MiniMax-H3 Stack] Text/Image-to-Video with Native Stereo Audio (`minimax/h3-max/text-to-video` & `image-to-video`)
 
-Combine up to **9 reference images** (character face, outfit, environment, props), **3 reference videos** (camera trajectory / motion), and **3 reference audio clips** in a single unified context window:
+When you need **joint video + native synchronized stereo audio** (dialogue, foley, ambient soundscapes) or **first + last frame interpolation**, call the `minimax/h3-max/*` endpoints:
+
+```bash
+# Text-to-Video + Native Stereo Audio (FL2VA 33B partition)
+curl -X POST http://localhost:8000/minimax/h3-max/text-to-video \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Cinematic drone shot rolling over a misty mountain ridge at dawn, wind howling and distant eagle cry.",
+    "duration": 5,
+    "resolution": "768P",
+    "aspect_ratio": "16:9",
+    "prompt_expansion_mode": "balanced",
+    "enable_audio": true
+  }'
+```
+
+---
+
+### 7. [Optional MiniMax-H3 Stack] 9-Ref Omni Video, Recast, Relight & Insert-Video (`minimax/h3-max/*`)
+
+Combine up to **9 reference images**, **3 reference videos**, and **3 reference audio tracks** (`Ref2VA` 33B partition), or run video relighting / object insertion:
 
 ```javascript
+// Omni-Reference Video (9 images + 3 videos + 3 audio tracks)
 const omni = await fal.subscribe("minimax/h3-max/reference-to-video", {
   input: {
     prompt: "The detective from @image_1 wearing the coat from @image_2 walks through the alley in @image_3, matching the camera pan of @video_1",
@@ -408,26 +433,16 @@ const omni = await fal.subscribe("minimax/h3-max/reference-to-video", {
       "http://localhost:8000/files/trenchcoat.png",
       "http://localhost:8000/files/cyberpunk_alley.png",
     ],
-    reference_video_urls: [
-      "http://localhost:8000/files/camera_pan_ref.mp4",
-    ],
-    reference_audio_urls: [
-      "http://localhost:8000/files/voice_timbre_ref.wav",
-    ],
+    reference_video_urls: ["http://localhost:8000/files/camera_pan_ref.mp4"],
+    reference_audio_urls: ["http://localhost:8000/files/voice_timbre_ref.wav"],
     duration: 6,
     resolution: "768P",
-    aspect_ratio: "16:9",
   },
 });
-console.log("Omni-Reference Video:", omni.data.video.url);
 ```
 
----
-
-### 7. Video Editing: Relight & Insert-Video (`minimax/h3-max/relight` & `minimax/h3-max/insert-video`)
-
-**Relight an existing video (`minimax/h3-max/relight`):**
 ```bash
+# Video Relighting (minimax/h3-max/relight)
 curl -X POST http://localhost:8000/minimax/h3-max/relight \
   -H "Content-Type: application/json" \
   -d '{
@@ -437,10 +452,8 @@ curl -X POST http://localhost:8000/minimax/h3-max/relight \
     "duration": 5,
     "resolution": "768P"
   }'
-```
 
-**Insert a character or object into a video (`minimax/h3-max/insert-video`):**
-```bash
+# Video Object / Character Insertion (minimax/h3-max/insert-video)
 curl -X POST http://localhost:8000/minimax/h3-max/insert-video \
   -H "Content-Type: application/json" \
   -d '{
@@ -454,53 +467,29 @@ curl -X POST http://localhost:8000/minimax/h3-max/insert-video \
 
 ---
 
-### 8. Stylized Video Endpoints (`styles/hand-drawn` & `styles/16bit-pixel`)
+### 8. Queue Lifecycle & Server-Sent Events (SSE) Streaming
+
+If you are integrating without an SDK, you can drive the `fal.ai` queue lifecycle directly on any `wan/v2.2/*`, `qwen/image-2.1/*`, or `minimax/h3/*` route:
 
 ```bash
-# Hand-Drawn Anime / 2D Cel Animation Style
-curl -X POST http://localhost:8000/minimax/h3-max/styles/hand-drawn \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "A young mage riding a clockwork owl over a floating library, Ghibli-inspired hand-drawn cel animation",
-    "duration": 5,
-    "resolution": "768P"
-  }'
-
-# 16-Bit Retro Pixel Art Style with Chiptune Stereo Audio
-curl -X POST http://localhost:8000/minimax/h3-max/styles/16bit-pixel \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "16-bit pixel art boss battle in a lava cavern, retro synth chiptune audio",
-    "duration": 5,
-    "resolution": "480P"
-  }'
-```
-
----
-
-### 9. Queue Lifecycle & Server-Sent Events (SSE) Streaming
-
-If you are integrating without an SDK, you can drive the `fal.ai` queue lifecycle directly:
-
-```bash
-# 1. Enqueue a job asynchronously (returns request_id, status_url, response_url, cancel_url)
-REQ_ID=$(curl -s -X POST http://localhost:8000/queue/minimax/h3-max/text-to-video \
+# 1. Enqueue a Wan 2.2 MoE job asynchronously (returns request_id, status_url, response_url, cancel_url)
+REQ_ID=$(curl -s -X POST http://localhost:8000/queue/wan/v2.2/text-to-video \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Aurora borealis dancing over an ice cave", "duration": 4}' | python3 -c "import sys,json; print(json.load(sys.stdin)['request_id'])")
 
-# 2. Stream real-time queue & Strata block-offload logs via SSE
-curl -N "http://localhost:8000/minimax/h3-max/text-to-video/requests/${REQ_ID}/status/stream?logs=1"
+# 2. Stream real-time queue & MoE / Strata telemetry logs via SSE
+curl -N "http://localhost:8000/wan/v2.2/text-to-video/requests/${REQ_ID}/status/stream?logs=1"
 
 # 3. Fetch final completed payload
-curl -s "http://localhost:8000/minimax/h3-max/text-to-video/requests/${REQ_ID}" | python3 -m json.tool
+curl -s "http://localhost:8000/wan/v2.2/text-to-video/requests/${REQ_ID}" | python3 -m json.tool
 
 # 4. Or cancel an in-flight job
-curl -X PUT "http://localhost:8000/minimax/h3-max/text-to-video/requests/${REQ_ID}/cancel"
+curl -X PUT "http://localhost:8000/wan/v2.2/text-to-video/requests/${REQ_ID}/cancel"
 ```
 
 ---
 
-### 10. Strata Engine Control, VRAM Sleep/Wake & Model Installer API
+### 9. Strata Engine Control, VRAM Sleep/Wake & Model Installer API
 
 Manage your GPUs, switch hardware profiles on the fly, evict VRAM to Pinned RAM (`0 MB` idle VRAM), or trigger Hugging Face model downloads via REST:
 
@@ -509,7 +498,6 @@ Manage your GPUs, switch hardware profiles on the fly, evict VRAM to Pinned RAM 
 curl -s http://localhost:8000/v1/engine/status | python3 -m json.tool
 
 # Hot-switch hardware profile (e.g. dual_5060ti_32gb, dual_5060ti_24gb, single_5090_32gb, single_12gb_minimum)
-# Optional: override exact number of DiT blocks pinned in VRAM Counter
 curl -X POST http://localhost:8000/v1/engine/profile \
   -H "Content-Type: application/json" \
   -d '{"profile_id": "dual_5060ti_24gb", "resident_vram_blocks": 24}'
@@ -517,17 +505,17 @@ curl -X POST http://localhost:8000/v1/engine/profile \
 # Evict all resident GPU weights to Pinned Host RAM (0.0 GB GPU VRAM used while idle!)
 curl -X POST http://localhost:8000/v1/engine/sleep
 
-# Wake engine and restore pinned resident DiT blocks back to GPU VRAM Counter
+# Wake engine and restore pinned resident blocks back to GPU VRAM Counter
 curl -X POST http://localhost:8000/v1/engine/wake
 
 # Auto-detect host GPUs, System RAM, and free NVMe space
 curl -s http://localhost:8000/v1/models/hardware-detect | python3 -m json.tool
 
-# Trigger Hugging Face model download + 50-block Strata shard packing via API
+# Trigger Hugging Face model download + Strata shard packing for Wan 2.2 MoE or Qwen-Image-2.1
 curl -X POST http://localhost:8000/v1/models/download \
   -H "Content-Type: application/json" \
   -d '{
-    "component_id": "fl2va",
+    "component_id": "wan22_t2v_moe",
     "quantization": "fp8_e4m3",
     "mode": "hf_hub",
     "run_async": true

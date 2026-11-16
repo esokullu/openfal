@@ -171,9 +171,9 @@ def main() -> None:
     p_dl.add_argument("--repo-id", default=None, help="Optional custom Hugging Face repo ID override")
     p_dl.set_defaults(func=cmd_download)
 
-    p_bench = sub.add_parser("benchmark", help="Run a local MiniMax-H3 Strata-DiT pipeline benchmark")
+    p_bench = sub.add_parser("benchmark", help="Run a local Strata-DiT pipeline benchmark")
     p_bench.add_argument("--profile", choices=list(HARDWARE_PROFILES.keys()), default="dual_5060ti_32gb")
-    p_bench.add_argument("--endpoint", default="minimax/h3-max/text-to-video")
+    p_bench.add_argument("--endpoint", default="wan/v2.2/text-to-video")
     p_bench.add_argument("--prompt", default="A futuristic high-speed train gliding over an ocean bridge at sunset")
     p_bench.add_argument("--resolution", default="768P")
     p_bench.add_argument("--duration", type=float, default=2.0)
