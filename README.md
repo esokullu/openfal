@@ -159,6 +159,11 @@ openfal download --component qwen_image_21 --quant fp8_e4m3    # ~16.1 GB (DiT +
 openfal download --component wan22_animate --quant fp8_e4m3    # ~17.2 GB for Video Face Swap
 openfal download --component fl2va --quant int4_awq            # ~10.6 GB Q4_K GGUF
 
+# Option F — Upstream Official BF16 Fallback + Local Tensor Quantization (if pre-quantized mirrors ever move):
+openfal download --component wan22_t2v_moe --source official-bf16 --quant bf16
+openfal download --component wan22_t2v_moe --source official-bf16 --quant fp8_e4m3 --cleanup-raw
+openfal download --component fl2va --pack-only --quant int4_awq --cleanup-raw   # Quantize already-downloaded local BF16 files
+
 # Inspect installed partitions and Strata shard readiness:
 openfal models
 
@@ -683,6 +688,25 @@ There are **two differences** between those two commands: **which DiT partitions
      ```
      *(On **Windows PowerShell**, set it first: `$env:CUDA_VISIBLE_DEVICES = "1,2"; openfal serve --profile dual_5060ti_32gb --port 8000`)*
    * **In Docker (`docker-compose.yml`):** Replace `count: all` under `deploy.resources.reservations.devices` with `device_ids: ['1', '2']` to bind only those specific GPUs into the container.
+
+---
+
+### Q9: What if `Comfy-Org` or `unsloth` pre-quantized Hugging Face links ever go away? Is there a BF16 fallback + local quantizer?
+**Yes.** Every component in `openfal` keeps its official upstream BF16 repository mapping (`Wan-AI/*`, `Qwen/*`, `MiniMaxAI/*`) alongside the default `--source prequantized` links:
+1. **Download Raw BF16 Only (`--quant bf16`):**
+   ```bash
+   openfal download --component wan22_t2v_moe --quant bf16
+   ```
+2. **Download Official BF16 + Locally Quantize to 50-Block `FP8_E4M3` or `INT4_AWQ` Strata Shards (and auto-clean raw BF16 files):**
+   ```bash
+   openfal download --component wan22_t2v_moe --source official-bf16 --quant fp8_e4m3 --cleanup-raw
+   ```
+   When `--source official-bf16` is set, `openfal` pulls directly from the official upstream repo, quantizes linear 2D `.safetensors` tensors block-by-block into `strata_blocks/block_00.safetensors`..`block_49.safetensors` (`fp8_e4m3` with per-column float32 scales, or group-wise `int4_awq` packed nibbles), and if `--cleanup-raw` is passed, deletes the raw BF16 `.safetensors` files once sharding finishes.
+3. **Quantize Already-Downloaded Local BF16 Files Without Re-Downloading:**
+   ```bash
+   openfal download --component fl2va --pack-only --quant int4_awq --cleanup-raw
+   ```
+4. **Custom Hugging Face Repo Override (`--repo-id`):** Point any component at any mirror with `--repo-id <org/repo>`.
 
 ---
 

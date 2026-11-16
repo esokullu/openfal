@@ -90,13 +90,15 @@ def cmd_download(args: argparse.Namespace) -> None:
     mode = "strata_repack" if args.pack_only else "hf_hub"
     print(
         f"[openfal download] Target={weights_dir.resolve()} | Component={args.component} | "
-        f"Mode={mode} | Quant={quant}"
+        f"Mode={mode} | Source={args.source} | Quant={quant} | CleanupRaw={args.cleanup_raw}"
     )
 
     task = mgr.start_download_or_pack(
         component_id=args.component,
         quantization=quant,
         mode=mode,
+        source=args.source,
+        cleanup_raw=args.cleanup_raw,
         hf_token=args.hf_token,
         custom_repo_id=args.repo_id,
         run_async=False,
@@ -220,11 +222,22 @@ def main() -> None:
         default="fp8_e4m3",
         help="Target quantization format for 50-block Strata shards",
     )
+    p_dl.add_argument(
+        "--source",
+        choices=["prequantized", "official-bf16"],
+        default="prequantized",
+        help="'prequantized' (default: Comfy-Org/unsloth fast links) or 'official-bf16' (upstream BF16 fallback + local quantization)",
+    )
+    p_dl.add_argument(
+        "--cleanup-raw",
+        action="store_true",
+        help="After local quantization from official-bf16, delete raw BF16 .safetensors files to save disk space",
+    )
     p_dl.add_argument("--auto-detect", action="store_true", help="Auto-select quantization based on detected GPUs")
     p_dl.add_argument(
         "--pack-only",
         action="store_true",
-        help="Build 50-block Strata safetensors shards locally without contacting Hugging Face",
+        help="Quantize/pack existing local .safetensors (or build structural shards) without contacting Hugging Face",
     )
     p_dl.add_argument("--hf-token", default=None, help="Hugging Face token (or set HF_TOKEN env var)")
     p_dl.add_argument("--repo-id", default=None, help="Optional custom Hugging Face repo ID override")

@@ -121,7 +121,15 @@ class ModelDownloadRequest(BaseModel):
     )
     mode: str = Field(
         default="hf_hub",
-        description="'hf_hub' to download from Hugging Face Hub + pack shards, or 'strata_repack' to pack local 50-block shards.",
+        description="'hf_hub' to download from Hugging Face Hub + pack shards, or 'strata_repack' to pack/quantize local shards.",
+    )
+    source: str = Field(
+        default="prequantized",
+        description="'prequantized' (Comfy-Org/unsloth fast weights) or 'official-bf16' (raw Wan-AI/Qwen/MiniMaxAI BF16 weights + local quantization).",
+    )
+    cleanup_raw: bool = Field(
+        default=False,
+        description="Delete raw BF16 .safetensors files after quantizing into 50-block Strata shards.",
     )
     hf_token: Optional[str] = Field(default=None, description="Optional Hugging Face access token (hf_...).")
     custom_repo_id: Optional[str] = Field(default=None, description="Optional custom Hugging Face repo ID override.")

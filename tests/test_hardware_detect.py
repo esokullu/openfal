@@ -1,13 +1,26 @@
 from pathlib import Path
 import argparse
+import numpy as np
+from safetensors.numpy import load_file as load_safetensors_numpy, save_file as save_safetensors_numpy
 from openfal.cli import cmd_cleanup
 from openfal.engine.downloader import MODEL_COMPONENTS, StrataModelManager, recommend_hardware_profile
 
 
-def test_prequantized_hf_source_resolution() -> None:
+def test_prequantized_and_official_bf16_source_resolution() -> None:
     wan_fp8 = StrataModelManager.resolve_download_source(MODEL_COMPONENTS["wan22_t2v_moe"], "fp8_e4m3")
     assert wan_fp8.repo_id == "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
     assert any("fp8_scaled" in p for p in wan_fp8.allow_patterns)
+
+    # Even with quant=fp8_e4m3 or int4_awq, source='official-bf16' must select upstream official BF16 repo
+    wan_official = StrataModelManager.resolve_download_source(
+        MODEL_COMPONENTS["wan22_t2v_moe"], "fp8_e4m3", source="official-bf16"
+    )
+    assert wan_official.repo_id == "Wan-AI/Wan2.2-T2V-A14B"
+
+    fl2va_official = StrataModelManager.resolve_download_source(
+        MODEL_COMPONENTS["fl2va"], "int4_awq", source="official-bf16"
+    )
+    assert fl2va_official.repo_id == "MiniMaxAI/MiniMax-H3"
 
     fl2va_fp8 = StrataModelManager.resolve_download_source(MODEL_COMPONENTS["fl2va"], "fp8_e4m3")
     assert fl2va_fp8.repo_id == "Comfy-Org/MiniMax-H3"
@@ -22,6 +35,57 @@ def test_prequantized_hf_source_resolution() -> None:
 
     fl2va_bf16 = StrataModelManager.resolve_download_source(MODEL_COMPONENTS["fl2va"], "bf16")
     assert fl2va_bf16.repo_id == "MiniMaxAI/MiniMax-H3"
+
+
+def test_real_local_tensor_quantization_fp8_int4_and_cleanup_raw(tmp_path: Path) -> None:
+    weights_dir = tmp_path / "weights"
+    comp_dir = weights_dir / "FL2VA"
+    comp_dir.mkdir(parents=True)
+
+    rng = np.random.default_rng(123)
+    raw_file = comp_dir / "model-00001-of-00001.safetensors"
+    save_safetensors_numpy(
+        {
+            "blocks.0.attn.qkv.weight": rng.standard_normal((64, 256)).astype(np.float32),
+            "blocks.27.mlp.fc1.weight": rng.standard_normal((64, 256)).astype(np.float32),
+            "blocks.27.norm.weight": np.ones((256,), dtype=np.float32),
+        },
+        str(raw_file),
+    )
+
+    mgr = StrataModelManager(weights_dir)
+    # 1. Quantize locally to FP8 E4M3 without removing raw file yet
+    t_fp8 = mgr.start_download_or_pack(
+        component_id="fl2va",
+        quantization="fp8_e4m3",
+        mode="strata_repack",
+        cleanup_raw=False,
+        run_async=False,
+    )
+    assert t_fp8.status == "COMPLETED"
+    assert raw_file.exists()
+
+    blk27 = load_safetensors_numpy(str(comp_dir / "strata_blocks" / "block_27.safetensors"))
+    assert "blocks.27.mlp.fc1.weight.qweight" in blk27
+    assert blk27["blocks.27.mlp.fc1.weight.qweight"].dtype == np.uint8
+    assert "blocks.27.mlp.fc1.weight.scales" in blk27
+    assert "blocks.27.norm.weight" in blk27
+
+    # 2. Quantize locally to INT4_AWQ with cleanup_raw=True -> deletes source BF16 safetensors
+    t_int4 = mgr.start_download_or_pack(
+        component_id="fl2va",
+        quantization="int4_awq",
+        mode="strata_repack",
+        cleanup_raw=True,
+        run_async=False,
+    )
+    assert t_int4.status == "COMPLETED"
+    assert not raw_file.exists()
+
+    blk0 = load_safetensors_numpy(str(comp_dir / "strata_blocks" / "block_00.safetensors"))
+    assert "blocks.0.attn.qkv.weight.qweight" in blk0
+    assert "blocks.0.attn.qkv.weight.qzeros" in blk0
+    assert blk0["blocks.0.attn.qkv.weight.qweight"].dtype == np.uint8
 
 
 def test_rtx_5090_plus_t400_4gb_excludes_display_gpu() -> None:

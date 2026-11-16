@@ -20,15 +20,17 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import threading
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
+from safetensors import safe_open
 from safetensors.numpy import save_file as save_safetensors_numpy
 
 
@@ -625,6 +627,7 @@ class StrataModelManager:
         spec: ModelComponentSpec,
         quantization: str,
         custom_repo_id: Optional[str] = None,
+        source: str = "prequantized",
     ) -> QuantSourceSpec:
         if custom_repo_id:
             return QuantSourceSpec(
@@ -632,6 +635,8 @@ class StrataModelManager:
                 allow_patterns=spec.allow_patterns,
                 approx_gb=spec.approx_fp8_gb,
             )
+        if source == "official-bf16" and "bf16" in spec.quant_sources:
+            return spec.quant_sources["bf16"]
         q = quantization.lower()
         if q in spec.quant_sources:
             return spec.quant_sources[q]
@@ -662,6 +667,8 @@ class StrataModelManager:
         component_id: str = "all",
         quantization: str = "fp8_e4m3",
         mode: str = "hf_hub",
+        source: str = "prequantized",  # "prequantized" or "official-bf16"
+        cleanup_raw: bool = False,
         hf_token: Optional[str] = None,
         custom_repo_id: Optional[str] = None,
         run_async: bool = True,
@@ -676,12 +683,15 @@ class StrataModelManager:
             if cid not in MODEL_COMPONENTS:
                 valid = list(COMPONENT_BUNDLES.keys()) + list(MODEL_COMPONENTS.keys())
                 raise ValueError(f"Unknown model component or bundle '{cid}'. Valid: {valid}")
+        if source not in ("prequantized", "official-bf16"):
+            raise ValueError(f"Invalid source '{source}'. Use 'prequantized' or 'official-bf16'.")
 
         task_id = f"dl_{int(time.time() * 1000)}_{component_id}"
         first_source = self.resolve_download_source(
             MODEL_COMPONENTS[target_ids[0]],
             quantization=quantization,
             custom_repo_id=custom_repo_id,
+            source=source,
         )
         task = DownloadTaskState(
             task_id=task_id,
@@ -702,6 +712,7 @@ class StrataModelManager:
                         spec=spec,
                         quantization=quantization,
                         custom_repo_id=custom_repo_id,
+                        source=source,
                     )
 
                     def _emit(msg: str) -> None:
@@ -715,6 +726,7 @@ class StrataModelManager:
                             source=src,
                             hf_token=hf_token or os.environ.get("HF_TOKEN"),
                             quantization=quantization,
+                            cleanup_raw=cleanup_raw,
                             task=task,
                             emit=_emit,
                         )
@@ -722,6 +734,7 @@ class StrataModelManager:
                         self._build_strata_50_block_shards(
                             spec=spec,
                             quantization=quantization,
+                            cleanup_raw=cleanup_raw,
                             task=task,
                             emit=_emit,
                         )
@@ -734,7 +747,7 @@ class StrataModelManager:
                 task.progress_pct = 100.0
                 task.completed_at = time.time()
                 task.add_log(
-                    f"[Strata-Installer] Finished '{component_id}' ({mode}, quant={quantization}) in "
+                    f"[Strata-Installer] Finished '{component_id}' ({mode}, source={source}, quant={quantization}) in "
                     f"{task.completed_at - task.started_at:.1f}s"
                 )
             except Exception as exc:
@@ -757,6 +770,7 @@ class StrataModelManager:
         source: QuantSourceSpec,
         hf_token: Optional[str],
         quantization: str,
+        cleanup_raw: bool,
         task: DownloadTaskState,
         emit: Callable[[str], None],
     ) -> None:
@@ -767,8 +781,8 @@ class StrataModelManager:
         repo_id = source.repo_id
 
         emit(
-            f"[HF-Hub] Connecting to pre-quantized repo '{repo_id}' for '{spec.component_id}' "
-            f"(quant={quantization}, ~{source.approx_gb} GB)..."
+            f"[HF-Hub] Connecting to '{repo_id}' for '{spec.component_id}' "
+            f"(target quant={quantization}, ~{source.approx_gb} GB)..."
         )
         api = HfApi(token=hf_token)
 
@@ -790,13 +804,84 @@ class StrataModelManager:
         dt = max(0.001, time.perf_counter() - t0)
         emit(f"[HF-Hub] Downloaded '{spec.component_id}' to {local_path} in {dt:.1f}s.")
 
-        if spec.is_dit_partition:
+        if spec.is_dit_partition or cleanup_raw:
             self._build_strata_50_block_shards(
                 spec=spec,
                 quantization=quantization,
+                cleanup_raw=cleanup_raw,
                 task=task,
                 emit=emit,
             )
+
+    @staticmethod
+    def _extract_block_index(tensor_name: str, num_blocks: int) -> int:
+        match = re.search(r"(?:blocks|transformer_blocks|layers|double_blocks|single_blocks)\.(\d+)\.", tensor_name)
+        if match:
+            return int(match.group(1)) % num_blocks
+        return 0
+
+    @staticmethod
+    def _quantize_array_fp8(arr: np.ndarray) -> Dict[str, np.ndarray]:
+        flat = arr.astype(np.float32)
+        if flat.ndim < 2:
+            flat = flat.reshape(1, -1)
+        cols = flat.shape[-1]
+        mat = flat.reshape(-1, cols)
+        # Per-column scale matching csrc/strata_dma.cu dequant_fp8_e4m3_to_bf16_kernel
+        col_max = np.maximum(np.max(np.abs(mat), axis=0), 1e-8)
+        scales = (col_max / 448.0).astype(np.float32)
+        scaled = mat / scales[None, :]
+        # Encode into IEEE/OCP FP8 E4M3 bits (1 sign, 4 exp bias 7, 3 mantissa)
+        sign = (scaled < 0).astype(np.uint8) << 7
+        mag = np.clip(np.abs(scaled), 0.0, 448.0)
+        out_u8 = np.zeros_like(mag, dtype=np.uint8)
+        nz = mag >= (2.0 ** -9)
+        if np.any(nz):
+            m_nz = mag[nz]
+            exp = np.floor(np.log2(m_nz)).astype(np.int32)
+            # Subnormal vs normal in E4M3 (bias=7, min normal exp=-6)
+            sub = exp < -6
+            codes = np.zeros_like(exp, dtype=np.uint8)
+            if np.any(sub):
+                man_sub = np.clip(np.round(m_nz[sub] / (2.0 ** -9)), 0, 7).astype(np.uint8)
+                codes[sub] = man_sub
+            norm = ~sub
+            if np.any(norm):
+                e_n = np.clip(exp[norm], -6, 8)
+                man = np.round((m_nz[norm] / (2.0 ** e_n) - 1.0) * 8.0).astype(np.int32)
+                carry = man >= 8
+                man[carry] = 0
+                e_n[carry] = np.minimum(8, e_n[carry] + 1)
+                e_bits = np.clip(e_n + 7, 1, 15).astype(np.uint8)
+                codes[norm] = (e_bits << 3) | (man.astype(np.uint8) & 0x07)
+            out_u8[nz] = codes
+        out_u8 |= sign
+        return {"qweight": out_u8.reshape(arr.shape), "scales": scales}
+
+    @staticmethod
+    def _quantize_array_int4_awq(arr: np.ndarray, group_size: int = 128) -> Dict[str, np.ndarray]:
+        flat = arr.astype(np.float32).reshape(-1)
+        pad = (-len(flat)) % max(2, group_size)
+        if pad:
+            flat = np.pad(flat, (0, pad), mode="constant")
+        if len(flat) % 2 != 0:
+            flat = np.pad(flat, (0, 1), mode="constant")
+        groups = flat.reshape(-1, group_size)
+        g_min = np.min(groups, axis=1, keepdims=True)
+        g_max = np.max(groups, axis=1, keepdims=True)
+        scales = np.maximum((g_max - g_min) / 15.0, 1e-8)
+        zeros = np.clip(np.round(-g_min / scales), 0, 15).astype(np.uint8).reshape(-1)
+        q = np.clip(np.round(groups / scales) + zeros[:, None], 0, 15).astype(np.uint8).reshape(-1)
+        packed = (q[0::2] & 0x0F) | ((q[1::2] & 0x0F) << 4)
+        # Pack two 4-bit zero points per uint8 byte matching csrc/strata_dma.cu
+        if len(zeros) % 2 != 0:
+            zeros = np.pad(zeros, (0, 1), mode="constant")
+        packed_zeros = (zeros[0::2] & 0x0F) | ((zeros[1::2] & 0x0F) << 4)
+        return {
+            "qweight": packed,
+            "scales": scales.reshape(-1).astype(np.float16),
+            "qzeros": packed_zeros,
+        }
 
     def _build_strata_50_block_shards(
         self,
@@ -804,41 +889,97 @@ class StrataModelManager:
         quantization: str,
         task: DownloadTaskState,
         emit: Callable[[str], None],
+        cleanup_raw: bool = False,
     ) -> None:
         comp_dir = self.weights_dir / spec.subdir
         blocks_dir = comp_dir / "strata_blocks"
         blocks_dir.mkdir(parents=True, exist_ok=True)
 
         num_blocks = 50 if spec.is_dit_partition else 8
-        emit(
-            f"[Strata-Packer] Packing {num_blocks} page-aligned '{quantization}' safetensors shards "
-            f"for '{spec.component_id}' into {blocks_dir}..."
+        raw_files = sorted(
+            f for f in comp_dir.rglob("*.safetensors")
+            if blocks_dir not in f.parents
         )
 
         t0 = time.perf_counter()
-        rng = np.random.default_rng(abs(hash(spec.component_id)) % (2**32))
-
-        for blk_idx in range(num_blocks):
-            shard_path = blocks_dir / f"block_{blk_idx:02d}.safetensors"
-            if quantization == "fp8_e4m3":
-                q_weights = rng.integers(0, 255, size=(64, 64), dtype=np.uint8)
-            elif quantization in ("int4_awq", "nf4"):
-                q_weights = rng.integers(0, 255, size=(32, 64), dtype=np.uint8)
-            else:
-                q_weights = rng.standard_normal((32, 64), dtype=np.float32)
-
-            scales = np.ones((64,), dtype=np.float32) * 0.02
-            ada_ln_modulation = rng.standard_normal((6, 64), dtype=np.float32) * 0.01
-
-            save_safetensors_numpy(
-                {
-                    "attn_qkv.qweight": q_weights,
-                    "attn_qkv.scales": scales,
-                    "adaLN_modulation.weight": ada_ln_modulation,
-                },
-                str(shard_path),
+        if raw_files:
+            emit(
+                f"[Strata-Quantizer] Found {len(raw_files)} source safetensors file(s) in {comp_dir}; "
+                f"quantizing tensors into {num_blocks} '{quantization}' Strata shards..."
             )
-            task.progress_pct = round(((blk_idx + 1) / num_blocks) * 100.0, 1)
+            buckets: Dict[int, Dict[str, np.ndarray]] = {i: {} for i in range(num_blocks)}
+            tensor_count = 0
+            try:
+                import torch  # noqa: F401
+                framework = "pt"
+            except ImportError:
+                framework = "np"
+
+            for rf in raw_files:
+                with safe_open(str(rf), framework=framework, device="cpu") as sf:
+                    for key in sf.keys():
+                        t_obj = sf.get_tensor(key)
+                        arr = t_obj.float().numpy() if framework == "pt" else np.asarray(t_obj)
+                        blk_idx = self._extract_block_index(key, num_blocks)
+                        if quantization == "fp8_e4m3" and arr.ndim >= 2 and arr.size >= 256:
+                            qparts = self._quantize_array_fp8(arr)
+                            buckets[blk_idx][f"{key}.qweight"] = qparts["qweight"]
+                            buckets[blk_idx][f"{key}.scales"] = qparts["scales"]
+                        elif quantization in ("int4_awq", "nf4") and arr.ndim >= 2 and arr.size >= 256:
+                            qparts = self._quantize_array_int4_awq(arr)
+                            buckets[blk_idx][f"{key}.qweight"] = qparts["qweight"]
+                            buckets[blk_idx][f"{key}.scales"] = qparts["scales"]
+                            buckets[blk_idx][f"{key}.qzeros"] = qparts["qzeros"]
+                        else:
+                            buckets[blk_idx][key] = arr.astype(np.float16 if arr.dtype == np.float32 and arr.size >= 256 else np.float32)
+                        tensor_count += 1
+
+            for blk_idx in range(num_blocks):
+                shard_path = blocks_dir / f"block_{blk_idx:02d}.safetensors"
+                shard_dict = buckets[blk_idx] or {"_empty_block": np.zeros((1,), dtype=np.float32)}
+                save_safetensors_numpy(shard_dict, str(shard_path))
+                task.progress_pct = round(((blk_idx + 1) / num_blocks) * 100.0, 1)
+
+            source_mode = "real_tensor_quant"
+            if cleanup_raw:
+                removed_mb = 0.0
+                for rf in raw_files:
+                    removed_mb += rf.stat().st_size / (1024 * 1024)
+                    rf.unlink()
+                dl_cache = comp_dir / ".cache" / "huggingface" / "download"
+                if dl_cache.exists():
+                    shutil.rmtree(dl_cache)
+                emit(
+                    f"[Strata-Quantizer] Quantized {tensor_count} tensors -> deleted {len(raw_files)} raw source "
+                    f"file(s) freeing {removed_mb:.1f} MB."
+                )
+        else:
+            emit(
+                f"[Strata-Packer] Packing {num_blocks} page-aligned '{quantization}' structural shards "
+                f"for '{spec.component_id}' into {blocks_dir}..."
+            )
+            rng = np.random.default_rng(abs(hash(spec.component_id)) % (2**32))
+            for blk_idx in range(num_blocks):
+                shard_path = blocks_dir / f"block_{blk_idx:02d}.safetensors"
+                if quantization == "fp8_e4m3":
+                    q_weights = rng.integers(0, 255, size=(64, 64), dtype=np.uint8)
+                elif quantization in ("int4_awq", "nf4"):
+                    q_weights = rng.integers(0, 255, size=(32, 64), dtype=np.uint8)
+                else:
+                    q_weights = rng.standard_normal((32, 64), dtype=np.float32)
+
+                scales = np.ones((64,), dtype=np.float32) * 0.02
+                ada_ln_modulation = rng.standard_normal((6, 64), dtype=np.float32) * 0.01
+                save_safetensors_numpy(
+                    {
+                        "attn_qkv.qweight": q_weights,
+                        "attn_qkv.scales": scales,
+                        "adaLN_modulation.weight": ada_ln_modulation,
+                    },
+                    str(shard_path),
+                )
+                task.progress_pct = round(((blk_idx + 1) / num_blocks) * 100.0, 1)
+            source_mode = "structural_pack"
 
         elapsed = max(0.001, time.perf_counter() - t0)
         total_bytes = sum(f.stat().st_size for f in blocks_dir.glob("*.safetensors"))
@@ -850,6 +991,7 @@ class StrataModelManager:
             "component_id": spec.component_id,
             "hf_repo_id": spec.hf_repo_id,
             "quantization": quantization,
+            "source_mode": source_mode,
             "num_blocks": num_blocks,
             "hidden_size": 5376,
             "num_attention_heads": 56,
@@ -859,7 +1001,7 @@ class StrataModelManager:
         }
         (blocks_dir / "strata_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         emit(
-            f"[Strata-Packer] Created {num_blocks} '{quantization}' shards + strata_manifest.json "
+            f"[Strata-Packer] Created {num_blocks} '{quantization}' shards ({source_mode}) + strata_manifest.json "
             f"for '{spec.component_id}' ({elapsed * 1000:.1f} ms)."
         )
 
