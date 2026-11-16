@@ -191,10 +191,23 @@ openfal models
 git clone https://github.com/esokullu/openfal.git
 cd openfal
 pip install -e ".[dev]"
-
-# Optional: Build the native C++/CUDA Strata DMA & FP8/INT4 dequantization extension (csrc/)
-OPENFAL_BUILD_CUDA=1 pip install -e . --no-build-isolation
 ```
+
+**Optional — Build the native C++/CUDA Strata DMA & FP8/INT4 dequantization extension (`csrc/`):**
+
+* **Linux / macOS (bash / zsh):**
+  ```bash
+  OPENFAL_BUILD_CUDA=1 pip install -e . --no-build-isolation
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  $env:OPENFAL_BUILD_CUDA = "1"
+  pip install -e . --no-build-isolation
+  ```
+* **Windows (Command Prompt / cmd.exe):**
+  ```bat
+  set OPENFAL_BUILD_CUDA=1 && pip install -e . --no-build-isolation
+  ```
 
 ### 2. Launch the Server & Studio Web UI
 
@@ -645,6 +658,7 @@ There are **two differences** between those two commands: **which DiT partitions
      # Example: Expose only GPU 1 (e.g. a single RTX 5090) and leave GPU 0 untouched:
      CUDA_VISIBLE_DEVICES=1 openfal serve --profile single_5090_32gb --port 8000
      ```
+     *(On **Windows PowerShell**, set it first: `$env:CUDA_VISIBLE_DEVICES = "1,2"; openfal serve --profile dual_5060ti_32gb --port 8000`)*
    * **In Docker (`docker-compose.yml`):** Replace `count: all` under `deploy.resources.reservations.devices` with `device_ids: ['1', '2']` to bind only those specific GPUs into the container.
 
 ---
