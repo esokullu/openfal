@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from openfal.config import EngineConfig
+from openfal.engine.downloader import StrataModelManager
 from openfal.engine.memory_hierarchy import StrataMemoryHierarchy
 from openfal.engine.text_cache import TextEncoderCache
 from openfal.models.face_swap import ReferenceFaceSwapConditioner
@@ -33,6 +34,7 @@ class OpenFalRunner:
     def __init__(self, config: EngineConfig):
         self.config = config
         self.memory = StrataMemoryHierarchy(config)
+        self.model_manager = StrataModelManager(config.weights_dir)
         self.text_cache = TextEncoderCache(config.cache_dir)
         self.qwen_encoder = StreamedQwen3VLEncoder(self.memory, self.text_cache)
         self.dit = MiniMaxH3DiT(self.memory, config.weights_dir)

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Callable, Optional, Tuple
 
 import numpy as np
+from safetensors.numpy import load_file as load_safetensors_numpy
 
 from openfal.engine.block_streamer import StrataDiTBlockStreamer
 from openfal.engine.memory_hierarchy import StrataMemoryHierarchy
@@ -115,7 +116,18 @@ class MiniMaxH3DiT:
 
     def has_local_safetensors(self, partition: str) -> bool:
         part_dir = self.weights_dir / partition
-        return part_dir.exists() and any(part_dir.glob("*.safetensors"))
+        return part_dir.exists() and any(part_dir.rglob("*.safetensors"))
+
+    def load_block_modulation_scale(self, partition: str, block_id: int) -> float:
+        shard_path = self.weights_dir / partition / "strata_blocks" / f"block_{block_id:02d}.safetensors"
+        if shard_path.exists():
+            try:
+                tensors = load_safetensors_numpy(str(shard_path))
+                if "attn_qkv.scales" in tensors:
+                    return float(np.mean(tensors["attn_qkv.scales"]))
+            except Exception:
+                pass
+        return 0.015
 
     def sample_latents(
         self,

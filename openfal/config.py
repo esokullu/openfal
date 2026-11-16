@@ -48,6 +48,7 @@ class HardwareProfile:
     description: str
     num_gpus: int
     total_vram_gb: float
+    min_system_ram_gb: int
     recommended_system_ram_gb: int
     quantization: QuantizationMode
     offload_strategy: OffloadStrategy
@@ -70,9 +71,22 @@ class HardwareProfile:
         }
         return mapping[self.quantization]
 
+    @property
+    def active_pantry_ram_gb(self) -> float:
+        # Offloaded DiT blocks in page-locked (cudaHostAlloc) RAM + 4.0 GB Qwen3-VL / VAE staging buffer
+        offloaded_blocks = self.total_dit_blocks - self.resident_vram_blocks
+        return round((offloaded_blocks * self.block_size_mb) / 1024.0 + 4.0, 1)
+
+    @property
+    def full_partition_pinned_ram_gb(self) -> float:
+        # Full 50-block partition pinned in RAM (allows instant VRAM Sleep/Wake + zero NVMe read during steps)
+        return round((self.total_dit_blocks * self.block_size_mb) / 1024.0 + 4.0, 1)
+
     def to_dict(self) -> dict:
         data = asdict(self)
         data["block_size_mb"] = self.block_size_mb
+        data["active_pantry_ram_gb"] = self.active_pantry_ram_gb
+        data["full_partition_pinned_ram_gb"] = self.full_partition_pinned_ram_gb
         return data
 
 
@@ -88,6 +102,7 @@ HARDWARE_PROFILES: Dict[str, HardwareProfile] = {
         ),
         num_gpus=2,
         total_vram_gb=32.0,
+        min_system_ram_gb=32,
         recommended_system_ram_gb=64,
         quantization=QuantizationMode.FP8_E4M3,
         offload_strategy=OffloadStrategy.STRATA_DUAL_GPU_PIPELINE,
@@ -130,7 +145,8 @@ HARDWARE_PROFILES: Dict[str, HardwareProfile] = {
         ),
         num_gpus=2,
         total_vram_gb=24.0,
-        recommended_system_ram_gb=64,
+        min_system_ram_gb=24,
+        recommended_system_ram_gb=48,
         quantization=QuantizationMode.INT4_AWQ,
         offload_strategy=OffloadStrategy.STRATA_DUAL_GPU_PIPELINE,
         total_dit_blocks=50,
@@ -172,6 +188,7 @@ HARDWARE_PROFILES: Dict[str, HardwareProfile] = {
         ),
         num_gpus=1,
         total_vram_gb=32.0,
+        min_system_ram_gb=32,
         recommended_system_ram_gb=64,
         quantization=QuantizationMode.FP8_E4M3,
         offload_strategy=OffloadStrategy.STRATA_RING_STREAM,
@@ -203,6 +220,7 @@ HARDWARE_PROFILES: Dict[str, HardwareProfile] = {
         ),
         num_gpus=1,
         total_vram_gb=24.0,
+        min_system_ram_gb=32,
         recommended_system_ram_gb=64,
         quantization=QuantizationMode.FP8_E4M3,
         offload_strategy=OffloadStrategy.STRATA_RING_STREAM,
@@ -234,7 +252,8 @@ HARDWARE_PROFILES: Dict[str, HardwareProfile] = {
         ),
         num_gpus=1,
         total_vram_gb=16.0,
-        recommended_system_ram_gb=64,
+        min_system_ram_gb=32,
+        recommended_system_ram_gb=48,
         quantization=QuantizationMode.INT4_AWQ,
         offload_strategy=OffloadStrategy.STRATA_LOW_VRAM_MICRO,
         total_dit_blocks=50,
@@ -253,6 +272,38 @@ HARDWARE_PROFILES: Dict[str, HardwareProfile] = {
                 assigned_block_start=0,
                 assigned_block_end=50,
                 resident_blocks=12,
+            ),
+        ],
+    ),
+    "single_12gb_minimum": HardwareProfile(
+        profile_id="single_12gb_minimum",
+        display_name="1x RTX 4070 / 3060 / 5060 (12GB VRAM Minimum Entry)",
+        description=(
+            "Minimum entry-level 12GB VRAM configuration. Uses INT4-AWQ weights, pins 6 DiT "
+            "blocks in VRAM Counter + 2 DMA slots, and streams 44 blocks from Pinned Host RAM."
+        ),
+        num_gpus=1,
+        total_vram_gb=12.0,
+        min_system_ram_gb=32,
+        recommended_system_ram_gb=48,
+        quantization=QuantizationMode.INT4_AWQ,
+        offload_strategy=OffloadStrategy.STRATA_LOW_VRAM_MICRO,
+        total_dit_blocks=50,
+        resident_vram_blocks=6,
+        ping_pong_prefetch_slots=2,
+        qwen3_vl_stream_layers=3,
+        vae_tiled_decode=True,
+        pcie_bandwidth_gbps=24.0,
+        gpus=[
+            GPUDeviceSpec(
+                device_id=0,
+                name="NVIDIA GeForce RTX 12GB (Entry Minimum)",
+                vram_gb=12.0,
+                pcie_gen=4,
+                pcie_lanes=16,
+                assigned_block_start=0,
+                assigned_block_end=50,
+                resident_blocks=6,
             ),
         ],
     ),

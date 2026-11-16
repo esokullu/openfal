@@ -108,3 +108,22 @@ class ProfileSwitchRequest(BaseModel):
         le=50,
         description="Optional override for number of MiniMax-H3 DiT blocks pinned in VRAM Counter.",
     )
+
+
+class ModelDownloadRequest(BaseModel):
+    component_id: str = Field(
+        default="all",
+        description="Component to download/pack: 'all', 'fl2va', 'ref2va', 'h3-image', 'qwen3_vl', or 'vae'.",
+    )
+    quantization: str = Field(
+        default="fp8_e4m3",
+        description="Target Strata shard quantization: 'fp8_e4m3', 'int4_awq', 'nf4', or 'bf16'.",
+    )
+    mode: str = Field(
+        default="hf_hub",
+        description="'hf_hub' to download from Hugging Face Hub + pack shards, or 'strata_repack' to pack local 50-block shards.",
+    )
+    hf_token: Optional[str] = Field(default=None, description="Optional Hugging Face access token (hf_...).")
+    custom_repo_id: Optional[str] = Field(default=None, description="Optional custom Hugging Face repo ID override.")
+    run_async: bool = Field(default=True, description="Run download in background thread and return task_id.")
+

@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from openfal.config import EngineConfig, HARDWARE_PROFILES, get_default_config
 from openfal.engine.runner import OpenFalRunner
 from openfal.server.queue_manager import FalQueueManager
-from openfal.server.schemas import MiniMaxH3Input, ProfileSwitchRequest
+from openfal.server.schemas import MiniMaxH3Input, ModelDownloadRequest, ProfileSwitchRequest
 
 
 SUPPORTED_ENDPOINTS = [
@@ -226,6 +226,40 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
     @app.get("/v1/jobs")
     async def list_recent_jobs() -> dict:
         return {"jobs": queue_mgr.list_recent_jobs(limit=25)}
+
+    # -------------------------------------------------------------------------
+    # Strata-Style Hugging Face Model Manager & Hardware Auto-Detector Endpoints
+    # -------------------------------------------------------------------------
+    @app.get("/v1/models/status")
+    async def models_status() -> dict:
+        return runner.model_manager.get_all_status()
+
+    @app.get("/v1/models/hardware-detect")
+    async def models_hardware_detect() -> dict:
+        return runner.model_manager.detect_hardware()
+
+    @app.post("/v1/models/download")
+    async def start_model_download(req: ModelDownloadRequest) -> dict:
+        try:
+            task = runner.model_manager.start_download_or_pack(
+                component_id=req.component_id,
+                quantization=req.quantization,
+                mode=req.mode,
+                hf_token=req.hf_token,
+                custom_repo_id=req.custom_repo_id,
+                run_async=req.run_async,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": task.status, "task": task.to_dict()}
+
+    @app.delete("/v1/models/{component_id}")
+    async def delete_model_component(component_id: str) -> dict:
+        try:
+            info = runner.model_manager.remove_component(component_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "removed", "component": info}
 
     # -------------------------------------------------------------------------
     # Local Media Storage & File Serving (compatible with fal.storage.upload)

@@ -313,6 +313,7 @@
     <div class="header-controls">
       <label style="font-size:12px;color:var(--text-1);">Hardware Profile:</label>
       <select id="profileSelect" onchange="switchProfile()" style="width:auto;min-width:270px;"></select>
+      <button class="btn-secondary" onclick="toggleModelHub()">📦 HF Model Hub &amp; Installer</button>
       <button id="sleepWakeBtn" class="btn-sleep" onclick="toggleSleepWake()">VRAM Sleep (Evict to RAM)</button>
       <a href="/docs" target="_blank" style="text-decoration:none;">
         <button class="btn-secondary">OpenAPI / Swagger</button>
@@ -323,6 +324,23 @@
   <main class="layout">
     <!-- Left Column: Task Playground -->
     <section>
+      <div class="card" id="modelHubPanel" style="display:none;border-color:var(--accent);">
+        <div class="card-title">
+          <span>📦 Hugging Face Model Hub &amp; Strata 50-Block Installer</span>
+          <button class="btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="toggleModelHub()">Close</button>
+        </div>
+        <div id="hwDetectSummary" style="font-size:12px;color:var(--text-1);margin-bottom:10px;">Detecting host hardware...</div>
+        <div class="form-group">
+          <label>Optional Hugging Face Token (`HF_TOKEN` for gated/rate-limited repos)</label>
+          <input type="text" id="hfTokenInput" placeholder="hf_..." />
+        </div>
+        <div id="modelComponentsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-primary" style="flex:1;" onclick="triggerModelInstall('all', 'hf_hub')">⬇️ Download All from HF</button>
+          <button class="btn-secondary" style="flex:1;" onclick="triggerModelInstall('all', 'strata_repack')">⚡ Pack 50-Block Strata Shards</button>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title">
           <span>MiniMax H3 Multimodal Endpoint</span>
@@ -560,6 +578,63 @@
       const route = isSleeping ? "/v1/engine/wake" : "/v1/engine/sleep";
       await fetch(route, { method: "POST" });
       await refreshTelemetry();
+    }
+
+    async function toggleModelHub() {
+      const panel = document.getElementById("modelHubPanel");
+      if (panel.style.display === "none") {
+        panel.style.display = "block";
+        await refreshModelHub();
+      } else {
+        panel.style.display = "none";
+      }
+    }
+
+    async function refreshModelHub() {
+      const res = await fetch("/v1/models/status");
+      const data = await res.json();
+      const hw = data.hardware;
+      document.getElementById("hwDetectSummary").innerHTML =
+        `Host: <b>${hw.platform}</b> | System RAM: <b>${hw.system_ram_gb} GB</b> | Free NVMe: <b>${hw.free_nvme_gb} GB</b> | Recommended: <b>${hw.recommended_profile_id} (${hw.recommended_quantization})</b>`;
+
+      const listEl = document.getElementById("modelComponentsList");
+      listEl.innerHTML = "";
+      for (const c of data.components) {
+        const row = document.createElement("div");
+        row.style.cssText = "background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;";
+        const badge = c.strata_50_blocks_ready
+          ? `<span class="pill" style="background:rgba(16,185,129,0.2);color:#6ee7b7;">50 Shards Ready (${c.disk_size_mb} MB)</span>`
+          : (c.installed ? `<span class="pill">Installed (${c.disk_size_mb} MB)</span>` : `<span class="pill" style="background:rgba(244,63,94,0.15);color:#fda4af;">Not Downloaded</span>`);
+        row.innerHTML = `
+          <div style="font-size:11.5px;">
+            <div style="font-weight:700;color:var(--text-0);">${c.display_name}</div>
+            <div style="color:var(--text-1);font-size:10.5px;">HF: ${c.hf_repo_id} (${c.subdir}) &bull; FP8: ~${c.approx_fp8_gb}GB / INT4: ~${c.approx_int4_gb}GB</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${badge}
+            <button class="btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="triggerModelInstall('${c.component_id}', 'hf_hub')">HF Pull</button>
+            <button class="btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="triggerModelInstall('${c.component_id}', 'strata_repack')">Pack</button>
+          </div>
+        `;
+        listEl.appendChild(row);
+      }
+    }
+
+    async function triggerModelInstall(component_id, mode) {
+      const hf_token = document.getElementById("hfTokenInput").value.trim() || null;
+      const logBox = document.getElementById("logBox");
+      logBox.textContent += `[Strata-Installer] Starting ${mode} for '${component_id}'...\n`;
+      const res = await fetch("/v1/models/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ component_id, mode, hf_token, run_async: false })
+      });
+      const out = await res.json();
+      if (out.task && out.task.logs) {
+        out.task.logs.forEach(l => { logBox.textContent += `${l}\n`; });
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+      await refreshModelHub();
     }
 
     async function uploadLocalFile() {

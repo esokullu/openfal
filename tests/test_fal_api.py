@@ -11,11 +11,47 @@ from openfal.server.app import create_app
 def _make_client(tmp_path: Path) -> TestClient:
     cfg = EngineConfig(
         profile_id="dual_5060ti_32gb",
+        weights_dir=tmp_path / "weights",
         output_dir=tmp_path / "outputs",
         cache_dir=tmp_path / "cache",
     )
     app = create_app(cfg)
     return TestClient(app)
+
+
+def test_model_downloader_and_strata_shard_packer(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+
+    hw_resp = client.get("/v1/models/hardware-detect")
+    assert hw_resp.status_code == 200
+    assert "recommended_profile_id" in hw_resp.json()
+
+    st0 = client.get("/v1/models/status").json()
+    assert len(st0["components"]) == 5
+
+    # Pack 50-block Strata safetensors shards for Ref2VA (Video Face Swap partition)
+    dl_resp = client.post(
+        "/v1/models/download",
+        json={
+            "component_id": "ref2va",
+            "quantization": "int4_awq",
+            "mode": "strata_repack",
+            "run_async": False,
+        },
+    )
+    assert dl_resp.status_code == 200
+    assert dl_resp.json()["status"] == "COMPLETED"
+
+    st1 = client.get("/v1/models/status").json()
+    ref2va_info = next(c for c in st1["components"] if c["component_id"] == "ref2va")
+    assert ref2va_info["installed"] is True
+    assert ref2va_info["strata_50_blocks_ready"] is True
+    assert ref2va_info["strata_blocks_count"] == 50
+
+    # Delete component
+    del_resp = client.delete("/v1/models/ref2va")
+    assert del_resp.status_code == 200
+    assert del_resp.json()["component"]["installed"] is False
 
 
 def test_web_ui_and_engine_endpoints(tmp_path: Path) -> None:
