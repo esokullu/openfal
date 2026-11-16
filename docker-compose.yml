@@ -1,0 +1,24 @@
+services:
+  openfal:
+    build: .
+    container_name: openfal-strata-h3
+    ports:
+      - "8000:8000"
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    environment:
+      - OPENFAL_PROFILE=${OPENFAL_PROFILE:-dual_5060ti_32gb}
+      - OPENFAL_WEIGHTS_DIR=/weights/MiniMax-H3
+      - OPENFAL_OUTPUT_DIR=/outputs
+    volumes:
+      - ./weights:/weights
+      - ./outputs:/outputs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

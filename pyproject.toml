@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openfal"
+version = "0.1.0"
+description = "Strata-inspired 3-Tier Offload Inference Engine & fal.ai-Compatible Server for MiniMax H3 (Video, Image, Omni-Reference & Face Swap) on Consumer GPUs"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "openfal Contributors" }
+]
+keywords = [
+    "minimax-h3",
+    "fal-ai",
+    "video-generation",
+    "image-generation",
+    "face-swap",
+    "diffusion-transformer",
+    "vram-offload",
+    "strata",
+    "consumer-gpu",
+    "rtx-5060ti",
+    "rtx-5090"
+]
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "pydantic>=2.6.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+    "httpx>=0.26.0",
+    "safetensors>=0.4.2",
+]
+
+[project.optional-dependencies]
+torch = [
+    "torch>=2.4.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "httpx>=0.26.0",
+]
+
+[project.scripts]
+openfal = "openfal.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["openfal*"]
+
+[tool.setuptools.package-data]
+openfal = ["ui/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

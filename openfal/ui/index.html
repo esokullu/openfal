@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>openfal Studio — MiniMax H3 Strata-DiT Offload Engine</title>
+  <style>
+    :root {
+      --bg-0: #090b10;
+      --bg-1: #111520;
+      --bg-2: #171c2b;
+      --bg-3: #1f263a;
+      --border: #283149;
+      --text-0: #f1f5f9;
+      --text-1: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #818cf8;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-0);
+      color: var(--text-0);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 24px;
+      background: rgba(17, 21, 32, 0.92);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(10px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 16px;
+      color: #090b10;
+    }
+    .brand h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .brand span.sub {
+      font-size: 12px;
+      color: var(--text-1);
+      display: block;
+    }
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    select, input[type="text"], input[type="number"], textarea {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--text-0);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    select:focus, input:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+    button {
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #090b10;
+      font-weight: 700;
+    }
+    .btn-primary:hover { opacity: 0.92; transform: translateY(-1px); }
+    .btn-secondary {
+      background: var(--bg-2);
+      border-color: var(--border);
+      color: var(--text-0);
+    }
+    .btn-secondary:hover { background: var(--bg-3); }
+    .btn-sleep {
+      background: rgba(245, 158, 11, 0.14);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: var(--amber);
+    }
+    .btn-wake {
+      background: rgba(16, 185, 129, 0.14);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: var(--emerald);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 440px 1fr;
+      gap: 20px;
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 20px 24px;
+    }
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-1);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .task-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .task-tab {
+      text-align: left;
+      padding: 9px 11px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-1);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .task-tab.active {
+      background: rgba(56, 189, 248, 0.14);
+      border-color: var(--accent);
+      color: var(--text-0);
+    }
+    .task-tab small {
+      display: block;
+      font-size: 10px;
+      opacity: 0.75;
+      margin-top: 2px;
+    }
+    .form-group { margin-bottom: 13px; }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-1);
+      margin-bottom: 5px;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 13px;
+    }
+    textarea { width: 100%; min-height: 86px; resize: vertical; }
+    input[type="text"], input[type="number"], select { width: 100%; }
+    .tier-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .tier-box {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .tier-box h4 {
+      font-size: 11px;
+      color: var(--text-1);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .tier-box .metric {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-0);
+    }
+    .tier-box .submetric {
+      font-size: 11px;
+      color: var(--text-1);
+      margin-top: 3px;
+    }
+    .blocks-grid {
+      display: grid;
+      grid-template-columns: repeat(25, 1fr);
+      gap: 4px;
+      margin-top: 10px;
+    }
+    .blk-cell {
+      height: 26px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255,255,255,0.08);
+      transition: transform 0.12s ease;
+    }
+    .blk-vram-gpu0 { background: rgba(16, 185, 129, 0.28); color: #6ee7b7; border-color: #10b981; }
+    .blk-vram-gpu1 { background: rgba(56, 189, 248, 0.28); color: #7dd3fc; border-color: #38bdf8; }
+    .blk-dma-slot  { background: rgba(245, 158, 11, 0.45); color: #fde68a; border-color: #f59e0b; transform: scale(1.08); }
+    .blk-ram-pantry { background: var(--bg-2); color: var(--text-1); }
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 11px;
+      color: var(--text-1);
+      margin-top: 10px;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+    .media-stage {
+      background: #05070b;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      min-height: 340px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    .media-stage video, .media-stage img {
+      max-width: 100%;
+      max-height: 460px;
+      border-radius: 8px;
+    }
+    .log-box {
+      background: #06080d;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 11.5px;
+      color: #a5f3fc;
+      max-height: 170px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    pre.code-snippet {
+      background: #06080d;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11.5px;
+      color: #e2e8f0;
+      overflow-x: auto;
+    }
+    .pill {
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+    }
+    .upload-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo-badge">of</div>
+      <div>
+        <h1>openfal <span class="pill">MiniMax-H3 33B</span></h1>
+        <span class="sub">Strata-Inspired 3-Tier Offload Engine &bull; fal.ai Compatible API &bull; MIT License</span>
+      </div>
+    </div>
+    <div class="header-controls">
+      <label style="font-size:12px;color:var(--text-1);">Hardware Profile:</label>
+      <select id="profileSelect" onchange="switchProfile()" style="width:auto;min-width:270px;"></select>
+      <button id="sleepWakeBtn" class="btn-sleep" onclick="toggleSleepWake()">VRAM Sleep (Evict to RAM)</button>
+      <a href="/docs" target="_blank" style="text-decoration:none;">
+        <button class="btn-secondary">OpenAPI / Swagger</button>
+      </a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Left Column: Task Playground -->
+    <section>
+      <div class="card">
+        <div class="card-title">
+          <span>MiniMax H3 Multimodal Endpoint</span>
+          <span id="activePartitionBadge" class="pill">Partition: FL2VA</span>
+        </div>
+
+        <div class="task-tabs" id="taskTabs">
+          <button class="task-tab active" data-ep="minimax/h3-max/text-to-video" data-part="FL2VA" onclick="selectTask(this)">
+            🎬 Text to Video
+            <small>minimax/h3-max/text-to-video</small>
+          </button>
+          <button class="task-tab" data-ep="minimax/h3-max/image-to-video" data-part="FL2VA" onclick="selectTask(this)">
+            🖼️ Image to Video
+            <small>minimax/h3-max/image-to-video</small>
+          </button>
+          <button class="task-tab" data-ep="minimax/h3-max/recast" data-part="Ref2VA" onclick="selectTask(this)">
+            🎭 Video Face Swap / Recast
+            <small>minimax/h3-max/recast</small>
+          </button>
+          <button class="task-tab" data-ep="minimax/h3-max/reference-to-video" data-part="Ref2VA" onclick="selectTask(this)">
+            🧬 Omni Reference Video
+            <small>minimax/h3-max/reference-to-video</small>
+          </button>
+          <button class="task-tab" data-ep="minimax/h3/text-to-image" data-part="H3-Image" onclick="selectTask(this)">
+            ✨ Text to Image (4K)
+            <small>minimax/h3/text-to-image</small>
+          </button>
+          <button class="task-tab" data-ep="minimax/h3/image-to-image" data-part="H3-Image" onclick="selectTask(this)">
+            🪄 Image / Face Edit
+            <small>minimax/h3/image-to-image</small>
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label>Prompt (Visual + Native Stereo Soundscape Cues)</label>
+          <textarea id="promptInput" oninput="updateCodeSnippet()">Cinematic tracking shot of a cyberpunk samurai walking through neon rain in Neo-Tokyo, reflections on wet pavement, ambient synth and rain stereo audio.</textarea>
+        </div>
+
+        <div id="refInputsContainer" style="display:none;">
+          <div class="form-group">
+            <label id="refPrimaryLabel">Reference / Start Image or Face Image (URL or Upload)</label>
+            <div class="upload-row">
+              <input type="text" id="refImageUrl" placeholder="https://... or upload local image ->" oninput="updateCodeSnippet()" />
+              <input type="file" id="fileUploadInput" accept="image/*,video/*" style="display:none;" onchange="uploadLocalFile()" />
+              <button type="button" class="btn-secondary" onclick="document.getElementById('fileUploadInput').click()">Upload</button>
+            </div>
+          </div>
+          <div class="form-group" id="targetVideoGroup" style="display:none;">
+            <label>Target Video URL (for Video Face Swap / Recast)</label>
+            <input type="text" id="targetVideoUrl" placeholder="Optional target video URL or /files/..." oninput="updateCodeSnippet()" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label style="font-size:11px;color:var(--text-1);">Resolution</label>
+            <select id="resolutionInput" onchange="updateCodeSnippet()">
+              <option value="480P">480P</option>
+              <option value="768P" selected>768P (Native)</option>
+              <option value="1080P">1080P</option>
+              <option value="2K">2K</option>
+              <option value="4K">4K</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-1);">Aspect Ratio</label>
+            <select id="aspectRatioInput" onchange="updateCodeSnippet()">
+              <option value="16:9" selected>16:9</option>
+              <option value="9:16">9:16</option>
+              <option value="1:1">1:1</option>
+              <option value="21:9">21:9</option>
+              <option value="4:3">4:3</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-1);">Duration (sec)</label>
+            <input type="number" id="durationInput" value="3" min="1" max="15" step="1" onchange="updateCodeSnippet()" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label style="font-size:11px;color:var(--text-1);">Turbo Steps</label>
+            <input type="number" id="stepsInput" value="6" min="2" max="30" />
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-1);">Guidance (CFG)</label>
+            <input type="number" id="cfgInput" value="4.5" min="1" max="12" step="0.5" />
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-1);">Seed (blank=random)</label>
+            <input type="text" id="seedInput" placeholder="Random" />
+          </div>
+        </div>
+
+        <button id="runBtn" class="btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="runInference()">
+          ⚡ Generate with openfal Strata-DiT Engine
+        </button>
+      </div>
+
+      <!-- Drop-in fal.ai SDK snippet -->
+      <div class="card">
+        <div class="card-title">
+          <span>fal.ai Drop-In Client Snippet</span>
+          <span class="pill">@fal-ai/client &amp; openfal SDK</span>
+        </div>
+        <pre class="code-snippet" id="sdkSnippetBox"></pre>
+      </div>
+    </section>
+
+    <!-- Right Column: Strata 3-Tier Memory Visualizer + Output Player -->
+    <section>
+      <div class="card">
+        <div class="card-title">
+          <span>Strata-DiT 3-Tier Memory Hierarchy (50-Block MiniMax-H3 33B DiT)</span>
+          <span id="engineStageBadge" class="pill">Stage: idle</span>
+        </div>
+
+        <div class="tier-grid">
+          <div class="tier-box">
+            <h4>Tier 1 &mdash; GPU VRAM ("The Counter")</h4>
+            <div class="metric" id="tier1Metric">-- / -- GB</div>
+            <div class="submetric" id="tier1Sub">Resident DiT Blocks + 2 Ping-Pong DMA Slots</div>
+          </div>
+          <div class="tier-box">
+            <h4>Tier 2 &mdash; Pinned DDR5 ("The Pantry")</h4>
+            <div class="metric" id="tier2Metric">-- GB Pinned</div>
+            <div class="submetric" id="tier2Sub">Async PCIe 5.0 H2D Streamer</div>
+          </div>
+          <div class="tier-box">
+            <h4>Tier 3 &mdash; NVMe SSD ("The Storeroom")</h4>
+            <div class="metric" id="tier3Metric">-- GB mmap</div>
+            <div class="submetric" id="tier3Sub">Qwen3-VL Layer-50 Cache &amp; Partitions</div>
+          </div>
+        </div>
+
+        <div style="font-size:12px;font-weight:600;color:var(--text-1);">
+          Live 50-Block Residency Map (Blocks 0..24 GPU 0 | Blocks 25..49 GPU 1 / Streamed):
+        </div>
+        <div class="blocks-grid" id="blocksGrid"></div>
+        <div class="legend">
+          <span><i class="dot" style="background:#10b981;"></i> GPU 0 VRAM Counter (Pinned)</span>
+          <span><i class="dot" style="background:#38bdf8;"></i> GPU 1 VRAM Counter (Pinned)</span>
+          <span><i class="dot" style="background:#f59e0b;"></i> Active Ping-Pong DMA Slot A/B</span>
+          <span><i class="dot" style="background:#334155;"></i> Pinned Host RAM Pantry (Streamed)</span>
+        </div>
+      </div>
+
+      <!-- Output Player & Live Logs -->
+      <div class="card">
+        <div class="card-title">
+          <span>Generated Media Output</span>
+          <span id="outputMetaBadge" class="pill">Ready</span>
+        </div>
+        <div class="media-stage" id="mediaStage">
+          <div style="text-align:center;color:var(--text-1);padding:24px;">
+            <p style="font-size:15px;font-weight:600;margin-bottom:6px;">Select a MiniMax-H3 workflow and click Generate</p>
+            <p style="font-size:12px;">Supports Text-to-Video (Stereo Audio), Image-to-Video, Video Face Swap (`recast`), Omni-Reference, and 4K Image Generation.</p>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <div class="card-title" style="margin-bottom:6px;">
+            <span>Real-Time Queue &amp; Strata Offload Telemetry Logs</span>
+          </div>
+          <div class="log-box" id="logBox">[openfal] Ready. Waiting for request...</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let currentEndpoint = "minimax/h3-max/text-to-video";
+    let currentPartition = "FL2VA";
+    let isSleeping = false;
+
+    async function initStudio() {
+      const profRes = await fetch("/v1/engine/profiles");
+      const profData = await profRes.json();
+      const sel = document.getElementById("profileSelect");
+      sel.innerHTML = "";
+      for (const p of profData.profiles) {
+        const opt = document.createElement("option");
+        opt.value = p.profile_id;
+        opt.textContent = `${p.display_name} [${p.quantization}]`;
+        if (p.profile_id === profData.active_profile_id) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      updateCodeSnippet();
+      await refreshTelemetry();
+      setInterval(refreshTelemetry, 1200);
+    }
+
+    function selectTask(btn) {
+      document.querySelectorAll(".task-tab").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentEndpoint = btn.getAttribute("data-ep");
+      currentPartition = btn.getAttribute("data-part");
+      document.getElementById("activePartitionBadge").textContent = `Partition: ${currentPartition}`;
+
+      const refContainer = document.getElementById("refInputsContainer");
+      const targetVideoGroup = document.getElementById("targetVideoGroup");
+      const refLabel = document.getElementById("refPrimaryLabel");
+
+      if (currentEndpoint.includes("text-to-video") || currentEndpoint.includes("text-to-image")) {
+        refContainer.style.display = "none";
+      } else {
+        refContainer.style.display = "block";
+        if (currentEndpoint.includes("recast")) {
+          refLabel.textContent = "Source Face / Character Identity Image (URL or Upload)";
+          targetVideoGroup.style.display = "block";
+          document.getElementById("promptInput").value = "Character speaking naturally in cinematic studio lighting, preserving target head motion and expressions.";
+        } else if (currentEndpoint.includes("reference-to-video")) {
+          refLabel.textContent = "Omni Reference Image URL (Subject / Style Consistency)";
+          targetVideoGroup.style.display = "none";
+        } else {
+          refLabel.textContent = "Start Frame / Input Image (URL or Upload)";
+          targetVideoGroup.style.display = "none";
+        }
+      }
+      updateCodeSnippet();
+    }
+
+    async function switchProfile() {
+      const profile_id = document.getElementById("profileSelect").value;
+      await fetch("/v1/engine/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id })
+      });
+      await refreshTelemetry();
+    }
+
+    async function toggleSleepWake() {
+      const route = isSleeping ? "/v1/engine/wake" : "/v1/engine/sleep";
+      await fetch(route, { method: "POST" });
+      await refreshTelemetry();
+    }
+
+    async function uploadLocalFile() {
+      const fileInput = document.getElementById("fileUploadInput");
+      if (!fileInput.files.length) return;
+      const file = fileInput.files[0];
+      const res = await fetch("/v1/storage/upload", {
+        method: "POST",
+        headers: { "Content-Type": file.type || "image/png" },
+        body: file
+      });
+      const data = await res.json();
+      document.getElementById("refImageUrl").value = data.url;
+      updateCodeSnippet();
+    }
+
+    async function refreshTelemetry() {
+      try {
+        const res = await fetch("/v1/engine/status");
+        const t = await res.json();
+        isSleeping = t.sleeping;
+        const btn = document.getElementById("sleepWakeBtn");
+        if (isSleeping) {
+          btn.textContent = "⚡ Wake Engine (Restore VRAM)";
+          btn.className = "btn-wake";
+        } else {
+          btn.textContent = "🌙 VRAM Sleep (Evict to RAM)";
+          btn.className = "btn-sleep";
+        }
+
+        document.getElementById("engineStageBadge").textContent = `Stage: ${t.active_stage} (${t.active_partition})`;
+        const t1 = t.tiers.tier1_vram_counter;
+        const t2 = t.tiers.tier2_ram_pantry;
+        const t3 = t.tiers.tier3_nvme_storeroom;
+
+        document.getElementById("tier1Metric").textContent = `${t1.used_gb} / ${t1.budget_gb} GB (${t1.utilization_pct}%)`;
+        document.getElementById("tier1Sub").textContent = `${t1.resident_dit_blocks}/50 Resident Blocks + ${t1.ping_pong_slots} DMA Slots`;
+        document.getElementById("tier2Metric").textContent = `${t2.used_gb} GB Pinned DDR5`;
+        document.getElementById("tier2Sub").textContent = `${t2.streamed_dit_blocks} Streamed Blocks @ ${t2.pcie_dma_bandwidth_gbps} GB/s (${t2.compute_dma_overlap_pct}% overlap)`;
+        document.getElementById("tier3Metric").textContent = `${t3.mapped_gb} GB NVMe mmap`;
+        document.getElementById("tier3Sub").textContent = `Qwen3-VL Cache Hits: ${t.text_encoder_cache.hits} | Standby: ${t3.inactive_partitions.join(", ")}`;
+
+        const grid = document.getElementById("blocksGrid");
+        grid.innerHTML = "";
+        for (const b of t.blocks) {
+          const cell = document.createElement("div");
+          let cls = "blk-cell blk-ram-pantry";
+          if (b.tier === "vram_prefetch_slot_a" || b.tier === "vram_prefetch_slot_b" || b.block_id === t.active_block_id) {
+            cls = "blk-cell blk-dma-slot";
+          } else if (b.tier === "vram_counter") {
+            cls = b.assigned_gpu === 0 ? "blk-cell blk-vram-gpu0" : "blk-cell blk-vram-gpu1";
+          }
+          cell.className = cls;
+          cell.title = `Block ${b.block_id} | GPU ${b.assigned_gpu} | Tier: ${b.tier} (${b.size_mb} MB)`;
+          cell.textContent = b.block_id;
+          grid.appendChild(cell);
+        }
+      } catch (e) {}
+    }
+
+    function buildPayload() {
+      const payload = {
+        prompt: document.getElementById("promptInput").value,
+        resolution: document.getElementById("resolutionInput").value,
+        aspect_ratio: document.getElementById("aspectRatioInput").value,
+        duration: parseFloat(document.getElementById("durationInput").value || "3"),
+        num_inference_steps: parseInt(document.getElementById("stepsInput").value || "6", 10),
+        guidance_scale: parseFloat(document.getElementById("cfgInput").value || "4.5")
+      };
+      const seedVal = document.getElementById("seedInput").value.trim();
+      if (seedVal) payload.seed = parseInt(seedVal, 10);
+
+      const refUrl = document.getElementById("refImageUrl").value.trim();
+      const targetVid = document.getElementById("targetVideoUrl").value.trim();
+      if (refUrl) {
+        if (currentEndpoint.includes("recast")) {
+          payload.face_image_url = refUrl;
+          payload.reference_image_urls = [refUrl];
+        } else if (currentEndpoint.includes("reference-to-video")) {
+          payload.reference_image_urls = [refUrl];
+        } else {
+          payload.start_image_url = refUrl;
+        }
+      }
+      if (targetVid && currentEndpoint.includes("recast")) {
+        payload.target_video_url = targetVid;
+      }
+      return payload;
+    }
+
+    function updateCodeSnippet() {
+      const payload = buildPayload();
+      const snippet = `// JavaScript (@fal-ai/client pointed at local openfal)
+import { fal } from "@fal-ai/client";
+fal.config({ proxyUrl: "${window.location.origin}" });
+
+const result = await fal.subscribe("${currentEndpoint}", {
+  input: ${JSON.stringify(payload, null, 2)}
+});
+console.log(result);`;
+      document.getElementById("sdkSnippetBox").textContent = snippet;
+    }
+
+    async function runInference() {
+      const runBtn = document.getElementById("runBtn");
+      const logBox = document.getElementById("logBox");
+      const stage = document.getElementById("mediaStage");
+      const badge = document.getElementById("outputMetaBadge");
+
+      runBtn.disabled = true;
+      runBtn.textContent = "⏳ Running Strata-DiT 50-Block Pipeline...";
+      logBox.textContent = `[openfal] Submitting job to /queue/${currentEndpoint}...\n`;
+      badge.textContent = "IN_PROGRESS";
+
+      try {
+        const submitRes = await fetch(`/queue/${currentEndpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildPayload())
+        });
+        const job = await submitRes.json();
+        const reqId = job.request_id;
+
+        let seenLogs = 0;
+        while (true) {
+          const stRes = await fetch(`/${currentEndpoint}/requests/${reqId}/status?logs=1`);
+          const st = await stRes.json();
+          const logs = st.logs || [];
+          while (seenLogs < logs.length) {
+            logBox.textContent += `${logs[seenLogs].message}\n`;
+            logBox.scrollTop = logBox.scrollHeight;
+            seenLogs++;
+          }
+          await refreshTelemetry();
+          if (st.status === "COMPLETED") break;
+          if (st.status === "FAILED" || st.status === "CANCELLED") {
+            throw new Error(st.error || st.status);
+          }
+          await new Promise(r => setTimeout(r, 120));
+        }
+
+        const finalRes = await fetch(`/${currentEndpoint}/requests/${reqId}`);
+        const out = await finalRes.json();
+        badge.textContent = `Completed in ${out.timings.inference}s • Seed ${out.seed}`;
+
+        if (out.video) {
+          stage.innerHTML = `<video src="${out.video.url}" controls autoplay loop></video>`;
+        } else if (out.images && out.images.length) {
+          stage.innerHTML = `<img src="${out.images[0].url}" alt="Generated Image" />`;
+        }
+      } catch (err) {
+        badge.textContent = "Error";
+        logBox.textContent += `[ERROR] ${err.message}\n`;
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = "⚡ Generate with openfal Strata-DiT Engine";
+        await refreshTelemetry();
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", initStudio);
+  </script>
+</body>
+</html>
