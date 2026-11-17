@@ -5,7 +5,7 @@ Pydantic Schemas matching fal.ai's MiniMax H3 & H3 Max API specification.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -48,13 +48,13 @@ class MiniMaxH3Input(BaseModel):
         default=None,
         ge=1,
         le=100,
-        description="Denoising steps (defaults per backend: 8 for Qwen-Image-2.1-Turbo, 30 for Wan 2.2 MoE & MiniMax-H3).",
+        description="Denoising steps (defaults: Qwen Turbo 8, Wan 2.2 40, MiniMax video 30; MiniMax Image uses its 6-step PDD schedule).",
     )
     guidance_scale: Optional[float] = Field(
         default=None,
         ge=0.0,
         le=20.0,
-        description="CFG guidance scale (defaults per backend: 1.0 for Qwen-Image-2.1-Turbo & MiniMax-H3, 4.0 for Wan 2.2 MoE).",
+        description="CFG guidance (Qwen/MiniMax 1; Wan T2V 4 with low-noise 3; Wan I2V 3.5).",
     )
     prompt_expansion_mode: PromptExpansionMode = Field(default=PromptExpansionMode.BALANCED)
     enable_safety_checker: bool = Field(default=True)
@@ -123,19 +123,19 @@ class ProfileSwitchRequest(BaseModel):
 class ModelDownloadRequest(BaseModel):
     component_id: str = Field(
         default="all",
-        description="Component to download/pack: 'all', 'fl2va', 'ref2va', 'h3-image', 'qwen3_vl', or 'vae'.",
+        description="Model component or bundle ID; see GET /v1/models/status for available components and bundles.",
     )
-    quantization: str = Field(
+    quantization: Literal["fp8_e4m3", "int4_awq", "nf4", "bf16"] = Field(
         default="fp8_e4m3",
-        description="Target Strata shard quantization: 'fp8_e4m3', 'int4_awq', 'nf4', or 'bf16'.",
+        description="Use 'fp8_e4m3' for supported FP8/INT8 installs. Other formats are available only for experimental 'strata_repack' tooling.",
     )
-    mode: str = Field(
+    mode: Literal["hf_hub", "runtime_assets", "strata_repack"] = Field(
         default="hf_hub",
-        description="'hf_hub' to download from Hugging Face Hub + pack shards, or 'strata_repack' to pack/quantize local shards.",
+        description="'hf_hub' installs supported model assets; 'runtime_assets' repairs metadata and shared dependencies; 'strata_repack' is experimental local packing and does not establish inference readiness.",
     )
-    source: str = Field(
+    source: Literal["prequantized", "official-bf16"] = Field(
         default="prequantized",
-        description="'prequantized' (Comfy-Org/unsloth fast weights) or 'official-bf16' (raw Wan-AI/Qwen/MiniMaxAI BF16 weights + local quantization).",
+        description="Use 'prequantized' for compatible single-file checkpoints. 'official-bf16' repository layouts are unsupported and fail before downloading.",
     )
     cleanup_raw: bool = Field(
         default=False,

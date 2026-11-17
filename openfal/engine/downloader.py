@@ -33,6 +33,11 @@ import numpy as np
 from safetensors import safe_open
 from safetensors.numpy import save_file as save_safetensors_numpy
 
+from openfal.model_assets import (
+    COMPONENT_DEPENDENCIES, HF_CONFIGS, WAN_SHARED_FILES, WEIGHT_GROUPS,
+    config_keys_for_component, find_weight, unsupported_checkpoint_format,
+)
+
 
 @dataclass
 class QuantSourceSpec:
@@ -568,7 +573,10 @@ def recommend_hardware_profile(
         "raw_total_vram_gb": round(sum(g["vram_gb"] for g in detected_gpus), 1),
         "recommended_cuda_visible_devices": rec_cuda_visible,
         "recommended_profile_id": rec_profile,
-        "recommended_quantization": rec_quant,
+        # The Python runtime supports INT8/FP8, regardless of the hardware
+        # profile's theoretical INT4 memory budget.
+        "recommended_quantization": "fp8_e4m3",
+        "profile_quantization": rec_quant,
     }
 
 
@@ -589,42 +597,36 @@ def recommend_autosetup_plans(hw: dict) -> Dict[str, dict]:
     """
     free_gb = float(hw.get("free_nvme_gb", 0.0))
     usable_gb = max(0.0, free_gb - 15.0)
-    rec_quant = hw.get("recommended_quantization", "fp8_e4m3")
-
-    # 1. Minimal: Fast 7B Text-to-Image & Face Edit (~13.3 GB W4A8 or ~16.1 GB INT8)
-    min_quant = "int4_awq" if (rec_quant == "int4_awq" or usable_gb < 17.0) else "fp8_e4m3"
+    # Select formats the runtime can actually load. GGUF, NVFP4 and W4A8
+    # checkpoints are not made usable by selecting a small-memory profile.
+    min_quant = "fp8_e4m3"
     min_gb = _estimate_bundle_gb("qwen_image_21", min_quant)
 
-    # 2. Moderate (Default): Balanced everyday Video + Face Swap + Image stack that fits disk
-    if usable_gb >= 96.0:
-        mod_comp, mod_quant = "alibaba-only", rec_quant
-        mod_desc = "Fast Alibaba MoE stack (Wan 2.2 T2V + I2V + Animate Face Swap + Qwen-Image-2.1)"
-    elif usable_gb >= 50.0:
-        mod_comp, mod_quant = "minimax-omni-compact", ("fp8_e4m3" if rec_quant == "fp8_e4m3" else "int4_awq")
-        mod_desc = "All-in-one MiniMax-H3 Ref2VA (Video + Stereo Audio + Face Swap + Image)"
-    elif usable_gb >= 30.0:
-        mod_comp, mod_quant = "minimax-omni-compact", "int4_awq"
-        mod_desc = "Compact INT4/Q4_K MiniMax-H3 Ref2VA (Video + Stereo Audio + Face Swap + Image)"
+    alibaba_gb = _estimate_bundle_gb("alibaba-only", "fp8_e4m3")
+    compact_gb = _estimate_bundle_gb("minimax-omni-compact", "fp8_e4m3")
+    if usable_gb >= alibaba_gb:
+        mod_comp, mod_quant = "alibaba-only", "fp8_e4m3"
+        mod_desc = "Alibaba FP8/INT8 checkpoints (Wan 2.2 and Qwen-Image-2.1; endpoint support varies)"
+    elif usable_gb >= compact_gb:
+        mod_comp, mod_quant = "minimax-omni-compact", "fp8_e4m3"
+        mod_desc = "MiniMax-H3 Ref2VA with shared encoder and VAEs (FP8/INT8)"
     else:
         mod_comp, mod_quant = "qwen_image_21", min_quant
-        mod_desc = "7B Qwen-Image-2.1-Turbo (Text-to-Image & 10-Ref Face Edit; disk < 30 GB usable)"
+        mod_desc = "7B Qwen-Image-2.1-Turbo (INT8 image generation and editing)"
     mod_gb = _estimate_bundle_gb(mod_comp, mod_quant)
 
     # 3. Aggressive: Full multi-backend or largest family that fits disk
     all_fp8_gb = _estimate_bundle_gb("all", "fp8_e4m3")
-    all_int4_gb = _estimate_bundle_gb("all", "int4_awq")
-    if usable_gb >= all_fp8_gb and rec_quant == "fp8_e4m3":
+    minimax_gb = _estimate_bundle_gb("minimax-only", "fp8_e4m3")
+    if usable_gb >= all_fp8_gb:
         agg_comp, agg_quant = "all", "fp8_e4m3"
         agg_desc = "Full multi-backend suite (Alibaba Wan 2.2 MoE + Qwen-Image-2.1 + MiniMax-H3 FP8)"
-    elif usable_gb >= all_int4_gb:
-        agg_comp, agg_quant = "all", "int4_awq"
-        agg_desc = "Full multi-backend suite (Alibaba MoE + MiniMax-H3 INT4/Q4_K)"
-    elif usable_gb >= 95.0:
-        agg_comp, agg_quant = "alibaba-only", rec_quant
-        agg_desc = "Full Fast Alibaba MoE suite (largest bundle fitting available NVMe space)"
-    elif usable_gb >= 55.0:
-        agg_comp, agg_quant = "minimax-only", "int4_awq"
-        agg_desc = "Full MiniMax-H3 suite in INT4/GGUF (largest bundle fitting available NVMe space)"
+    elif usable_gb >= alibaba_gb:
+        agg_comp, agg_quant = "alibaba-only", "fp8_e4m3"
+        agg_desc = "Alibaba FP8/INT8 checkpoints (largest bundle fitting available NVMe space)"
+    elif usable_gb >= minimax_gb:
+        agg_comp, agg_quant = "minimax-only", "fp8_e4m3"
+        agg_desc = "MiniMax-H3 FP8/INT8 checkpoints (largest bundle fitting available NVMe space)"
     else:
         agg_comp, agg_quant = mod_comp, mod_quant
         agg_desc = f"{mod_desc} (capped by available disk space)"
@@ -750,12 +752,20 @@ class StrataModelManager:
                 manifest = None
 
         disk_bytes = sum(f.stat().st_size for f in weight_files) if weight_files else 0
-        installed = len(weight_files) > 0 or len(block_shards) == 50
+        missing_assets = self._missing_component_assets(component_id)
+        installed = not missing_assets
 
         return {
             **asdict(spec),
             "local_dir": str(comp_dir),
             "installed": installed,
+            "runtime_supported": component_id != "wan22_animate",
+            "runtime_unavailable_reason": (
+                "Driving-video, pose/face-motion preprocessing and CLIP conditioning are not implemented"
+                if component_id == "wan22_animate" else None
+            ),
+            "weights_present": any("strata_blocks" not in f.parts for f in weight_files),
+            "missing_assets": missing_assets,
             "safetensors_count": len(safetensor_files),
             "gguf_count": len(gguf_files),
             "strata_50_blocks_ready": len(block_shards) == 50,
@@ -763,6 +773,30 @@ class StrataModelManager:
             "disk_size_mb": round(disk_bytes / (1024 * 1024), 2),
             "manifest": manifest,
         }
+
+    def _missing_component_assets(self, component_id: str) -> List[str]:
+        missing = []
+        for cid in (component_id, *COMPONENT_DEPENDENCIES.get(component_id, ())):
+            root = self.weights_dir / MODEL_COMPONENTS[cid].subdir
+            missing_groups = [alternatives for alternatives in WEIGHT_GROUPS[cid]
+                              if find_weight(root, alternatives) is None]
+            # Unsupported files may coexist with usable checkpoints (for example
+            # after replacing an older installation). They only explain a missing
+            # supported checkpoint; their mere presence does not invalidate it.
+            if missing_groups and root.exists():
+                for path in root.rglob("*"):
+                    if path.suffix in (".safetensors", ".gguf") and path.is_file() and unsupported_checkpoint_format(path.name):
+                        missing.append(f"Unsupported checkpoint format: {path.relative_to(self.weights_dir)}; use FP8/INT8")
+            missing.extend(f"{MODEL_COMPONENTS[cid].subdir}/{' or '.join(alternatives)}"
+                           for alternatives in missing_groups)
+        for key in config_keys_for_component(component_id):
+            assets = HF_CONFIGS[key]
+            missing.extend(f"{assets.subdir}/{name}" for name in assets.missing(self.weights_dir))
+        if component_id.startswith("wan22_"):
+            for name in WAN_SHARED_FILES:
+                if find_weight(self.weights_dir, (Path(name).name,)) is None:
+                    missing.append(name)
+        return missing
 
     @staticmethod
     def resolve_download_source(
@@ -819,6 +853,11 @@ class StrataModelManager:
         tqdm_class: Optional[Any] = None,
         log_file: Optional[Path] = None,
     ) -> DownloadTaskState:
+        quantization = quantization.lower()
+        if quantization not in ("fp8_e4m3", "int4_awq", "nf4", "bf16"):
+            raise ValueError(f"Unknown quantization '{quantization}'. Use 'fp8_e4m3' for model installs.")
+        if mode not in ("hf_hub", "runtime_assets", "strata_repack"):
+            raise ValueError(f"Unsupported mode '{mode}'. Use 'hf_hub', 'runtime_assets', or 'strata_repack'.")
         comp_key = component_id.lower()
         if comp_key in COMPONENT_BUNDLES:
             target_ids = COMPONENT_BUNDLES[comp_key]
@@ -828,6 +867,12 @@ class StrataModelManager:
             if cid not in MODEL_COMPONENTS:
                 valid = list(COMPONENT_BUNDLES.keys()) + list(MODEL_COMPONENTS.keys())
                 raise ValueError(f"Unknown model component or bundle '{cid}'. Valid: {valid}")
+        # Individual endpoint installs include their shared encoders/decoders too.
+        if mode == "hf_hub":
+            target_ids = list(dict.fromkeys(
+                dependency for cid in target_ids
+                for dependency in (*COMPONENT_DEPENDENCIES.get(cid, ()), cid)
+            ))
         if source not in ("prequantized", "official-bf16"):
             raise ValueError(f"Invalid source '{source}'. Use 'prequantized' or 'official-bf16'.")
 
@@ -865,6 +910,22 @@ class StrataModelManager:
 
         def _worker() -> None:
             try:
+                if mode == "hf_hub":
+                    if source == "official-bf16" or quantization.lower() == "bf16":
+                        raise ValueError(
+                            "The installer cannot prepare official BF16 repository shards for this runtime. "
+                            "Use --source prequantized --quant fp8_e4m3. Recognized local single-file "
+                            "BF16 checkpoints remain supported. No files were downloaded."
+                        )
+                    if quantization.lower() in ("int4_awq", "nf4") or any(
+                        unsupported_checkpoint_format(pattern)
+                        for resolved in resolved_sources for pattern in resolved.allow_patterns
+                    ):
+                        raise ValueError(
+                            "The inference runtime does not support GGUF, NVFP4, W4A8 or INT4 checkpoints. "
+                            "Use --quant fp8_e4m3 (FP8/INT8 per model). No files were downloaded. "
+                            "--pack-only remains available for experimental local quantization."
+                        )
                 total_targets = len(target_ids)
                 completed_gb = 0.0
                 for idx, cid in enumerate(target_ids):
@@ -915,6 +976,11 @@ class StrataModelManager:
                                 "total_gb": total_approx_gb,
                             },
                         )
+                    elif mode == "runtime_assets":
+                        self._ensure_component_hf_configs(
+                            spec=spec, target_dir=self.weights_dir / spec.subdir,
+                            hf_token=hf_token or os.environ.get("HF_TOKEN"), emit=_emit,
+                        )
                     elif mode == "strata_repack":
                         self._build_strata_50_block_shards(
                             spec=spec,
@@ -925,7 +991,7 @@ class StrataModelManager:
                             emit=_emit,
                         )
                     else:
-                        raise ValueError(f"Unsupported mode '{mode}'. Use 'hf_hub' or 'strata_repack'.")
+                        raise ValueError(f"Unsupported mode '{mode}'. Use 'hf_hub', 'runtime_assets', or 'strata_repack'.")
 
                     completed_gb += src.approx_gb
                     task.progress_pct = round(min(100.0, (completed_gb / total_approx_gb) * 100.0), 1)
@@ -945,6 +1011,11 @@ class StrataModelManager:
                             }
                         )
 
+                if mode == "hf_hub":
+                    incomplete = {cid: self._missing_component_assets(cid) for cid in target_ids}
+                    incomplete = {cid: items for cid, items in incomplete.items() if items}
+                    if incomplete:
+                        raise RuntimeError(f"Setup is incomplete; missing supported runtime assets: {incomplete}")
                 task.status = "COMPLETED"
                 task.progress_pct = 100.0
                 task.completed_at = time.time()
@@ -1031,50 +1102,43 @@ class StrataModelManager:
                 emit=emit,
             )
 
-    @staticmethod
     def _ensure_component_hf_configs(
+        self,
         spec: ModelComponentSpec,
         target_dir: Path,
         hf_token: Optional[str],
         emit: Callable[[str], None],
     ) -> None:
-        """Fetch lightweight (~2-12 MB) config & tokenizer JSONs alongside Comfy-Org single-file weights."""
-        from huggingface_hub import snapshot_download
+        """Install and verify every runtime asset; failures must fail setup itself."""
+        from huggingface_hub import hf_hub_download, snapshot_download
 
-        cfg_specs = {
-            "qwen_image_21": (
-                "Qwen/Qwen-Image-2.1-Turbo",
-                ["model_index.json", "scheduler/*", "transformer/*.json", "vae/*.json", "text_encoder/*.json", "processor/*"],
-            ),
-            "wan22_t2v_moe": (
-                "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
-                ["model_index.json", "scheduler/*", "transformer/*.json", "transformer_2/*.json", "vae/*.json", "text_encoder/*.json", "tokenizer/*"],
-            ),
-            "wan22_i2v_moe": (
-                "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
-                ["model_index.json", "scheduler/*", "transformer/*.json", "transformer_2/*.json", "vae/*.json", "text_encoder/*.json", "tokenizer/*"],
-            ),
-            "wan22_animate": (
-                "Wan-AI/Wan2.2-Animate-14B-Diffusers",
-                ["model_index.json", "scheduler/*", "transformer/*.json", "vae/*.json", "text_encoder/*.json", "tokenizer/*"],
-            ),
-        }
-        entry = cfg_specs.get(spec.component_id)
-        if not entry:
-            return
-        cfg_repo, cfg_patterns = entry
-        cfg_dir = target_dir / "hf_configs"
-        try:
-            emit(f"[HF-Config] Syncing config/tokenizer metadata from '{cfg_repo}' -> {cfg_dir}...")
+        for key in config_keys_for_component(spec.component_id):
+            assets = HF_CONFIGS[key]
+            if not assets.missing(self.weights_dir):
+                continue
+            cfg_dir = self.weights_dir / assets.subdir
+            emit(f"[HF-Config] Installing config/tokenizer metadata from '{assets.repo_id}' -> {cfg_dir}...")
             snapshot_download(
-                repo_id=cfg_repo,
+                repo_id=assets.repo_id,
                 local_dir=str(cfg_dir),
-                allow_patterns=cfg_patterns,
+                allow_patterns=list(assets.allow_patterns),
                 ignore_patterns=["*.safetensors", "*.bin", "*.pt", "*.ckpt", "assets/*"],
                 token=hf_token,
             )
-        except Exception as exc:
-            emit(f"[HF-Config] Note: Deferred config metadata fetch ({exc}); will retry cleanly at inference time.")
+            missing = assets.missing(self.weights_dir)
+            if missing:
+                raise RuntimeError(f"Metadata download for {assets.repo_id} is incomplete: {', '.join(missing)}")
+        if spec.component_id.startswith("wan22_"):
+            for filename in WAN_SHARED_FILES:
+                if find_weight(self.weights_dir, (Path(filename).name,)) is not None:
+                    continue
+                emit(f"[HF-Hub] Installing shared Wan runtime checkpoint '{filename}'...")
+                path = hf_hub_download(
+                    repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", filename=filename,
+                    local_dir=str(self.weights_dir / "Wan2.2-T2V-A14B"), token=hf_token,
+                )
+                if not Path(path).is_file() or Path(path).stat().st_size == 0:
+                    raise RuntimeError(f"Shared Wan checkpoint download is incomplete: {filename}")
 
     @staticmethod
     def _extract_block_index(tensor_name: str, num_blocks: int) -> int:

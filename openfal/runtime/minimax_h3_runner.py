@@ -28,12 +28,13 @@ from openfal.runtime.common import (
     clear_device_cache,
     compute_resident_blocks,
     encode_frames_to_mp4,
-    ensure_hf_configs,
+    ensure_model_configs,
     find_matching_safetensors,
     load_safetensors_state_dict,
     resolve_compute_device_and_dtype,
 )
 from openfal.runtime.quant import StrataBlockOffloadManager, quantized_module_swap_from_state_dict
+from openfal.runtime.attention import configure_qwen_prompt_attention
 from openfal.runtime.qwen_image_runner import convert_qwen3vl_text_encoder_state_dict
 
 
@@ -136,6 +137,7 @@ def _split_qkv_and_swap_swiglu_in_place(
     qkv_layout: str,
     num_attention_heads: Optional[int],
     attention_head_dim: int,
+    swiglu_bases: set[str],
 ) -> None:
     """In-place reorder fused `.ff.net.0.proj.*` and split fused QKV attention tensors + quant scales."""
     fc1_rows = {k.removesuffix(".weight"): v.shape[0] for k, v in out.items() if k.endswith(".ff.net.0.proj.weight")}
@@ -144,9 +146,9 @@ def _split_qkv_and_swap_swiglu_in_place(
     qkv_rows = {k[:-qkv_base_trim]: v.shape[0] for k, v in out.items() if k.endswith(qkv_weight_suffix)}
 
     for k in list(out.keys()):
-        if k.endswith(".ff.net.0.proj.weight") or k.endswith(".ff.net.0.proj.bias"):
+        if k.rsplit(".", 1)[0] in swiglu_bases and k.endswith((".weight", ".bias")):
             out[k] = _swap_swiglu_gate_value(out[k])
-        elif k.endswith(".ff.net.0.proj.weight_scale") or k.endswith(".ff.net.0.proj.scale_weight"):
+        elif k.rsplit(".", 1)[0] in swiglu_bases and k.endswith((".weight_scale", ".scale_weight")):
             base = k.rsplit(".", 1)[0]
             rows = fc1_rows.get(base)
             if out[k].ndim >= 1 and rows and out[k].shape[0] == rows:
@@ -198,6 +200,7 @@ def convert_minimax_h3_dit_state_dict(
 
     adaln_t_table = raw_sd.get("adaln_t_table")
     out: Dict[str, torch.Tensor] = {}
+    swiglu_bases: set[str] = set()
 
     for k, v in raw_sd.items():
         if k in ("adaln_t_table", "rope.inv_freq", "scaled_fp8") or k.endswith(
@@ -208,30 +211,22 @@ def convert_minimax_h3_dit_state_dict(
         for old, new in rename_map.items():
             nk = nk.replace(old, new)
         out[nk] = v
+        if ".mlp.fc1." in k:
+            swiglu_bases.add(nk.rsplit(".", 1)[0])
 
     # Split Comfy `final_layer.video_out` (`[num_pdd_heads * 96, ...]`) for MiniMax-H3-Image.
     # Comfy stores `chunk[0]` as head 0 and `chunks[1..H-1]` as residual deltas `(head_i - head_0)`.
     if num_pdd_heads > 0:
-        delta_mode: Optional[bool] = None
-        if "proj_out.weight" in out and out["proj_out.weight"].shape[0] % num_pdd_heads == 0:
-            w_chunks = torch.chunk(out["proj_out.weight"], num_pdd_heads, dim=0)
-            base_norm = w_chunks[0].float().norm()
-            delta_mode = len(w_chunks) > 1 and base_norm > 0 and all(
-                c.float().norm() < 0.5 * base_norm for c in w_chunks[1:]
-            )
         for suffix in ("weight", "bias"):
             pk = f"proj_out.{suffix}"
             if pk in out and out[pk].shape[0] % num_pdd_heads == 0:
                 chunks = torch.chunk(out.pop(pk), num_pdd_heads, dim=0)
                 base = chunks[0]
-                is_delta = delta_mode
-                if is_delta is None and len(chunks) > 1 and base.float().norm() > 0:
-                    is_delta = all(c.float().norm() < 0.5 * base.float().norm() for c in chunks[1:])
                 out[f"pdd_proj_out.0.{suffix}"] = base.contiguous()
                 for h_idx in range(1, len(chunks)):
-                    head_tensor = (
-                        (base.float() + chunks[h_idx].float()).to(base.dtype) if is_delta else chunks[h_idx]
-                    )
+                    # This is a checkpoint layout, not a magnitude heuristic. Native
+                    # Diffusers checkpoints already have separate pdd_proj_out keys.
+                    head_tensor = (base.float() + chunks[h_idx].float()).to(base.dtype)
                     out[f"pdd_proj_out.{h_idx}.{suffix}"] = head_tensor.contiguous()
 
     _split_qkv_and_swap_swiglu_in_place(
@@ -240,6 +235,7 @@ def convert_minimax_h3_dit_state_dict(
         qkv_layout=qkv_layout,
         num_attention_heads=num_attention_heads,
         attention_head_dim=attention_head_dim,
+        swiglu_bases=swiglu_bases,
     )
     return out, adaln_t_table
 
@@ -256,6 +252,7 @@ def convert_minimax_h3_video_vae_state_dict(
     head-interleaved `to_qkv` (`(num_heads, 3, head_dim)`) and reordering SwiGLU `[value; gate]`.
     """
     out: Dict[str, torch.Tensor] = {}
+    swiglu_bases: set[str] = set()
     down_blk_re = re.compile(r"^encoder\.down\.(\d+)\.block\.(\d+)\.(.+)$")
     down_samp_re = re.compile(r"^encoder\.down\.(\d+)\.downsample\.(.+)$")
 
@@ -274,10 +271,11 @@ def convert_minimax_h3_video_vae_state_dict(
             nk = f"encoder.down_blocks.{m_ds.group(1)}.downsamplers.0.{m_ds.group(2)}"
         elif k.startswith("decoder.x_embedder."):
             nk = "decoder.proj_in." + k[len("decoder.x_embedder.") :]
-        elif ".attn.to_out." in k:
+        elif ".attn.to_out." in k and ".attn.to_out.0." not in k:
             nk = k.replace(".attn.to_out.", ".attn.to_out.0.")
         elif ".ff.w1." in k:
             nk = k.replace(".ff.w1.", ".ff.net.0.proj.")
+            swiglu_bases.add(nk.rsplit(".", 1)[0])
         elif ".ff.w2." in k:
             nk = k.replace(".ff.w2.", ".ff.net.2.")
         else:
@@ -290,6 +288,7 @@ def convert_minimax_h3_video_vae_state_dict(
         qkv_layout=qkv_layout,
         num_attention_heads=num_attention_heads,
         attention_head_dim=attention_head_dim,
+        swiglu_bases=swiglu_bases,
     )
     return out
 
@@ -313,12 +312,75 @@ class _PassthroughDecoderLayer(nn.Module):
         return hidden_states
 
 
-def _materialize_remaining_meta(module: nn.Module, dtype: torch.dtype) -> None:
-    """Replace any unpopulated meta parameters/buffers (e.g. pruned trailing norms) on CPU."""
+def _retain_conditioning_hidden_state(model: nn.Module, layer_index: int = 50) -> None:
+    """Capture only the requested pre-final-norm language hidden state.
+
+    The normal Transformers recorder retains every layer. Its last recorded state
+    can also be replaced by the final norm when a pruned tail is a custom identity
+    layer. Capture the real decoder output directly so both memory and semantics
+    are independent of that recorder's treatment of pruned layers.
+    """
+    if getattr(model, "_openfal_conditioning_capture", False):
+        return
+    original_forward = model.forward
+    conditioning_layer = model.language_model.layers[layer_index - 1]
+
+    def forward(*args, **kwargs):
+        if not kwargs.get("output_hidden_states", False):
+            return original_forward(*args, **kwargs)
+        captured = []
+
+        def capture_layer(module, inputs, output):
+            captured.append(output[0] if isinstance(output, tuple) else output)
+
+        handle = conditioning_layer.register_forward_hook(capture_layer)
+        kwargs["output_hidden_states"] = False
+        try:
+            output = original_forward(*args, **kwargs)
+        finally:
+            handle.remove()
+        if len(captured) != 1:
+            raise RuntimeError(f"Expected one Qwen3-VL layer-{layer_index} hidden state, got {len(captured)}")
+        output.hidden_states = (None,) * layer_index + (captured[0],)
+        return output
+
+    model.forward = forward
+    model._openfal_conditioning_capture = True
+
+
+def _validate_checkpoint_keys(
+    component: str,
+    missing: List[str],
+    unexpected: List[str],
+    allowed_missing: Tuple[str, ...] = (),
+) -> None:
+    """Reject incomplete checkpoints instead of generating with fabricated weights."""
+    unexplained = sorted(set(missing) - set(allowed_missing))
+    if unexplained or unexpected:
+        raise RuntimeError(
+            f"{component} checkpoint is incompatible: missing={unexplained}, unexpected={unexpected}. "
+            "Reinstall the matching model with openfal download."
+        )
+
+
+_PRUNED_TIME_EMBEDDER_KEYS = (
+    "time_embedder.linear_1.weight",
+    "time_embedder.linear_1.bias",
+    "time_embedder.linear_2.weight",
+    "time_embedder.linear_2.bias",
+)
+
+
+def _materialize_remaining_meta(
+    module: nn.Module, dtype: torch.dtype, allowed_parameters: Tuple[str, ...] = ()
+) -> None:
+    """Initialize only explicitly unused pruned parameters; reject other meta tensors."""
     from openfal.runtime.quant import _get_parent_and_attr
 
     for name, param in list(module.named_parameters(recurse=True)):
         if param.is_meta:
+            if name not in allowed_parameters:
+                raise RuntimeError(f"Unloaded model parameter: {name}")
             fill = torch.ones if "norm" in name else torch.zeros
             target_dt = dtype if param.is_floating_point() else param.dtype
             parent, attr = _get_parent_and_attr(module, name)
@@ -330,7 +392,7 @@ def _materialize_remaining_meta(module: nn.Module, dtype: torch.dtype) -> None:
     for mod in module.modules():
         for bname, buf in list(mod._buffers.items()):
             if buf is not None and buf.is_meta:
-                mod._buffers[bname] = torch.zeros(buf.shape, dtype=buf.dtype, device="cpu")
+                raise RuntimeError(f"Uninitialized model buffer: {bname}")
 
 
 def _build_minimax_pipeline_state(pipe: Any, init_inputs: Dict[str, Any]) -> Any:
@@ -351,6 +413,69 @@ def _build_minimax_pipeline_state(pipe: Any, init_inputs: Dict[str, Any]) -> Any
         elif name is not None and name not in state.values and default is not None:
             state.set(name, default, kt)
     return state
+
+
+def _resample_reference_audio(reference: Any, sample_rate: int = 32000) -> Any:
+    """Normalize decoded reference audio with PyAV, which also decodes the media.
+
+    Diffusers otherwise imports torchaudio when a reference has a different sample
+    rate. Keeping this at the file boundary avoids a second binary dependency that
+    must match the user's exact PyTorch/CUDA build.
+    """
+    if not reference.has_audio or reference.sample_rate in (None, sample_rate):
+        return reference
+    import av
+
+    waveform = reference.audio.detach().to(device="cpu", dtype=torch.float32).contiguous()
+    if waveform.ndim != 2 or waveform.shape[0] not in (1, 2):
+        raise ValueError("MiniMax-H3 reference audio must be mono or stereo")
+    if reference.sample_rate <= 0:
+        raise ValueError("MiniMax-H3 reference audio must have a positive sample rate")
+    layout = "mono" if waveform.shape[0] == 1 else "stereo"
+    frame = av.AudioFrame.from_ndarray(waveform.numpy(), format="fltp", layout=layout)
+    frame.sample_rate = int(reference.sample_rate)
+    resampler = av.AudioResampler(format="fltp", layout=layout, rate=sample_rate)
+    converted = resampler.resample(frame) + resampler.resample(None)
+    if not converted:
+        raise ValueError("MiniMax-H3 reference audio is empty after resampling")
+    reference.audio = torch.cat([torch.from_numpy(item.to_ndarray()) for item in converted], dim=-1)
+    reference.sample_rate = sample_rate
+    return reference
+
+
+def _load_minimax_references(
+    images: Optional[List[Image.Image]] = None,
+    videos: Optional[List[str]] = None,
+    audios: Optional[List[str]] = None,
+) -> List[Any]:
+    """Load every requested reference, or fail before generation can ignore one."""
+    from diffusers.modular_pipelines.minimax_h3.references import (
+        MiniMaxH3AudioReference,
+        MiniMaxH3ImageReference,
+        MiniMaxH3VideoReference,
+    )
+
+    images, videos, audios = list(images or []), list(videos or []), list(audios or [])
+    if not (images or videos or audios):
+        raise ValueError("MiniMax-H3 reference-to-video requires at least one image or video reference")
+    for kind, refs, limit in (("image", images, 9), ("video", videos, 3), ("audio", audios, 3)):
+        if len(refs) > limit:
+            raise ValueError(f"MiniMax-H3 supports at most {limit} {kind} references per request")
+    if len(images) + len(videos) + len(audios) > 12:
+        raise ValueError("MiniMax-H3 supports at most 12 references in total")
+    if audios and not (images or videos):
+        raise ValueError("MiniMax-H3 audio references require at least one image or video reference")
+    refs = [MiniMaxH3ImageReference(image=im.convert("RGB")) for im in images]
+    for kind, paths, reference_class in (
+        ("video", videos, MiniMaxH3VideoReference),
+        ("audio", audios, MiniMaxH3AudioReference),
+    ):
+        for index, path in enumerate(paths, 1):
+            try:
+                refs.append(_resample_reference_audio(reference_class.from_file(path)))
+            except Exception as exc:
+                raise ValueError(f"Unable to decode MiniMax-H3 {kind} reference {index}: {exc}") from exc
+    return refs
 
 
 class RealMiniMaxH3Runner:
@@ -404,62 +529,14 @@ class RealMiniMaxH3Runner:
     def _ensure_configs(self, on_log: Optional[Callable[[str], None]] = None) -> Path:
         if self._cfg_dir is not None:
             return self._cfg_dir
-        target = self.weights_dir / "minimax_h3_hf_configs"
-        ensure_hf_configs(
-            repo_id=self.HF_REPO,
-            target_dir=target,
-            required_files=[
-                "modular_model_index.json",
-                "scheduler/scheduler_config.json",
-                "audio_scheduler/scheduler_config.json",
-                "transformer/config.json",
-                "vae/config.json",
-                "audio_vae/config.json",
-                "text_encoder/config.json",
-                "tokenizer/tokenizer_config.json",
-                "tokenizer/tokenizer.json",
-                "processor/processor_config.json",
-                "processor/tokenizer.json",
-                "processor/chat_template.json",
-            ],
-            allow_patterns=[
-                "modular_model_index.json",
-                "scheduler/*.json",
-                "audio_scheduler/*.json",
-                "transformer/*.json",
-                "transformer_ref/*.json",
-                "vae/*.json",
-                "audio_vae/*.json",
-                "text_encoder/*.json",
-                "tokenizer/*",
-                "processor/*",
-            ],
-            on_log=on_log,
-        )
+        target = ensure_model_configs("minimax_h3", self.weights_dir, on_log=on_log)
         self._cfg_dir = target
         return target
 
     def _ensure_image_configs(self, on_log: Optional[Callable[[str], None]] = None) -> Path:
         if self._img_cfg_dir is not None:
             return self._img_cfg_dir
-        target = self.weights_dir / "minimax_h3_image_hf_configs"
-        ensure_hf_configs(
-            repo_id=self.HF_IMAGE_REPO,
-            target_dir=target,
-            required_files=[
-                "modular_model_index.json",
-                "scheduler/scheduler_config.json",
-                "transformer_diffusers/config.json",
-                "vae_diffusers/config.json",
-            ],
-            allow_patterns=[
-                "modular_model_index.json",
-                "scheduler/*.json",
-                "transformer_diffusers/*.json",
-                "vae_diffusers/*.json",
-            ],
-            on_log=on_log,
-        )
+        target = ensure_model_configs("minimax_h3_image", self.weights_dir, on_log=on_log)
         self._img_cfg_dir = target
         return target
 
@@ -509,13 +586,15 @@ class RealMiniMaxH3Runner:
                 list(orig_layers[:50]) + [_PassthroughDecoderLayer()]
             )
 
-        te_missing, _ = quantized_module_swap_from_state_dict(
+        te_missing, te_unexpected = quantized_module_swap_from_state_dict(
             text_encoder,
             te_mapped,
             compute_dtype=compute_dtype,
             embedding_names=("model.language_model.embed_tokens",),
         )
         del te_mapped
+        unused_norm = ("model.language_model.norm.weight",) if not has_layer_50 else ()
+        _validate_checkpoint_keys("MiniMax-H3 Qwen3-VL", te_missing, te_unexpected, unused_norm)
 
         text_encoder.model.language_model.rotary_emb = Qwen3VLTextRotaryEmbedding(config=te_cfg.text_config)
         try:
@@ -523,7 +602,10 @@ class RealMiniMaxH3Runner:
         except (TypeError, AttributeError):
             head_dim = te_cfg.vision_config.hidden_size // te_cfg.vision_config.num_heads
             text_encoder.model.visual.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
-        _materialize_remaining_meta(text_encoder, compute_dtype)
+        _materialize_remaining_meta(text_encoder, compute_dtype, unused_norm)
+        text_encoder.eval()
+        _retain_conditioning_hidden_state(text_encoder.model)
+        configure_qwen_prompt_attention(text_encoder)
 
         te_layers = text_encoder.model.language_model.layers
         # Stream Qwen3-VL-32B (~25.3 GB INT8) through a rolling layer window on <=48 GB GPUs
@@ -539,10 +621,14 @@ class RealMiniMaxH3Runner:
         self._text_encoder = text_encoder
         self._tokenizer = Qwen2TokenizerFast.from_pretrained(str(cfg_dir / "tokenizer"))
         self._processor = Qwen3VLProcessor.from_pretrained(str(cfg_dir / "processor"))
+        # Adopt the reference qwen-vl-utils per-frame budget, supported by current
+        # Transformers and becoming its default. This does not resize VAE refs.
+        if hasattr(self._processor.video_processor, "cap_pixels_per_frame"):
+            self._processor.video_processor.cap_pixels_per_frame = True
         if on_log:
             on_log(
                 f"[MiniMax-H3 Qwen3-VL-32B] Loaded '{te_path.name}' "
-                f"({te_resident}/{len(te_layers)} layers Counter, missing={len(te_missing)})"
+                f"({te_resident}/{len(te_layers)} layers Counter, all active weights verified)"
             )
 
     @staticmethod
@@ -625,6 +711,10 @@ class RealMiniMaxH3Runner:
                 transformer, dit_mapped, compute_dtype=compute_dtype
             )
             del dit_mapped
+            _validate_checkpoint_keys(
+                "MiniMax-H3 Image DiT", dit_missing, dit_unexp,
+                _PRUNED_TIME_EMBEDDER_KEYS if adaln_t_table is not None else (),
+            )
 
             from diffusers.models.transformers.transformer_minimax_h3_image import MiniMaxH3ImageRotaryPosEmbed
 
@@ -644,6 +734,7 @@ class RealMiniMaxH3Runner:
                         orig_linear=blk.adaln_proj.linear,
                     )
             _materialize_remaining_meta(transformer, compute_dtype)
+            transformer.eval()
 
             num_blocks = len(transformer.transformer_blocks)
             dit_resident = min(
@@ -664,7 +755,7 @@ class RealMiniMaxH3Runner:
                 on_log(
                     f"[MiniMax-H3-Image DiT] Loaded '{paths['dit'].name}' "
                     f"({dit_resident}/{num_blocks} Counter blocks, pruned={adaln_t_table is not None}, "
-                    f"missing={len(dit_missing)}, unexpected={len(dit_unexp)})"
+                    "all active weights verified)"
                 )
 
             ivae_cfg = AutoencoderKLMiniMaxH3Image.load_config(str(img_cfg_dir / "vae_diffusers"))
@@ -677,7 +768,10 @@ class RealMiniMaxH3Runner:
                 attention_head_dim=int(ivae_cfg.get("decoder_attention_head_dim", 64)),
             )
             del ivae_raw
-            quantized_module_swap_from_state_dict(image_vae, ivae_mapped, compute_dtype=compute_dtype)
+            ivae_missing, ivae_unexpected = quantized_module_swap_from_state_dict(
+                image_vae, ivae_mapped, compute_dtype=compute_dtype
+            )
+            _validate_checkpoint_keys("MiniMax-H3 Image VAE", ivae_missing, ivae_unexpected)
             del ivae_mapped
             from diffusers.models.autoencoders.autoencoder_kl_minimax_h3_image import MiniMaxH3ImageRotaryPosEmbed as _VaeRope
 
@@ -687,6 +781,7 @@ class RealMiniMaxH3Runner:
                 num_axes=2,
             )
             _materialize_remaining_meta(image_vae, compute_dtype)
+            image_vae.eval()
 
             scheduler = MiniMaxH3Scheduler.from_pretrained(str(img_cfg_dir / "scheduler"))
             pipe = MiniMaxH3ImageBlocks().init_pipeline(str(img_cfg_dir))
@@ -728,6 +823,10 @@ class RealMiniMaxH3Runner:
             transformer, dit_mapped, compute_dtype=compute_dtype
         )
         del dit_mapped
+        _validate_checkpoint_keys(
+            "MiniMax-H3 Video DiT", dit_missing, dit_unexp,
+            _PRUNED_TIME_EMBEDDER_KEYS if adaln_t_table is not None else (),
+        )
 
         from diffusers.models.transformers.transformer_minimax_h3 import MiniMaxH3RotaryPosEmbed
 
@@ -747,6 +846,7 @@ class RealMiniMaxH3Runner:
                     orig_linear=blk.adaln_proj.linear,
                 )
         _materialize_remaining_meta(transformer, compute_dtype)
+        transformer.eval()
 
         num_blocks = len(transformer.transformer_blocks)
         dit_resident = min(
@@ -767,7 +867,7 @@ class RealMiniMaxH3Runner:
             on_log(
                 f"[MiniMax-H3 33B DiT ({partition})] Loaded '{paths['dit'].name}' "
                 f"({dit_resident}/{num_blocks} Counter blocks, pruned={adaln_t_table is not None}, "
-                f"missing={len(dit_missing)}, unexpected={len(dit_unexp)})"
+                "all active weights verified)"
             )
 
         # 3. Video VAE (CNN Encoder + 36-layer 3D ViT Decoder)
@@ -781,7 +881,10 @@ class RealMiniMaxH3Runner:
             attention_head_dim=int(vvae_cfg.get("decoder_attention_head_dim", 64)),
         )
         del vvae_raw
-        quantized_module_swap_from_state_dict(video_vae, vvae_mapped, compute_dtype=compute_dtype)
+        vvae_missing, vvae_unexpected = quantized_module_swap_from_state_dict(
+            video_vae, vvae_mapped, compute_dtype=compute_dtype
+        )
+        _validate_checkpoint_keys("MiniMax-H3 Video VAE", vvae_missing, vvae_unexpected)
         del vvae_mapped
         from diffusers.models.autoencoders.autoencoder_kl_minimax_h3 import MiniMaxH3VideoRotaryPosEmbed
 
@@ -790,6 +893,7 @@ class RealMiniMaxH3Runner:
             theta=vvae_cfg.get("decoder_rope_theta", 100.0),
         )
         _materialize_remaining_meta(video_vae, compute_dtype)
+        video_vae.eval()
 
         # 4. Audio VAE (BigVGAN 32kHz Stereo)
         avae_cfg = AutoencoderKLMiniMaxH3Audio.load_config(str(cfg_dir / "audio_vae"))
@@ -797,7 +901,8 @@ class RealMiniMaxH3Runner:
         _strip_audio_weight_norm(audio_vae)
         avae_raw = load_safetensors_state_dict(paths["audio_vae"], device="cpu")
         avae_sd = {k: v for k, v in avae_raw.items() if k not in ("latents_mean", "latents_std")}
-        audio_vae.load_state_dict(avae_sd, strict=False, assign=True)
+        audio_vae.load_state_dict(avae_sd, strict=True, assign=True)
+        audio_vae.eval()
 
         scheduler = MiniMaxH3Scheduler.from_pretrained(str(cfg_dir / "scheduler"))
         audio_scheduler = MiniMaxH3Scheduler.from_pretrained(str(cfg_dir / "audio_scheduler"))
@@ -956,6 +1061,12 @@ class RealMiniMaxH3Runner:
         on_log: Optional[Callable[[str], None]] = None,
     ) -> Path:
         """Run full 3-stage Strata MiniMax-H3 joint Video + 32kHz Stereo Audio generation."""
+        refs = None
+        if partition == "Ref2VA":
+            imgs = list(reference_images or [])
+            if not imgs:
+                imgs = [im for im in (start_image, end_image) if im is not None]
+            refs = _load_minimax_references(imgs, reference_videos, reference_audios)
         if self.memory.sleeping:
             self.memory.wake()
         self.memory.switch_partition(partition)
@@ -982,31 +1093,6 @@ class RealMiniMaxH3Runner:
         }
 
         if partition == "Ref2VA":
-            from diffusers.modular_pipelines.minimax_h3.references import (
-                MiniMaxH3AudioReference,
-                MiniMaxH3ImageReference,
-                MiniMaxH3VideoReference,
-            )
-
-            refs: List[Any] = []
-            imgs = list(reference_images or [])
-            if not imgs:
-                for fallback_img in (start_image, end_image):
-                    if fallback_img is not None:
-                        imgs.append(fallback_img)
-            for im in imgs[:9]:
-                refs.append(MiniMaxH3ImageReference(image=im.convert("RGB")))
-            for v_url in (reference_videos or [])[:3]:
-                try:
-                    refs.append(MiniMaxH3VideoReference.from_file(v_url))
-                except Exception:
-                    pass
-            for a_url in (reference_audios or [])[:3]:
-                if refs:  # Audio references must be paired with at least one visual reference
-                    try:
-                        refs.append(MiniMaxH3AudioReference.from_file(a_url))
-                    except Exception:
-                        pass
             if refs:
                 init_inputs["references"] = refs
         else:

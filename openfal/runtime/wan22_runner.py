@@ -19,7 +19,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from openfal.config import EngineConfig
@@ -29,12 +28,37 @@ from openfal.runtime.common import (
     clear_device_cache,
     compute_resident_blocks,
     encode_frames_to_mp4,
-    ensure_hf_configs,
+    ensure_model_configs,
     find_matching_safetensors,
     load_safetensors_state_dict,
     resolve_compute_device_and_dtype,
 )
 from openfal.runtime.quant import StrataBlockOffloadManager, quantized_module_swap_from_state_dict
+
+
+# Wan's published defaults explicitly suppress overexposure, stylization and
+# static frames. See Wan-Video/Wan2.2/wan/configs/shared_config.py.
+WAN_DEFAULT_NEGATIVE_PROMPT = (
+    "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，"
+    "最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，"
+    "画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，"
+    "杂乱的背景，三条腿，背景人很多，倒着走"
+)
+WAN_FLOW_SHIFTS = {"Wan2.2-T2V-A14B": 12.0, "Wan2.2-I2V-A14B": 5.0}
+
+
+def _set_wan_timesteps(scheduler: Any, steps: int, device: torch.device) -> None:
+    """Match Wan's native UniPC sigma grid, including its initial noise level.
+
+    Wan starts at float32(1 - 1 / training_steps) and ends at zero. Diffusers'
+    default flow grid starts at one and ends at 1 / training_steps instead.
+    Supply the unshifted grid; the scheduler applies its configured flow_shift.
+    """
+    import numpy as np
+
+    sigma_max = float(np.float32(1.0 - 1.0 / scheduler.config.num_train_timesteps))
+    sigmas = np.linspace(sigma_max, 0.0, steps + 1)[:-1]
+    scheduler.set_timesteps(sigmas=sigmas, device=device)
 
 
 def convert_wan22_transformer_state_dict(raw_sd: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -66,23 +90,21 @@ def convert_wan22_transformer_state_dict(raw_sd: Dict[str, torch.Tensor]) -> Dic
 
 
 def _materialize_remaining_meta(module: nn.Module, dtype: torch.dtype) -> None:
-    """Replace any unpopulated meta parameters or buffers on CPU."""
-    from openfal.runtime.quant import _get_parent_and_attr
+    """Reject incomplete checkpoint loads instead of inventing trained weights."""
+    remaining = [
+        name
+        for name, tensor in list(module.named_parameters()) + list(module.named_buffers())
+        if tensor.is_meta
+    ]
+    if remaining:
+        raise RuntimeError(f"Wan checkpoint left uninitialized tensors: {remaining[:12]}")
 
-    for name, param in list(module.named_parameters(recurse=True)):
-        if param.is_meta:
-            fill = torch.ones if "norm" in name else torch.zeros
-            target_dt = dtype if param.is_floating_point() else param.dtype
-            parent, attr = _get_parent_and_attr(module, name)
-            setattr(
-                parent,
-                attr,
-                nn.Parameter(fill(param.shape, dtype=target_dt, device="cpu"), requires_grad=False),
-            )
-    for mod in module.modules():
-        for bname, buf in list(mod._buffers.items()):
-            if buf is not None and buf.is_meta:
-                mod._buffers[bname] = torch.zeros(buf.shape, dtype=buf.dtype, device="cpu")
+
+def _validate_checkpoint_keys(missing: List[str], unexpected: List[str], label: str) -> None:
+    if missing or unexpected:
+        raise RuntimeError(
+            f"{label} checkpoint is incompatible: missing={missing[:12]}, unexpected={unexpected[:12]}"
+        )
 
 
 def convert_umt5_fp8_state_dict(raw_sd: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -133,22 +155,27 @@ class RealWan22Runner:
         return None
 
     def _find_16ch_vae(self) -> Optional[Path]:
-        # Prefer explicit wan_2.1_vae (16-ch) over wan2.2_vae (which is 48-ch TI2V-5B VAE)
-        for root in self._search_roots():
-            for p in root.rglob("*.safetensors"):
-                if p.name in ("wan_2.1_vae.safetensors", "diffusion_pytorch_model.safetensors") and "vae" in str(
-                    p.parent
-                ).lower():
-                    return p
-        # Check wan2.2_vae.safetensors ONLY if its conv2.weight actually has 16 channels
+        # File names are not architecture guarantees: older installations contain
+        # a 48-channel TI2V-5B VAE under a generic Wan 2.2 name.
         from safetensors import safe_open
 
+        checked: set[Path] = set()
         for root in self._search_roots():
-            cand = find_matching_safetensors(root, ["wan2.2_vae"])
-            if cand is not None:
-                with safe_open(str(cand), framework="pt", device="cpu") as f:
-                    if "conv2.weight" in f.keys() and f.get_slice("conv2.weight").get_shape()[0] == 16:
-                        return cand
+            for candidate in root.rglob("*.safetensors"):
+                if candidate in checked:
+                    continue
+                checked.add(candidate)
+                named_wan_vae = candidate.name in ("wan_2.1_vae.safetensors", "wan2.2_vae.safetensors")
+                native_vae = candidate.name == "diffusion_pytorch_model.safetensors" and candidate.parent.name == "vae"
+                if not (named_wan_vae or native_vae):
+                    continue
+                with safe_open(str(candidate), framework="pt", device="cpu") as checkpoint:
+                    for key in ("conv2.weight", "post_quant_conv.weight"):
+                        if key not in checkpoint.keys():
+                            continue
+                        shape = checkpoint.get_slice(key).get_shape()
+                        if len(shape) == 5 and shape[:2] == [16, 16]:
+                            return candidate
         return None
 
     def _resolve_expert_paths(self, variant: str) -> Tuple[Optional[Path], Optional[Path]]:
@@ -167,37 +194,18 @@ class RealWan22Runner:
         return hi, lo
 
     def has_weights_for(self, variant: str) -> bool:
-        hi, _ = self._resolve_expert_paths(variant)
-        return hi is not None
+        hi, lo = self._resolve_expert_paths(variant)
+        return hi is not None and (variant == "Wan2.2-Animate-14B" or lo is not None)
 
     def _ensure_configs(self, variant: str, on_log: Optional[Callable[[str], None]] = None) -> Path:
         if variant in self._cfg_dirs:
             return self._cfg_dirs[variant]
-        repo_id = self.REPO_MAP.get(variant, self.REPO_MAP["Wan2.2-T2V-A14B"])
-        target = self.weights_dir / variant / "hf_configs"
-        ensure_hf_configs(
-            repo_id=repo_id,
-            target_dir=target,
-            required_files=[
-                "model_index.json",
-                "scheduler/scheduler_config.json",
-                "transformer/config.json",
-                "vae/config.json",
-                "text_encoder/config.json",
-                "tokenizer/tokenizer_config.json",
-                "tokenizer/spiece.model",
-            ],
-            allow_patterns=[
-                "model_index.json",
-                "scheduler/*",
-                "transformer/*.json",
-                "transformer_2/*.json",
-                "vae/*.json",
-                "text_encoder/*.json",
-                "tokenizer/*",
-            ],
-            on_log=on_log,
-        )
+        component = {
+            "Wan2.2-T2V-A14B": "wan22_t2v_moe",
+            "Wan2.2-I2V-A14B": "wan22_i2v_moe",
+            "Wan2.2-Animate-14B": "wan22_animate",
+        }[variant]
+        target = ensure_model_configs(component, self.weights_dir, on_log=on_log)
         self._cfg_dirs[variant] = target
         return target
 
@@ -205,18 +213,11 @@ class RealWan22Runner:
         existing = self._find_16ch_vae()
         if existing is not None:
             return existing
-        dest_dir = self.weights_dir / "Wan2.2-T2V-A14B"
-        if on_log:
-            on_log(
-                "[Wan2.2-VAE] Existing 'wan2.2_vae.safetensors' is 48-ch (TI2V-5B). Fetching "
-                "16-ch 'split_files/vae/wan_2.1_vae.safetensors' (~384 MB) for Wan 2.2 14B..."
-            )
-        downloaded = hf_hub_download(
-            repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-            filename="split_files/vae/wan_2.1_vae.safetensors",
-            local_dir=str(dest_dir),
+        raise RuntimeError(
+            "Wan 2.2 A14B requires the 16-channel wan_2.1_vae.safetensors; "
+            "the 48-channel TI2V-5B VAE is incompatible. "
+            "Run: openfal download --component wan22_t2v_moe --runtime-assets-only"
         )
-        return Path(downloaded)
 
     def _load_shared_text_encoder(self, cfg_dir: Path, on_log: Optional[Callable[[str], None]] = None) -> None:
         if self._text_encoder is not None:
@@ -232,8 +233,8 @@ class RealWan22Runner:
         from transformers import T5TokenizerFast, UMT5Config, UMT5EncoderModel
 
         _, compute_dtype = resolve_compute_device_and_dtype()
-        self._tokenizer = T5TokenizerFast.from_pretrained(str(cfg_dir / "tokenizer"))
-        te_cfg = UMT5Config.from_pretrained(str(cfg_dir / "text_encoder"))
+        self._tokenizer = T5TokenizerFast.from_pretrained(str(cfg_dir / "tokenizer"), local_files_only=True)
+        te_cfg = UMT5Config.from_pretrained(str(cfg_dir / "text_encoder"), local_files_only=True)
         with init_empty_weights():
             te = UMT5EncoderModel(te_cfg)
         raw_sd = load_safetensors_state_dict(umt5_path, device="cpu")
@@ -241,7 +242,9 @@ class RealWan22Runner:
         del raw_sd
         missing, unexp = quantized_module_swap_from_state_dict(te, mapped_sd, compute_dtype=compute_dtype)
         del mapped_sd
+        _validate_checkpoint_keys(missing, unexp, "Wan UMT5")
         _materialize_remaining_meta(te, compute_dtype)
+        te.eval()
         if on_log:
             on_log(
                 f"[Wan2.2 UMT5-XXL] Loaded '{umt5_path.name}' in FP8 "
@@ -255,20 +258,19 @@ class RealWan22Runner:
         from diffusers import AutoencoderKLWan
         from diffusers.loaders.single_file_utils import convert_wan_vae_to_diffusers
 
-        _, compute_dtype = resolve_compute_device_and_dtype()
         vae_path = self._ensure_16ch_vae_file(on_log=on_log)
-        vae_cfg = AutoencoderKLWan.load_config(str(cfg_dir / "vae"))
+        vae_cfg = AutoencoderKLWan.load_config(str(cfg_dir / "vae"), local_files_only=True)
         vae = AutoencoderKLWan.from_config(vae_cfg)
         vae_raw = load_safetensors_state_dict(vae_path, device="cpu")
         vae_sd = convert_wan_vae_to_diffusers(vae_raw)
         del vae_raw
         vae.load_state_dict(
-            {k: (v.to(dtype=compute_dtype) if v.is_floating_point() else v) for k, v in vae_sd.items()},
-            strict=False,
+            {k: (v.to(dtype=torch.float32) if v.is_floating_point() else v) for k, v in vae_sd.items()},
+            strict=True,
             assign=True,
         )
         del vae_sd
-        vae.to(dtype=compute_dtype)
+        vae.eval()
         self._vae = vae
         if on_log:
             on_log(f"[Wan2.2-VAE] Loaded 16-ch AutoencoderKLWan from '{vae_path.name}'")
@@ -290,7 +292,8 @@ class RealWan22Runner:
         device, compute_dtype = resolve_compute_device_and_dtype()
         is_animate = "Animate" in key or "animate" in ckpt_path.name.lower()
         model_cls = WanAnimateTransformer3DModel if is_animate else WanTransformer3DModel
-        tr_cfg = model_cls.load_config(str(cfg_dir / "transformer"))
+        config_subdir = "transformer_2" if key.endswith(":low") else "transformer"
+        tr_cfg = model_cls.load_config(str(cfg_dir / config_subdir), local_files_only=True)
         with init_empty_weights():
             model = model_cls.from_config(tr_cfg)
 
@@ -326,6 +329,8 @@ class RealWan22Runner:
             unexp = [k for k in unexp if not k.endswith(".blur_kernel")]
         del mapped_sd
 
+        _validate_checkpoint_keys(missing, unexp, f"Wan expert {ckpt_path.name}")
+
         # Re-init tiny non-persistent RoPE frequency buffers
         model.rope = WanRotaryPosEmbed(
             attention_head_dim=model.config.attention_head_dim,
@@ -333,6 +338,7 @@ class RealWan22Runner:
             max_seq_len=model.config.rope_max_seq_len,
         )
         _materialize_remaining_meta(model, compute_dtype)
+        model.eval()
 
         num_blocks = len(model.blocks)
         resident = min(
@@ -379,32 +385,6 @@ class RealWan22Runner:
         model.to("cpu")
         clear_device_cache(device)
 
-    @staticmethod
-    def _extract_animate_image_embeds(
-        ref_img: Image.Image,
-        device: torch.device,
-        dtype: torch.dtype,
-        image_dim: int = 1280,
-    ) -> torch.Tensor:
-        """
-        Extract `(1, 257, 1280)` visual patch tokens from the reference character image
-        for `WanAnimateTransformer3DModel.condition_embedder.image_embedder`.
-        """
-        import numpy as np
-
-        img_224 = ref_img.convert("RGB").resize((224, 224), Image.Resampling.BICUBIC)
-        arr = (np.asarray(img_224, dtype=np.float32) / 255.0 - 0.5) / 0.5
-        patches = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).to(device=device, dtype=torch.float32)
-        # Unfold into 16x16 grid of 14x14 patches -> (1, 256, 3*14*14 = 588)
-        unfolded = torch.nn.functional.unfold(patches, kernel_size=14, stride=14).transpose(1, 2)
-        cls_tok = unfolded.mean(dim=1, keepdim=True)
-        tokens_257 = torch.cat([cls_tok, unfolded], dim=1)  # (1, 257, 588)
-        # Repeat-pad / interpolate feature channels to `image_dim` (1280) and layer-normalize
-        reps = (image_dim + tokens_257.shape[-1] - 1) // tokens_257.shape[-1]
-        feat = tokens_257.repeat(1, 1, reps)[..., :image_dim]
-        feat = torch.nn.functional.layer_norm(feat, (image_dim,))
-        return feat.to(dtype=dtype)
-
     @torch.inference_mode()
     def generate_video(
         self,
@@ -424,6 +404,13 @@ class RealWan22Runner:
         on_log: Optional[Callable[[str], None]] = None,
     ) -> Path:
         """Execute full 3-stage Stage-wise MoE Wan 2.2 video generation -> `.mp4`."""
+        if variant == "Wan2.2-Animate-14B":
+            raise NotImplementedError(
+                "Wan Animate/Recast requires a driving video, extracted pose/face motion, and a CLIP image encoder. "
+                "This runtime does not yet implement that conditioning; use Wan text-to-video or image-to-video."
+            )
+        if variant == "Wan2.2-I2V-A14B" and start_image is None:
+            raise ValueError("Wan image-to-video requires a start image.")
         if self.memory.sleeping:
             self.memory.wake()
         self.memory.switch_partition(variant)
@@ -431,9 +418,9 @@ class RealWan22Runner:
         check_inference_dependencies(("diffusers", "transformers", "accelerate"))
 
         hi_path, lo_path = self._resolve_expert_paths(variant)
-        if hi_path is None:
+        if hi_path is None or lo_path is None:
             raise RuntimeError(
-                f"Missing Wan 2.2 weights for '{variant}' under '{self.weights_dir}'. "
+                f"Missing Wan 2.2 high/low-noise expert weights for '{variant}' under '{self.weights_dir}'. "
                 "Run: openfal download --component alibaba-only"
             )
 
@@ -451,10 +438,11 @@ class RealWan22Runner:
         self._load_shared_text_encoder(cfg_dir, on_log=on_log)
         self._load_shared_vae(cfg_dir, on_log=on_log)
 
-        # Configure UniPCMultistepScheduler with appropriate flow_shift (5.0 for >=720p else 3.0)
-        flow_shift = 5.0 if max(width, height) >= 1200 else 3.0
-        scheduler = UniPCMultistepScheduler.from_pretrained(str(cfg_dir / "scheduler"))
-        scheduler.config["flow_shift"] = flow_shift
+        # A14B's native schedules differ by task, not output resolution.
+        flow_shift = WAN_FLOW_SHIFTS[variant]
+        scheduler = UniPCMultistepScheduler.from_pretrained(
+            str(cfg_dir / "scheduler"), flow_shift=flow_shift, local_files_only=True
+        )
 
         import json
 
@@ -489,9 +477,9 @@ class RealWan22Runner:
             padded = [torch.cat([u, u.new_zeros(512 - u.size(0), u.size(1))]) for u in trimmed]
             return torch.stack(padded, dim=0)
 
-        do_cfg = guidance_scale > 1.0
+        do_cfg = guidance_scale > 1.0 or (guidance_scale_2 is not None and guidance_scale_2 > 1.0)
         prompt_embeds = _encode_t5([prompt])
-        neg_prompt = negative_prompt or "low quality, blurry, watermark, text, distorted"
+        neg_prompt = negative_prompt or WAN_DEFAULT_NEGATIVE_PROMPT
         neg_embeds = _encode_t5([neg_prompt]) if do_cfg else None
 
         self._text_encoder.to("cpu")
@@ -500,7 +488,7 @@ class RealWan22Runner:
         if on_log:
             on_log("[Wan2.2 UMT5-XXL] Evicted UMT5-XXL from VRAM (0 MB resident)")
 
-        # -------- Prepare Latents (+ I2V / Animate Conditioning) --------
+        # -------- Prepare Latents (+ I2V Conditioning) --------
         gen_dev = "cpu" if device.type == "mps" else device
         generator = torch.Generator(device=gen_dev).manual_seed(int(seed))
         z_dim = self._vae.config.z_dim
@@ -510,95 +498,50 @@ class RealWan22Runner:
         latent_h = height // s_scale
         latent_w = width // s_scale
 
-        is_animate = variant == "Wan2.2-Animate-14B"
-        latent_t_dim = (latent_f + 1) if is_animate else latent_f
         latents = torch.randn(
-            (1, z_dim, latent_t_dim, latent_h, latent_w),
+            (1, z_dim, latent_f, latent_h, latent_w),
             generator=generator,
             device=device if gen_dev != "cpu" else "cpu",
             dtype=torch.float32,
         ).to(device)
 
-        lmean = torch.tensor(self._vae.config.latents_mean, device=device, dtype=compute_dtype).view(1, z_dim, 1, 1, 1)
-        lstd = 1.0 / torch.tensor(self._vae.config.latents_std, device=device, dtype=compute_dtype).view(
+        # The reference VAE runs in FP32 even with a BF16/FP8 transformer.
+        vae_dtype = self._vae.dtype
+        lmean = torch.tensor(self._vae.config.latents_mean, device=device, dtype=vae_dtype).view(1, z_dim, 1, 1, 1)
+        lstd = 1.0 / torch.tensor(self._vae.config.latents_std, device=device, dtype=vae_dtype).view(
             1, z_dim, 1, 1, 1
         )
 
         condition: Optional[torch.Tensor] = None
-        animate_kwargs: Dict[str, Any] = {}
 
-        if is_animate:
-            ref_img = (start_image or Image.new("RGB", (width, height), (128, 128, 128))).convert("RGB")
+        if variant == "Wan2.2-I2V-A14B":
             video_proc = VideoProcessor(vae_scale_factor=s_scale)
-            ref_resized = ref_img.resize((width, height), Image.Resampling.LANCZOS)
-            ref_tensor = video_proc.preprocess(ref_resized, height=height, width=width).to(device, dtype=compute_dtype)
-
+            img_rgb = start_image.convert("RGB").resize((width, height), Image.Resampling.LANCZOS)
+            img_tensor = video_proc.preprocess(img_rgb, height=height, width=width).to(device, dtype=vae_dtype)
+            vid_cond = torch.cat(
+                [
+                    img_tensor[:, :, None],
+                    img_tensor.new_zeros(1, 3, num_frames - 1, height, width),
+                ],
+                dim=2,
+            )
             self._vae.to(device)
-            # 1. Reference character image latents: (1, 16, 1, latent_h, latent_w) + 4-ch ones mask -> 20 ch
-            ref_enc = self._vae.encode(ref_tensor[:, :, None]).latent_dist.mode()
-            ref_enc = (ref_enc - lmean.to(ref_enc.dtype)) * lstd.to(ref_enc.dtype)
-            ref_mask = torch.ones(1, 4, 1, latent_h, latent_w, device=device, dtype=compute_dtype)
-            ref_cond = torch.cat([ref_mask, ref_enc.to(compute_dtype)], dim=1)
-
-            # 2. Prev-segment conditioning latents: zeros encoded -> (1, 16, latent_f, latent_h, latent_w) + 4-ch zero mask
-            zero_vid = ref_tensor.new_zeros(1, 3, num_frames, height, width)
-            prev_enc = self._vae.encode(zero_vid).latent_dist.mode()
-            prev_enc = (prev_enc - lmean.to(prev_enc.dtype)) * lstd.to(prev_enc.dtype)
-            prev_mask = torch.zeros(1, 4, latent_f, latent_h, latent_w, device=device, dtype=compute_dtype)
-            prev_cond = torch.cat([prev_mask, prev_enc.to(compute_dtype)], dim=1)
-
-            # Concatenate along temporal dimension -> (1, 20, latent_f + 1, latent_h, latent_w)
-            condition = torch.cat([ref_cond, prev_cond], dim=2)
-
-            # 3. Pose latents: (1, 16, latent_f, latent_h, latent_w)
-            pose_latents = prev_enc.to(compute_dtype)
+            enc = self._vae.encode(vid_cond).latent_dist.mode()
             self._vae.to("cpu")
             clear_device_cache(device)
 
-            # 4. Face video segment: (1, 3, num_frames, 512, 512)
-            face_crop = ref_img.resize((512, 512), Image.Resampling.LANCZOS)
-            face_t = video_proc.preprocess(face_crop, height=512, width=512).to(device, dtype=compute_dtype)
-            face_video_segment = face_t[:, :, None].expand(1, 3, num_frames, 512, 512).contiguous()
+            enc = (enc - lmean.to(enc.dtype)) * lstd.to(enc.dtype)
 
-            # 5. Reference image CLIP-compatible embeddings: (1, 257, 1280)
-            image_embeds = self._extract_animate_image_embeds(ref_img, device=device, dtype=compute_dtype)
-            animate_kwargs = {
-                "encoder_hidden_states_image": image_embeds,
-                "pose_hidden_states": pose_latents,
-                "face_pixel_values": face_video_segment,
-            }
-        elif variant == "Wan2.2-I2V-A14B":
-            if start_image is not None:
-                video_proc = VideoProcessor(vae_scale_factor=s_scale)
-                img_rgb = start_image.convert("RGB").resize((width, height), Image.Resampling.LANCZOS)
-                img_tensor = video_proc.preprocess(img_rgb, height=height, width=width).to(device, dtype=compute_dtype)
-                vid_cond = torch.cat(
-                    [
-                        img_tensor[:, :, None],
-                        img_tensor.new_zeros(1, 3, num_frames - 1, height, width),
-                    ],
-                    dim=2,
-                )
-                self._vae.to(device)
-                enc = self._vae.encode(vid_cond).latent_dist.mode()
-                self._vae.to("cpu")
-                clear_device_cache(device)
+            mask_lat = torch.ones(1, 1, num_frames, latent_h, latent_w, device=device, dtype=enc.dtype)
+            mask_lat[:, :, 1:] = 0
+            first_four = mask_lat[:, :, :1].repeat(1, 4, 1, 1, 1)
+            rest = mask_lat[:, :, 1:].reshape(1, -1, 4, latent_h, latent_w).permute(0, 2, 1, 3, 4)
+            mask_packed = torch.cat([first_four, rest], dim=2)
+            condition = torch.cat([mask_packed, enc], dim=1)
 
-                enc = (enc - lmean.to(enc.dtype)) * lstd.to(enc.dtype)
-
-                mask_lat = torch.ones(1, 1, num_frames, latent_h, latent_w, device=device, dtype=enc.dtype)
-                mask_lat[:, :, 1:] = 0
-                first_four = mask_lat[:, :, :1].repeat(1, 4, 1, 1, 1)
-                rest = mask_lat[:, :, 1:].reshape(1, -1, 4, latent_h, latent_w).permute(0, 2, 1, 3, 4)
-                mask_packed = torch.cat([first_four, rest], dim=2)
-                condition = torch.cat([mask_packed, enc], dim=1)
-            else:
-                # Fallback zero condition (4 mask + 16 latent channels = 20) so 36-channel I2V conv_in succeeds
-                condition = torch.zeros(1, 20, latent_f, latent_h, latent_w, device=device, dtype=compute_dtype)
-
-        # -------- Stage 2: Two-Expert MoE / Animate Denoising --------
+        # -------- Stage 2: Two-Expert MoE Denoising --------
         steps = max(4, int(num_steps))
-        scheduler.set_timesteps(steps, device=device)
+        _set_wan_timesteps(scheduler, steps, device)
         timesteps = scheduler.timesteps
         boundary_ts = (boundary_ratio * scheduler.config.num_train_timesteps) if boundary_ratio else None
         g2 = guidance_scale_2 if guidance_scale_2 is not None else guidance_scale
@@ -638,18 +581,13 @@ class RealWan22Runner:
                 timestep=ts_in,
                 encoder_hidden_states=prompt_embeds,
                 return_dict=False,
-                **animate_kwargs,
             )[0]
             if do_cfg and neg_embeds is not None:
-                uncond_kwargs = dict(animate_kwargs)
-                if "face_pixel_values" in uncond_kwargs:
-                    uncond_kwargs["face_pixel_values"] = uncond_kwargs["face_pixel_values"] * 0 - 1
                 noise_uncond = model(
                     hidden_states=model_in,
                     timestep=ts_in,
                     encoder_hidden_states=neg_embeds,
                     return_dict=False,
-                    **uncond_kwargs,
                 )[0]
                 noise_pred = noise_uncond + cur_cfg * (noise_pred - noise_uncond)
 
@@ -668,7 +606,7 @@ class RealWan22Runner:
         # -------- Stage 3: AutoencoderKLWan Decode -> H.264 MP4 --------
         self.memory.begin_vae_stage()
         self._vae.to(device)
-        z_lat = (latents[:, :, 1:] if is_animate else latents).to(device=device, dtype=compute_dtype)
+        z_lat = latents.to(device=device, dtype=vae_dtype)
         z_lat = z_lat / lstd + lmean
         decoded = self._vae.decode(z_lat, return_dict=False)[0]
         video_proc = VideoProcessor(vae_scale_factor=s_scale)

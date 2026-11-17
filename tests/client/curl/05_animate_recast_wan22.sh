@@ -14,7 +14,7 @@ mkdir -p "${OUT_DIR}"
 echo "=== [05] Uploading character portrait sample_portrait.png ==="
 FACE_URL="$(curl -sS -X POST "${OPENFAL_URL}/v1/storage/upload" \
   -H "Content-Type: image/png" \
-  --data-binary "@${SAMPLES_DIR}/sample_portrait.png" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
+  --data-binary "@${SAMPLES_DIR}/${OPENFAL_PORTRAIT:-sample_portrait_photo.png}" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
 echo "  Character Portrait URL: ${FACE_URL}"
 
 echo "=== [05] Wan 2.2 Animate-14B Video Character Animation (${OPENFAL_URL}) ==="

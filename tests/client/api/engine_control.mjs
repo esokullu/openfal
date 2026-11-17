@@ -45,7 +45,7 @@ const models = await getJson("/v1/models/status");
 console.log("\n4. Installed model components:");
 for (const c of models.components || []) {
   console.log(
-    `   - ${c.component_id.padEnd(16)} : installed=${c.installed} (${c.disk_size_mb} MB)`
+    `   - ${c.component_id.padEnd(16)} : installed=${c.installed}, runtime_supported=${c.runtime_supported !== false} (${c.disk_size_mb} MB)`
   );
 }
 

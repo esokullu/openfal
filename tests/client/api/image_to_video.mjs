@@ -8,10 +8,10 @@
  *   node image_to_video.mjs --model=wan
  *   node image_to_video.mjs --model=minimax
  */
-import { downloadOutput, fal, OPENFAL_URL, parseModelFlag, uploadSampleFile } from "./config.mjs";
+import { downloadOutput, fal, OPENFAL_URL, STREET_SAMPLE, parseModelFlag, uploadSampleFile } from "./config.mjs";
 
 const modelFilter = parseModelFlag("all");
-const startImageUrl = await uploadSampleFile("sample_street_scene.png");
+const startImageUrl = await uploadSampleFile(STREET_SAMPLE);
 console.log("Uploaded start keyframe:", startImageUrl);
 
 async function runWan22I2V() {

@@ -13,8 +13,24 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const OPENFAL_URL = (process.env.OPENFAL_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 export const SAMPLES_DIR = path.resolve(__dirname, "../samples");
-export const OUTPUTS_DIR = path.resolve(__dirname, "outputs");
+export const OUTPUTS_DIR = process.env.OPENFAL_OUTPUTS_DIR
+  ? path.resolve(process.env.OPENFAL_OUTPUTS_DIR) : path.resolve(__dirname, "outputs");
+export const PORTRAIT_SAMPLE = process.env.OPENFAL_PORTRAIT || "sample_portrait_photo.png";
+export const STYLE_SAMPLE = process.env.OPENFAL_STYLE || "sample_style_photo.png";
+export const STREET_SAMPLE = process.env.OPENFAL_STREET || "sample_street_photo.png";
+const TEST_SEED = Number(process.env.OPENFAL_TEST_SEED || 20261117);
+const TEST_TIMEOUT_MS = Number(process.env.OPENFAL_TEST_TIMEOUT_MS || 30 * 60 * 1000);
 fs.mkdirSync(OUTPUTS_DIR, { recursive: true });
+
+function assertInferenceResponse(data) {
+  if (data.strata_engine?.mode !== "real_pytorch" && process.env.OPENFAL_ALLOW_SYNTHETIC_TESTS !== "1") {
+    throw new Error("Quality tests require real_pytorch inference; synthetic outputs do not pass");
+  }
+  const artifacts = data.images || (data.video ? [data.video] : []);
+  if (!artifacts.length || artifacts.some((item) => !item.url || !(item.file_size > 1024) || !(item.width > 0) || !(item.height > 0))) {
+    throw new Error("Inference returned missing or invalid output metadata");
+  }
+}
 
 /**
  * Rewrite `https://fal.run/...` or `https://queue.fal.run/...` URLs from `@fal-ai/client`
@@ -95,6 +111,7 @@ async function createFalClient() {
 
   return {
     async run(endpointId, { input = {} } = {}) {
+      input = { seed: TEST_SEED, ...input };
       const cleanEp = endpointId.replace(/^\/+/, "");
       const res = await fetch(`${OPENFAL_URL}/${cleanEp}`, {
         method: "POST",
@@ -105,10 +122,13 @@ async function createFalClient() {
         throw new Error(`fal.run(${endpointId}) failed (${res.status}): ${await res.text()}`);
       }
       const data = await res.json();
+      assertInferenceResponse(data);
       return { data, requestId: data.seed ? String(data.seed) : "sync" };
     },
 
     async subscribe(endpointId, { input = {}, logs = true, onQueueUpdate } = {}) {
+      input = { seed: TEST_SEED, ...input };
+      const deadline = Date.now() + TEST_TIMEOUT_MS;
       const cleanEp = endpointId.replace(/^\/+/, "");
       const submitRes = await fetch(`${OPENFAL_URL}/queue/${cleanEp}`, {
         method: "POST",
@@ -126,6 +146,9 @@ async function createFalClient() {
 
       let seenLogs = (initial.logs || []).length;
       while (true) {
+        if (Date.now() > deadline) {
+          throw new Error(`Job ${requestId} exceeded test timeout (${TEST_TIMEOUT_MS}ms)`);
+        }
         const statusRes = await fetch(
           `${OPENFAL_URL}/requests/${requestId}/status?logs=${logs ? 1 : 0}`
         );
@@ -153,6 +176,9 @@ async function createFalClient() {
         throw new Error(`Result fetch failed (${resultRes.status}): ${await resultRes.text()}`);
       }
       const data = await resultRes.json();
+      assertInferenceResponse(data);
+      fs.writeFileSync(path.join(OUTPUTS_DIR, `${cleanEp.replaceAll("/", "_")}.json`),
+        JSON.stringify({ endpoint: endpointId, input, requestId, result: data }, null, 2));
       return { data, requestId };
     },
 

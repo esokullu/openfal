@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import math
 import time
+from collections import deque
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
@@ -233,6 +234,19 @@ class StrataFP8ScaledLinear(nn.Module):
             self.bias = nn.Parameter(bias.detach().clone(), requires_grad=False)
         else:
             self.bias = None
+
+    @property
+    def weight(self) -> torch.Tensor:
+        """Expose a normal compute-dtype weight for Linear-compatible callers.
+
+        Transformers' UMT5 feed-forward layers inspect ``wo.weight.dtype`` before
+        calling it. Exposing the stored FP8 buffer would make them cast activations
+        to FP8, which is not the computation dtype. Do not cache this dense view:
+        the persistent weight must remain one byte per element.
+        """
+        return self.weight_fp8.to(dtype=self._dtype_anchor.dtype) * self.weight_scale.to(
+            device=self.weight_fp8.device, dtype=self._dtype_anchor.dtype
+        )
 
     def to(self, *args, **kwargs):
         # MPS currently lacks native float8_e4m3fn storage buffers on some PyTorch builds;
@@ -448,6 +462,8 @@ class StrataBlockOffloadManager:
         )
         self._pinned_cpu_backing: Dict[int, Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]] = {}
         self._staged_gpu_tensors: Dict[int, Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor], Any]] = {}
+        self._active_gpu_blocks: set[int] = set()
+        self._retired_compute_events: deque[Any] = deque()
         self._handles: List[Any] = []
         self._pin_cpu = bool(pin_memory and self._use_cuda_stream)
 
@@ -497,11 +513,30 @@ class StrataBlockOffloadManager:
         parent, attr = _get_parent_and_attr(root, dotted)
         parent._buffers[attr] = tensor
 
+    def _wait_for_staging_slot(self) -> None:
+        """Bound active, prefetched, and not-yet-reclaimable weights to two blocks.
+
+        A post hook runs before CUDA forward kernels finish. ``record_stream``
+        keeps their allocations alive, but by itself allows the host to enqueue
+        the whole model and grow VRAM far beyond the two streaming slots. Reclaim
+        the previous block before allocating the next prefetch. The next transfer
+        can then overlap the current block's forward as usual.
+        """
+        if not self._use_cuda_stream:
+            return
+        while self._retired_compute_events and self._retired_compute_events[0].query():
+            self._retired_compute_events.popleft()
+        while len(self._active_gpu_blocks) + len(self._staged_gpu_tensors) + len(self._retired_compute_events) >= 2:
+            if not self._retired_compute_events:
+                raise RuntimeError("Both CUDA streaming slots are still active; cannot prefetch another block")
+            self._retired_compute_events.popleft().synchronize()
+
     def _start_prefetch(self, idx: int) -> None:
         if idx < self.resident_vram_blocks or idx >= self.total_blocks:
             return
         if idx in self._staged_gpu_tensors:
             return
+        self._wait_for_staging_slot()
         p_back, b_back = self._pinned_cpu_backing[idx]
         p_gpu: Dict[str, torch.Tensor] = {}
         b_gpu: Dict[str, torch.Tensor] = {}
@@ -537,11 +572,21 @@ class StrataBlockOffloadManager:
             self._start_prefetch(idx)
         p_gpu, b_gpu, evt = self._staged_gpu_tensors.pop(idx)
         if evt is not None:
-            torch.cuda.current_stream(self.device).wait_event(evt)
+            compute_stream = torch.cuda.current_stream(self.device)
+            compute_stream.wait_event(evt)
+            # These allocations belong to the transfer stream. Forward kernels
+            # execute asynchronously on the compute stream, while the post hook
+            # immediately restores CPU backing and releases the GPU references.
+            # Without record_stream the transfer allocator can overwrite weights
+            # that are still being read by an in-flight forward pass.
+            for tensor in (*p_gpu.values(), *b_gpu.values()):
+                tensor.record_stream(compute_stream)
         for name, t in p_gpu.items():
             self._assign_nested_parameter(block, name, t)
         for name, t in b_gpu.items():
             self._assign_nested_buffer(block, name, t)
+        if self._use_cuda_stream:
+            self._active_gpu_blocks.add(idx)
         return (time.perf_counter() - t0) * 1000.0
 
     def _evict_block(self, idx: int) -> None:
@@ -553,6 +598,13 @@ class StrataBlockOffloadManager:
             self._assign_nested_parameter(block, name, t)
         for name, t in b_back.items():
             self._assign_nested_buffer(block, name, t)
+        if idx in self._active_gpu_blocks:
+            self._active_gpu_blocks.remove(idx)
+            # Record after dropping module references so allocator retirement
+            # events inserted by record_stream precede this completion marker.
+            done = torch.cuda.Event()
+            done.record(torch.cuda.current_stream(self.device))
+            self._retired_compute_events.append(done)
 
     def attach_hooks(self) -> None:
         self.detach_hooks()
@@ -593,4 +645,8 @@ class StrataBlockOffloadManager:
         for idx in range(self.resident_vram_blocks, self.total_blocks):
             self._evict_block(idx)
         if self._use_cuda_stream:
+            while self._retired_compute_events:
+                self._retired_compute_events.popleft().synchronize()
+            if self._prefetch_stream is not None:
+                self._prefetch_stream.synchronize()
             torch.cuda.empty_cache()

@@ -7,12 +7,12 @@
  *   node image_to_image_edit.mjs --model=qwen
  *   node image_to_image_edit.mjs --model=minimax
  */
-import { downloadOutput, fal, OPENFAL_URL, parseModelFlag, uploadSampleFile } from "./config.mjs";
+import { downloadOutput, fal, OPENFAL_URL, PORTRAIT_SAMPLE, STYLE_SAMPLE, parseModelFlag, uploadSampleFile } from "./config.mjs";
 
 const modelFilter = parseModelFlag("all");
 
-const portraitUrl = await uploadSampleFile("sample_portrait.png");
-const styleUrl = await uploadSampleFile("sample_style_ref.png");
+const portraitUrl = await uploadSampleFile(PORTRAIT_SAMPLE);
+const styleUrl = await uploadSampleFile(STYLE_SAMPLE);
 console.log("Uploaded sample references:", { portraitUrl, styleUrl });
 
 async function runQwenEdit() {
@@ -20,7 +20,7 @@ async function runQwenEdit() {
   const result = await fal.subscribe("fal-ai/qwen-image-2.1/edit", {
     input: {
       prompt:
-        "Transform the character portrait from the first image into a neon cyberpunk detective on a rainy Istanbul street matching the lighting of the second reference image",
+        "Transform the person in the first image into a photorealistic neon cyberpunk detective on a rainy Istanbul street, using only the cyan and magenta lighting palette of the second reference image. Preserve the person's facial identity, hair, freckles, age and natural skin texture. Dress them in a dark detective coat.",
       reference_image_urls: [portraitUrl, styleUrl],
       resolution: "768P",
       aspect_ratio: "1:1",
@@ -49,7 +49,7 @@ async function runMiniMaxH3Edit() {
   const result = await fal.subscribe("fal-ai/minimax/h3/image-to-image", {
     input: {
       prompt:
-        "Restyle the person in <Picture 1> as a cinematic oil painting with dramatic golden rim lighting",
+        "Restyle the person in <Picture 1> as a cinematic oil painting with dramatic golden rim lighting. Preserve their facial identity, hairstyle, age and expression, with visible painted brushwork.",
       reference_image_urls: [portraitUrl],
       resolution: "768P",
       aspect_ratio: "1:1",

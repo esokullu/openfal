@@ -2,6 +2,23 @@
 
 End-to-end client scripts exercising every engine (`Qwen-Image-2.1-Turbo`, `Wan 2.2 MoE`, and `MiniMax-H3`) and every task endpoint supported by `openfal`.
 
+`node api/run_all.mjs` runs each model separately, continues after failures, writes
+`api/outputs/suite_results.json`, and exits nonzero if any case fails. Generation
+uses a fixed seed (`OPENFAL_TEST_SEED`, default `20261117`) and a 30-minute polling
+deadline (`OPENFAL_TEST_TIMEOUT_MS`). Inspect the media as well as the exit status.
+Each suite run gets a fresh timestamped output directory so a failed request cannot
+reuse an older artifact. Request parameters and response metadata are saved beside
+the media; `OPENFAL_OUTPUTS_DIR` selects an explicit directory when needed.
+Wan Animate/Recast currently reports unsupported conditioning; this is a failing
+capability test, not a successful image-to-video substitute.
+
+The edit/reference tests use photographic portrait, lighting and street fixtures.
+The original drawings remain available via `OPENFAL_PORTRAIT`, `OPENFAL_STYLE`, and
+`OPENFAL_STREET`; see `samples/README.md` for provenance and visual evaluation criteria.
+Recast requires a driving video produced by the
+preceding MiniMax text-to-video test; native Ref2VA editing is generative and does
+not guarantee exact preservation of the driving video's motion or scene.
+
 By default, all scripts target `OPENFAL_URL=http://127.0.0.1:8000`. Override with:
 
 ```bash
@@ -12,10 +29,14 @@ export OPENFAL_URL="http://localhost:8008"
 
 ```text
 tests/client/
+├── inspect_outputs.py                         # Decode saved outputs and verify response metadata
 ├── samples/                                    # Sample input images for I2V, Edit, Ref2VA & Recast
-│   ├── sample_portrait.png                     # 768x768 character portrait
-│   ├── sample_street_scene.png                 # 1280x720 Istanbul cobblestone sunset scene
-│   └── sample_style_ref.png                    # 768x768 neon cyberpunk lighting reference
+│   ├── sample_portrait_photo.png               # Default fictional photographic identity
+│   ├── sample_street_photo.png                 # Default photographic street scene
+│   ├── sample_style_photo.png                  # Default photographic lighting reference
+│   ├── sample_portrait.png                     # Optional drawn portrait smoke test
+│   ├── sample_street_scene.png                 # Optional geometric scene smoke test
+│   └── sample_style_ref.png                    # Optional neon-grid smoke test
 ├── curl/                                       # Shell curl test scripts (outputs -> curl/outputs/)
 │   ├── 01_text_to_image_qwen.sh                # POST /qwen/image-2.1/text-to-image
 │   ├── 02_image_edit_qwen.sh                   # POST /qwen/image-2.1/edit (multi-reference)
@@ -64,3 +85,15 @@ node image_to_video.mjs
 node reference_to_video.mjs
 node video_recast_animate.mjs
 ```
+
+After a run, decode every saved output and check dimensions, frame counts,
+durations, file sizes and stereo audio against its response manifest:
+
+```bash
+# From the repository root, using the Python environment with inference dependencies:
+python tests/client/inspect_outputs.py tests/client/api/outputs/run-<timestamp>
+```
+
+This writes `media_checks.json` and first/middle/last video frames in `review/`.
+Inspect those frames and play the videos to assess identity, motion, prompt
+adherence and audio quality. A decodable file does not establish visual quality.

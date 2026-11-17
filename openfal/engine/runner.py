@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import base64
 import random
+import threading
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional
@@ -57,6 +58,15 @@ class OpenFalRunner:
         self._real_wan_runner = None
         self._real_minimax_runner = None
         self._active_real_family: Optional[str] = None
+        # Schedulers, module residency and the memory hierarchy are shared per runner.
+        self.execution_lock = threading.RLock()
+
+    def evict(self) -> None:
+        """Release real GPU allocations as well as the telemetry state."""
+        for runtime in (self._real_qwen_runner, self._real_wan_runner, self._real_minimax_runner):
+            if runtime is not None:
+                runtime.evict()
+        self._active_real_family = None
 
     def _evict_other_backends(self, next_family: str) -> None:
         if self._active_real_family and self._active_real_family != next_family:
@@ -67,6 +77,17 @@ class OpenFalRunner:
             elif self._active_real_family == "minimax_h3" and self._real_minimax_runner is not None:
                 self._real_minimax_runner.evict()
         self._active_real_family = next_family
+
+    def _load_reference_images(self, urls: List[str], limit: int) -> list:
+        if len(urls) > limit:
+            raise ValueError(f"This endpoint supports at most {limit} reference images")
+        images = []
+        for index, url in enumerate(urls, 1):
+            loaded = self.face_conditioner.load_image_from_url_or_path(url)
+            if loaded is None:
+                raise ValueError(f"Could not load reference image {index}; check its URL or uploaded file")
+            images.append(loaded)
+        return images
 
     def _try_execute_real(
         self,
@@ -105,11 +126,7 @@ class OpenFalRunner:
                 return None
 
             self._evict_other_backends("qwen_image_21")
-            ref_pil = []
-            for url in ref_images[:10]:
-                loaded = self.face_conditioner.load_image_from_url_or_path(url)
-                if loaded is not None:
-                    ref_pil.append(loaded)
+            ref_pil = self._load_reference_images(ref_images, 10)
 
             num_images = max(1, min(4, int(payload.get("num_images") or 1)))
             images_out = []
@@ -178,9 +195,12 @@ class OpenFalRunner:
                 or (ref_images[0] if ref_images else None)
             )
             start_img = self.face_conditioner.load_image_from_url_or_path(start_url) if start_url else None
+            if start_url and start_img is None:
+                raise ValueError("Could not load starting image")
             fname = f"openfal_vid_{short_id}.mp4"
             out_path = self.config.output_dir / fname
-            num_frames = max(17, int(duration * fps))
+            width, height = max(256, width // 16 * 16), max(256, height // 16 * 16)
+            num_frames = max(17, min(81, ((max(17, int(duration * fps)) - 1) // 4) * 4 + 1))
             self._real_wan_runner.generate_video(
                 variant=partition,
                 prompt=prompt,
@@ -191,6 +211,9 @@ class OpenFalRunner:
                 num_steps=num_steps,
                 seed=seed,
                 guidance_scale=guidance_scale,
+                guidance_scale_2=payload.get("guidance_scale_2") if payload.get("guidance_scale_2") is not None else (
+                    3.0 if partition == "Wan2.2-T2V-A14B" and payload.get("guidance_scale") is None else None
+                ),
                 negative_prompt=payload.get("negative_prompt") or "",
                 start_image=start_img,
                 output_path=out_path,
@@ -211,7 +234,8 @@ class OpenFalRunner:
                     "content_type": "video/mp4",
                     "width": width,
                     "height": height,
-                    "duration": duration,
+                    "duration": num_frames / fps,
+                    "num_frames": num_frames,
                     "fps": fps,
                     "stereo_audio": False,
                 },
@@ -237,11 +261,7 @@ class OpenFalRunner:
                 return None
 
             self._evict_other_backends("minimax_h3")
-            ref_pil = []
-            for url in ref_images[:9]:
-                loaded = self.face_conditioner.load_image_from_url_or_path(url)
-                if loaded is not None:
-                    ref_pil.append(loaded)
+            ref_pil = self._load_reference_images(ref_images, 16 if partition == "H3-Image" else 9)
 
             if partition == "H3-Image":
                 num_images = max(1, min(4, int(payload.get("num_images") or 1)))
@@ -293,8 +313,9 @@ class OpenFalRunner:
 
             start_url = payload.get("start_image_url") or payload.get("image_url")
             end_url = payload.get("end_image_url")
-            start_img = self.face_conditioner.load_image_from_url_or_path(start_url) if start_url else None
-            end_img = self.face_conditioner.load_image_from_url_or_path(end_url) if end_url else None
+            decoded_images = dict(zip(ref_images, ref_pil))
+            start_img = decoded_images[start_url] if start_url else None
+            end_img = decoded_images[end_url] if end_url else None
             ref_vids = list(payload.get("reference_video_urls") or [])
             for vk in ("video_url", "target_video_url"):
                 if payload.get(vk) and payload[vk] not in ref_vids:
@@ -304,7 +325,9 @@ class OpenFalRunner:
             fname = f"openfal_vid_{short_id}.mp4"
             out_path = self.config.output_dir / fname
             enable_audio = bool(payload.get("enable_audio", self.config.enable_native_stereo_audio))
-            num_frames = max(22, int(round(duration * 24)))
+            requested_frames = max(22, int(round(duration * 24)))
+            num_frames = ((requested_frames - 5 + 16) // 17) * 17 + 5
+            width, height = max(256, round(width / 32) * 32), max(256, round(height / 32) * 32)
             self._real_minimax_runner.generate_video(
                 partition=partition,
                 prompt=prompt,
@@ -337,7 +360,8 @@ class OpenFalRunner:
                     "content_type": "video/mp4",
                     "width": width,
                     "height": height,
-                    "duration": duration,
+                    "duration": num_frames / 24,
+                    "num_frames": num_frames,
                     "fps": 24,
                     "stereo_audio": enable_audio,
                 },
@@ -389,14 +413,37 @@ class OpenFalRunner:
         if backend_family == "qwen_image_21":
             return 8, 1.0
         if backend_family == "wan22_moe":
-            steps = 20 if "animate" in partition.lower() else 30
-            return steps, 4.0
+            if "animate" in partition.lower():
+                return 20, 4.0
+            return 40, 3.5 if partition == "Wan2.2-I2V-A14B" else 4.0
         # MiniMax-H3 checkpoints are guidance-distilled; base FL2VA/Ref2VA use ~30 steps
         if partition == "H3-Image":
-            return 25, 1.0
+            return 6, 1.0
         return 30, 1.0
 
     def execute(
+        self,
+        endpoint_id: str,
+        payload: Dict[str, Any],
+        base_url: str = "http://localhost:8000",
+        on_log: Optional[Callable[[str], None]] = None,
+    ) -> Dict[str, Any]:
+        with self.execution_lock:
+            try:
+                return self._execute(endpoint_id, payload, base_url, on_log)
+            except Exception:
+                try:
+                    self.evict()
+                except Exception:
+                    # Preserve the inference error, but discard partially loaded runners.
+                    self._real_qwen_runner = None
+                    self._real_wan_runner = None
+                    self._real_minimax_runner = None
+                    self._active_real_family = None
+                self.memory.finish_generation()
+                raise
+
+    def _execute(
         self,
         endpoint_id: str,
         payload: Dict[str, Any],
@@ -441,6 +488,30 @@ class OpenFalRunner:
         ref_audios: List[str] = list(payload.get("reference_audio_urls") or [])
         all_refs = ref_images + ref_videos + ref_audios
 
+        from openfal.runtime.common import use_synthetic_fallback
+
+        if not use_synthetic_fallback():
+            if backend_family == "wan22_moe" and int(duration * fps) > 81:
+                raise ValueError("Wan currently supports at most 81 frames per request; lower duration or fps")
+            if backend_family == "minimax_h3" and partition == "FL2VA":
+                if any(payload.get(key) for key in ("reference_image_urls", "face_image_url", "source_face_url")):
+                    raise ValueError(
+                        "MiniMax FL2VA accepts start_image_url (or image_url) and end_image_url; "
+                        "reference_image_urls and face references require a reference-to-video endpoint"
+                    )
+                if (
+                    payload.get("start_image_url")
+                    and payload.get("image_url")
+                    and payload["start_image_url"] != payload["image_url"]
+                ):
+                    raise ValueError("start_image_url and its image_url alias must identify the same starting frame")
+            if endpoint_id.endswith(("/edit", "/image-to-image", "/image-to-video")) and not ref_images:
+                raise ValueError("This endpoint requires an input image")
+            if backend_family == "minimax_h3" and endpoint_id.endswith(("/recast", "/relight", "/insert-video")) and not ref_videos:
+                raise ValueError("This video editing endpoint requires video_url or target_video_url")
+            if backend_family == "minimax_h3" and partition != "Ref2VA" and (ref_videos or ref_audios):
+                raise ValueError("Video/audio references require a MiniMax reference-to-video endpoint")
+
         width, height = self.dit.resolve_dimensions(resolution, aspect_ratio)
 
         # If real PyTorch `.safetensors` checkpoints exist on disk, run genuine neural inference
@@ -466,6 +537,20 @@ class OpenFalRunner:
         )
         if real_result is not None:
             return real_result
+
+        if not use_synthetic_fallback():
+            component = {
+                "Qwen-Image-2.1": "qwen_image_21",
+                "Wan2.2-T2V-A14B": "wan22_t2v_moe",
+                "Wan2.2-I2V-A14B": "wan22_i2v_moe",
+                "Wan2.2-Animate-14B": "wan22_animate",
+                "FL2VA": "fl2va", "Ref2VA": "ref2va", "H3-Image": "h3-image",
+            }.get(partition, "all")
+            raise RuntimeError(
+                f"No usable model weights for {partition}. "
+                f"Run: openfal download --component {component}. "
+                "Synthetic rendering is only available with OPENFAL_SYNTHETIC_FALLBACK=1."
+            )
 
         # Stage 1: Streamed Text/Multimodal Encoding + Immediate VRAM Eviction
         ctx_embedding = self.qwen_encoder.encode(
@@ -582,6 +667,7 @@ class OpenFalRunner:
                 "strata_engine": {
                     "backend": backend_family,
                     "partition": partition,
+                    "mode": "synthetic",
                     "profile_id": self.config.profile_id,
                     "vram_counter_blocks": self.config.profile.resident_vram_blocks,
                     "ram_pantry_blocks": self.config.profile.total_dit_blocks - self.config.profile.resident_vram_blocks,
@@ -631,6 +717,7 @@ class OpenFalRunner:
             "strata_engine": {
                 "backend": backend_family,
                 "partition": partition,
+                "mode": "synthetic",
                 "profile_id": self.config.profile_id,
                 "vram_counter_blocks": self.config.profile.resident_vram_blocks,
                 "ram_pantry_blocks": self.config.profile.total_dit_blocks - self.config.profile.resident_vram_blocks,

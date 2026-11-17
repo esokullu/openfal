@@ -14,9 +14,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from pydantic import ValidationError
 
 from openfal.config import EngineConfig, HARDWARE_PROFILES, get_default_config
 from openfal.engine.runner import OpenFalRunner
@@ -34,7 +36,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "wan22_moe",
         "partition": "Wan2.2-T2V-A14B",
         "category": "Text-to-Video (Fast MoE)",
-        "description": "Alibaba Wan 2.2 Two-Expert MoE (27B total, 14B active/step). Zero per-step PCIe streaming on 2x 5060 Ti!",
+        "description": "Alibaba Wan 2.2 two-expert MoE text-to-video (27B total, 14B active per step).",
     },
     {
         "id": "wan/v2.2/image-to-video",
@@ -49,8 +51,9 @@ SUPPORTED_ENDPOINTS = [
         "alias": "fal-ai/wan/v2.2/recast",
         "backend": "wan22_moe",
         "partition": "Wan2.2-Animate-14B",
-        "category": "Video Face Swap / Character Animate (Fast 14B)",
-        "description": "Wan 2.2 14B Video Face Swap, character replacement & expression transfer. Fits 100% in 16GB VRAM!",
+        "category": "Video Face Swap / Character Animate (Unavailable)",
+        "runtime_supported": False,
+        "description": "Generation unavailable: driving-video, pose/face-motion preprocessing and CLIP conditioning are not implemented. Downloaded weights alone do not enable this endpoint.",
     },
     {
         "id": "qwen/image-2.1/text-to-image",
@@ -58,7 +61,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "qwen_image_21",
         "partition": "Qwen-Image-2.1",
         "category": "Text-to-Image (Fast 7B Turbo)",
-        "description": "Alibaba Qwen-Image-2.1-Turbo (7B, 8 steps, 100% in VRAM, elite typography & RGBA support).",
+        "description": "Alibaba Qwen-Image-2.1-Turbo image generation (7B, 8-step checkpoint schedule).",
     },
     {
         "id": "qwen/image-2.1/edit",
@@ -66,7 +69,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "qwen_image_21",
         "partition": "Qwen-Image-2.1",
         "category": "Image / Face Edit (10-Ref 7B Turbo)",
-        "description": "Qwen-Image-2.1 identity-preserving portrait face swap & multi-reference editing (up to 10 images).",
+        "description": "Qwen-Image-2.1 multi-reference image and portrait editing (up to 10 images).",
     },
     # -------------------------------------------------------------------------
     # Optional Omni + Stereo Audio Stack: MiniMax H3 (33B Dense Single-Stream DiT)
@@ -77,7 +80,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "minimax_h3",
         "partition": "FL2VA",
         "category": "Text-to-Video (MiniMax H3 Omni)",
-        "description": "Generate 768P-2K video with synchronized native stereo audio from text prompt.",
+        "description": "Generate video with native stereo audio from a text prompt; supported dimensions depend on available memory.",
     },
     {
         "id": "minimax/h3-max/text-to-video",
@@ -85,7 +88,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "minimax_h3",
         "partition": "FL2VA",
         "category": "Text-to-Video (MiniMax H3 Max)",
-        "description": "Post-trained MiniMax H3 Max text-to-video with prompt expansion & stereo audio.",
+        "description": "Compatibility alias for the local MiniMax-H3 FL2VA text-to-video checkpoint with stereo audio.",
     },
     {
         "id": "minimax/h3/image-to-video",
@@ -101,7 +104,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "minimax_h3",
         "partition": "FL2VA",
         "category": "Image-to-Video (MiniMax H3 Max)",
-        "description": "High-fidelity H3 Max first/last-frame conditioned image-to-video.",
+        "description": "Compatibility alias for local MiniMax-H3 first/last-frame conditioned image-to-video.",
     },
     {
         "id": "minimax/h3/reference-to-video",
@@ -117,15 +120,15 @@ SUPPORTED_ENDPOINTS = [
         "backend": "minimax_h3",
         "partition": "Ref2VA",
         "category": "Reference-to-Video (MiniMax H3 Max)",
-        "description": "H3 Max subject/identity-consistent multi-reference video generation.",
+        "description": "Compatibility alias for local MiniMax-H3 Ref2VA multi-reference video generation.",
     },
     {
         "id": "minimax/h3-max/recast",
         "alias": "fal-ai/minimax/h3-max/recast",
         "backend": "minimax_h3",
         "partition": "Ref2VA",
-        "category": "Video Face Swap / Recast (MiniMax H3 Max)",
-        "description": "Video face swap & character identity replacement preserving target motion and lighting.",
+        "category": "Reference Video Editing / Recast (MiniMax H3)",
+        "description": "Generate a new video from a driving clip and identity references with Ref2VA. Exact target motion and scene preservation are not guaranteed.",
     },
     {
         "id": "minimax/h3-max/relight",
@@ -133,7 +136,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "minimax_h3",
         "partition": "Ref2VA",
         "category": "Video Editing (MiniMax H3 Max)",
-        "description": "Relight existing video footage with text & reference lighting conditions.",
+        "description": "Generate a video using a driving clip, prompt and lighting references with Ref2VA; this is a generative edit.",
     },
     {
         "id": "minimax/h3-max/insert-video",
@@ -141,7 +144,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "minimax_h3",
         "partition": "Ref2VA",
         "category": "Video Editing (MiniMax H3 Max)",
-        "description": "Insert reference characters or objects seamlessly into a target video scene.",
+        "description": "Generate a video using a driving clip and character/object references with Ref2VA; this is a generative edit.",
     },
     {
         "id": "minimax/h3/text-to-image",
@@ -149,7 +152,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "minimax_h3",
         "partition": "H3-Image",
         "category": "Text-to-Image (MiniMax H3-Image 33B)",
-        "description": "Multi-megapixel (up to 4096x4096) native image generation using MiniMax-H3-Image.",
+        "description": "MiniMax-H3-Image generation using the installed six-step PDD checkpoint; maximum image size depends on available memory.",
     },
     {
         "id": "minimax/h3/image-to-image",
@@ -157,7 +160,7 @@ SUPPORTED_ENDPOINTS = [
         "backend": "minimax_h3",
         "partition": "H3-Image",
         "category": "Image-to-Image / Face Edit (MiniMax H3-Image)",
-        "description": "Reference-guided image editing, style transfer, and portrait face swap.",
+        "description": "Reference-guided image editing, style transfer, and portrait editing.",
     },
 ]
 
@@ -179,6 +182,27 @@ def _extract_input_payload(raw_body: Dict[str, Any]) -> Dict[str, Any]:
         merged.update(raw_body["input"])
         return merged
     return raw_body
+
+
+def _validate_generation_payload(raw_body: Dict[str, Any]) -> Dict[str, Any]:
+    if "input" in raw_body and not isinstance(raw_body["input"], dict):
+        raise RequestValidationError([{
+            "type": "dict_type",
+            "loc": ("body", "input"),
+            "msg": "Input should be a valid dictionary",
+            "input": raw_body["input"],
+        }])
+    payload = _extract_input_payload(raw_body)
+    try:
+        return MiniMaxH3Input.model_validate(payload).model_dump()
+    except ValidationError as exc:
+        errors = exc.errors(include_url=False)
+        wrapped_fields = raw_body.get("input", {})
+        for error in errors:
+            loc = error["loc"]
+            prefix = ("body", "input") if loc and loc[0] in wrapped_fields else ("body",)
+            error["loc"] = prefix + loc
+        raise RequestValidationError(errors, body=raw_body) from exc
 
 
 def _base_url_from_request(request: Request) -> str:
@@ -227,12 +251,15 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict:
+        from openfal.runtime.common import use_synthetic_fallback
+
         return {
             "status": "ok",
             "engine": "openfal-strata-dit",
             "version": "0.1.0",
             "sleeping": runner.memory.sleeping,
             "active_profile": cfg.profile_id,
+            "synthetic_mode": use_synthetic_fallback(),
         }
 
     # -------------------------------------------------------------------------
@@ -241,6 +268,7 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
     @app.get("/v1/engine/status")
     async def engine_status() -> dict:
         telemetry = runner.memory.get_telemetry()
+        telemetry["telemetry_kind"] = "profile_estimate"
         telemetry["text_encoder_cache"] = runner.text_cache.stats()
         return telemetry
 
@@ -253,11 +281,23 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
 
     @app.post("/v1/engine/profile")
     async def switch_hardware_profile(req: ProfileSwitchRequest) -> dict:
+        def switch_exclusive():
+            with runner.execution_lock:
+                if req.profile_id not in HARDWARE_PROFILES:
+                    raise ValueError(f"Unknown hardware profile '{req.profile_id}'")
+                runner.evict()
+                updated = runner.memory.switch_profile(
+                    profile_id=req.profile_id,
+                    custom_resident_blocks=req.resident_vram_blocks,
+                )
+                # Block residency is computed when loading, so rebuild for this profile.
+                runner._real_qwen_runner = None
+                runner._real_wan_runner = None
+                runner._real_minimax_runner = None
+                return updated
+
         try:
-            updated = runner.memory.switch_profile(
-                profile_id=req.profile_id,
-                custom_resident_blocks=req.resident_vram_blocks,
-            )
+            updated = await asyncio.to_thread(switch_exclusive)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
@@ -269,12 +309,21 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
     @app.post("/v1/engine/sleep")
     async def engine_sleep() -> dict:
         """Evict all GPU VRAM Counter weights to Pinned Host RAM (0 MB model VRAM while idle)."""
-        return {"status": "sleeping", "telemetry": runner.memory.sleep()}
+        def sleep_exclusive():
+            with runner.execution_lock:
+                runner.evict()
+                return runner.memory.sleep()
+
+        return {"status": "sleeping", "telemetry": await asyncio.to_thread(sleep_exclusive)}
 
     @app.post("/v1/engine/wake")
     async def engine_wake() -> dict:
         """Restore pinned resident DiT blocks from Pinned Host RAM to GPU VRAM Counter."""
-        return {"status": "awake", "telemetry": runner.memory.wake()}
+        def wake_exclusive():
+            with runner.execution_lock:
+                return runner.memory.wake()
+
+        return {"status": "awake", "telemetry": await asyncio.to_thread(wake_exclusive)}
 
     @app.get("/v1/endpoints")
     async def list_endpoints() -> dict:
@@ -432,13 +481,14 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
     # fal.ai Queued Submission (`POST /queue/{endpoint_id:path}`)
     # -------------------------------------------------------------------------
     @app.post("/queue/{endpoint_id:path}")
-    async def submit_to_fal_queue(endpoint_id: str, request: Request) -> dict:
-        raw_body = await request.json()
-        payload = _extract_input_payload(raw_body)
-        validated = MiniMaxH3Input(**payload).model_dump()
+    async def submit_to_fal_queue(
+        endpoint_id: str, request: Request, raw_body: Dict[str, Any] = Body(...),
+    ) -> dict:
+        validated = _validate_generation_payload(raw_body)
         norm_ep = _normalize_endpoint_id(endpoint_id)
         base_url = _base_url_from_request(request)
-        job = queue_mgr.submit_job(
+        job = await asyncio.to_thread(
+            queue_mgr.submit_job,
             endpoint_id=norm_ep,
             payload=validated,
             base_url=base_url,
@@ -453,6 +503,7 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
     async def execute_fal_endpoint(
         endpoint_id: str,
         request: Request,
+        raw_body: Dict[str, Any] = Body(...),
         queue: bool = Query(default=False, description="Set true to enqueue and return request_id immediately."),
     ) -> Any:
         norm_ep = _normalize_endpoint_id(endpoint_id)
@@ -462,9 +513,7 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
                 detail=f"Unknown endpoint '{endpoint_id}'. See GET /v1/endpoints for supported Wan 2.2 MoE, Qwen-Image-2.1, and MiniMax H3 routes.",
             )
 
-        raw_body = await request.json()
-        payload = _extract_input_payload(raw_body)
-        validated = MiniMaxH3Input(**payload).model_dump()
+        validated = _validate_generation_payload(raw_body)
         base_url = _base_url_from_request(request)
 
         # Support queue mode via query param `?queue=true` or header `x-fal-queue: true`
@@ -479,7 +528,8 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
             return job.to_status_dict(include_logs=True)
 
         # Synchronous execution (still recorded in job history for Web UI visibility!)
-        job = queue_mgr.submit_job(
+        job = await asyncio.to_thread(
+            queue_mgr.submit_job,
             endpoint_id=norm_ep,
             payload=validated,
             base_url=base_url,

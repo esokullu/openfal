@@ -18,11 +18,11 @@ mkdir -p "${OUT_DIR}"
 echo "=== [08] Uploading reference images (portrait + street scene) ==="
 PORTRAIT_URL="$(curl -sS -X POST "${OPENFAL_URL}/v1/storage/upload" \
   -H "Content-Type: image/png" \
-  --data-binary "@${SAMPLES_DIR}/sample_portrait.png" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
+  --data-binary "@${SAMPLES_DIR}/${OPENFAL_PORTRAIT:-sample_portrait_photo.png}" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
 
 SCENE_URL="$(curl -sS -X POST "${OPENFAL_URL}/v1/storage/upload" \
   -H "Content-Type: image/png" \
-  --data-binary "@${SAMPLES_DIR}/sample_street_scene.png" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
+  --data-binary "@${SAMPLES_DIR}/${OPENFAL_STREET:-sample_street_photo.png}" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
 
 echo "  <Picture 1> Portrait: ${PORTRAIT_URL}"
 echo "  <Picture 2> Scene   : ${SCENE_URL}"

@@ -65,6 +65,7 @@ class FalQueueManager:
         self.runner = runner
         self._jobs: Dict[str, QueuedJob] = {}
         self._lock = threading.RLock()
+        self._execution_lock = runner.execution_lock
 
     def submit_job(
         self,
@@ -92,13 +93,21 @@ class FalQueueManager:
         return job
 
     def _execute_job(self, job: QueuedJob) -> None:
-        if job.status == "CANCELLED":
-            job.done_event.set()
-            return
+        # Keep waiting requests IN_QUEUE and serialize every use of the shared models.
+        with self._execution_lock:
+            self._execute_exclusive(job)
 
-        job.status = "IN_PROGRESS"
-        job.started_at = time.time()
-        job.add_log(f"Dispatching '{job.endpoint_id}' on openfal Strata-DiT engine")
+    def _execute_exclusive(self, job: QueuedJob) -> None:
+        # Cancellation uses _lock too. Checking and changing state must be one
+        # transition, otherwise a cancellation can be overwritten by this worker.
+        with self._lock:
+            if job.status == "CANCELLED":
+                job.done_event.set()
+                return
+
+            job.status = "IN_PROGRESS"
+            job.started_at = time.time()
+            job.add_log(f"Dispatching '{job.endpoint_id}' on openfal Strata-DiT engine")
 
         try:
             res = self.runner.execute(
@@ -107,15 +116,21 @@ class FalQueueManager:
                 base_url=job.base_url,
                 on_log=lambda msg: job.add_log(msg),
             )
-            job.result = res
-            job.status = "COMPLETED"
-            job.completed_at = time.time()
-            job.add_log(f"Completed '{job.endpoint_id}' in {job.completed_at - job.started_at:.2f}s")
+            with self._lock:
+                if job.status == "CANCELLED":
+                    return
+                job.result = res
+                job.status = "COMPLETED"
+                job.completed_at = time.time()
+                job.add_log(f"Completed '{job.endpoint_id}' in {job.completed_at - job.started_at:.2f}s")
         except Exception as exc:
-            job.error = str(exc)
-            job.status = "FAILED"
-            job.completed_at = time.time()
-            job.add_log(f"Generation failed: {exc}", level="ERROR")
+            with self._lock:
+                if job.status == "CANCELLED":
+                    return
+                job.error = str(exc)
+                job.status = "FAILED"
+                job.completed_at = time.time()
+                job.add_log(f"Generation failed: {exc}", level="ERROR")
         finally:
             job.done_event.set()
 
@@ -128,6 +143,7 @@ class FalQueueManager:
             job = self._jobs.get(request_id)
             if job and job.status in ("IN_QUEUE", "IN_PROGRESS"):
                 job.status = "CANCELLED"
+                job.completed_at = time.time()
                 job.add_log("Request cancelled by client", level="WARNING")
                 job.done_event.set()
             return job

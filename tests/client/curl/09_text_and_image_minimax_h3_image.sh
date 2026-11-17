@@ -30,7 +30,7 @@ echo "Saved -> ${OUT_DIR}/09a_minimax_h3_t2i.png"
 echo "=== [09b] Uploading sample_portrait.png for MiniMax-H3-Image Image-to-Image ==="
 PORTRAIT_URL="$(curl -sS -X POST "${OPENFAL_URL}/v1/storage/upload" \
   -H "Content-Type: image/png" \
-  --data-binary "@${SAMPLES_DIR}/sample_portrait.png" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
+  --data-binary "@${SAMPLES_DIR}/${OPENFAL_PORTRAIT:-sample_portrait_photo.png}" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
 
 RESP_I2I="$(curl -sS --max-time 600 -X POST "${OPENFAL_URL}/minimax/h3/image-to-image" \
   -H "Content-Type: application/json" \

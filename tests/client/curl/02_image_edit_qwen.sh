@@ -15,11 +15,11 @@ mkdir -p "${OUT_DIR}"
 echo "=== [02] Uploading sample reference images to ${OPENFAL_URL}/v1/storage/upload ==="
 PORTRAIT_URL="$(curl -sS -X POST "${OPENFAL_URL}/v1/storage/upload" \
   -H "Content-Type: image/png" \
-  --data-binary "@${SAMPLES_DIR}/sample_portrait.png" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
+  --data-binary "@${SAMPLES_DIR}/${OPENFAL_PORTRAIT:-sample_portrait_photo.png}" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
 
 STYLE_URL="$(curl -sS -X POST "${OPENFAL_URL}/v1/storage/upload" \
   -H "Content-Type: image/png" \
-  --data-binary "@${SAMPLES_DIR}/sample_style_ref.png" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
+  --data-binary "@${SAMPLES_DIR}/${OPENFAL_STYLE:-sample_style_photo.png}" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
 
 echo "  Portrait URL : ${PORTRAIT_URL}"
 echo "  Style Ref URL: ${STYLE_URL}"

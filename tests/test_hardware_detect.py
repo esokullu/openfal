@@ -136,7 +136,8 @@ def test_dual_5060ti_16gb_and_dual_12gb_detection() -> None:
     ]
     rec24 = recommend_hardware_profile(dual_12)
     assert rec24["recommended_profile_id"] == "dual_5060ti_24gb"
-    assert rec24["recommended_quantization"] == "int4_awq"
+    assert rec24["recommended_quantization"] == "fp8_e4m3"
+    assert rec24["profile_quantization"] == "int4_awq"
     assert rec24["recommended_cuda_visible_devices"] == "0,1"
 
 
@@ -144,7 +145,7 @@ def test_single_12gb_and_cuda_visible_devices_mask() -> None:
     single_12 = [{"index": 0, "name": "NVIDIA GeForce RTX 3060", "vram_gb": 12.0}]
     rec12 = recommend_hardware_profile(single_12)
     assert rec12["recommended_profile_id"] == "single_12gb_minimum"
-    assert rec12["recommended_quantization"] == "int4_awq"
+    assert rec12["recommended_quantization"] == "fp8_e4m3"
 
     dual_16 = [
         {"index": 0, "name": "NVIDIA GeForce RTX 5060 Ti", "vram_gb": 16.0},
@@ -167,7 +168,7 @@ def test_apple_silicon_unified_memory_profile_selection() -> None:
     ]
     rec64 = recommend_hardware_profile(mac_64)
     assert rec64["recommended_profile_id"] == "apple_silicon_64gb"
-    assert rec64["recommended_quantization"] == "int4_awq"
+    assert rec64["recommended_quantization"] == "fp8_e4m3"
     assert rec64["recommended_cuda_visible_devices"] is None
 
     mac_36 = [
@@ -248,12 +249,12 @@ def test_autosetup_plans_and_cli_override(tmp_path: Path) -> None:
     assert plans_268["aggressive"]["component"] == "all"
     assert plans_268["aggressive"]["quantization"] == "fp8_e4m3"
 
-    # Tighter disk space (45 GB) -> moderate=minimax-omni-compact (int4_awq)
+    # Tighter disk space -> supported INT8 Qwen, not unusable GGUF/NVFP4 MiniMax.
     plans_45 = recommend_autosetup_plans(
         {"free_nvme_gb": 45.0, "recommended_quantization": "int4_awq"}
     )
-    assert plans_45["moderate"]["component"] == "minimax-omni-compact"
-    assert plans_45["moderate"]["quantization"] == "int4_awq"
+    assert plans_45["moderate"]["component"] == "qwen_image_21"
+    assert plans_45["moderate"]["quantization"] == "fp8_e4m3"
 
     # Non-interactive `autosetup -y --pack-only --tier minimal` runs cleanly without input()
     weights_dir = tmp_path / "weights"

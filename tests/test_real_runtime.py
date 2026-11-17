@@ -737,13 +737,13 @@ def test_diffusers_models_accept_converted_state_dicts():
     assert torch.allclose(mapped_pdd["pdd_proj_out.3.weight"], pdd_base_w + pdd_deltas_w[2])
     assert torch.allclose(mapped_pdd["pdd_proj_out.5.bias"], pdd_base_b + pdd_deltas_b[4])
 
-    # Standalone (non-delta) PDD heads remain unmodified when head norms match base
+    # Comfy fused heads always use deltas, independent of their magnitudes.
     full_heads_w = torch.cat([torch.full((8, 16), float(i + 1)) for i in range(6)], dim=0)
     mapped_pdd_full, _ = convert_minimax_h3_dit_state_dict(
         {"final_layer.video_out.weight": full_heads_w},
         num_pdd_heads=6,
     )
-    assert torch.allclose(mapped_pdd_full["pdd_proj_out.4.weight"], torch.full((8, 16), 5.0))
+    assert torch.allclose(mapped_pdd_full["pdd_proj_out.4.weight"], torch.full((8, 16), 6.0))
 
     # 10. Verify MiniMax-H3-Image ViT VAE 2-axis RoPE (`num_axes=2`, dim=32 from 64*0.5) & decode
     from diffusers.models.autoencoders.autoencoder_kl_minimax_h3_image import (

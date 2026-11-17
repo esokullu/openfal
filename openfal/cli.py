@@ -93,10 +93,10 @@ def _run_download_with_progress(
 ):
     log_path = weights_dir.resolve() / "openfal_download.log"
     print(f"  Detail log : {log_path.as_uri()}")
-    if not verbose:
+    if not verbose and mode != "runtime_assets":
         print("  View mode  : Compact overall % + active task (pass --verbose for raw HF bars)")
 
-    if verbose:
+    if verbose or mode == "runtime_assets":
         return mgr.start_download_or_pack(
             component_id=component_id,
             quantization=quantization,
@@ -217,7 +217,9 @@ def cmd_download(args: argparse.Namespace) -> None:
     else:
         quant = args.quant
 
-    mode = "strata_repack" if args.pack_only else "hf_hub"
+    if args.pack_only and getattr(args, "runtime_assets_only", False):
+        raise ValueError("--pack-only and --runtime-assets-only cannot be combined")
+    mode = "runtime_assets" if getattr(args, "runtime_assets_only", False) else ("strata_repack" if args.pack_only else "hf_hub")
     print(
         f"[openfal download] Target={weights_dir.resolve()} | Component={args.component} | "
         f"Mode={mode} | Source={args.source} | Quant={quant} | CleanupRaw={args.cleanup_raw}"
@@ -238,7 +240,10 @@ def cmd_download(args: argparse.Namespace) -> None:
     if task.status == "FAILED":
         print(f"\n[openfal download] FAILED: {task.error}", file=sys.stderr)
         sys.exit(1)
-    print(f"[openfal download] SUCCESS ({task.downloaded_mb} MB processed) — Full log: {(weights_dir.resolve() / 'openfal_download.log').as_uri()}")
+    if mode == "runtime_assets":
+        print("[openfal download] Runtime assets verified. Run `openfal models` to inspect checkpoint readiness.")
+    else:
+        print(f"[openfal download] SUCCESS ({task.downloaded_mb} MB processed) — Full log: {(weights_dir.resolve() / 'openfal_download.log').as_uri()}")
 
 
 def cmd_cleanup(args: argparse.Namespace) -> None:
@@ -356,6 +361,9 @@ def cmd_autosetup(args: argparse.Namespace) -> None:
         print(f"[openfal autosetup] FAILED: {task.error}", file=sys.stderr)
         sys.exit(1)
 
+    if args.pack_only:
+        print("\n[openfal autosetup] Packing complete. Run `openfal models` to check model readiness before serving.")
+        return
     print(f"\n[openfal autosetup] Complete! Start your server with:")
     print(f"  openfal serve --profile {hw['recommended_profile_id']} --port 8000")
 
@@ -429,24 +437,28 @@ def main() -> None:
         "--quant",
         choices=["fp8_e4m3", "int4_awq", "nf4", "bf16"],
         default="fp8_e4m3",
-        help="Target quantization format for 50-block Strata shards",
+        help="Use fp8_e4m3 for supported model installs; other formats are available only for experimental --pack-only tooling",
     )
     p_dl.add_argument(
         "--source",
         choices=["prequantized", "official-bf16"],
         default="prequantized",
-        help="'prequantized' (default: Comfy-Org/unsloth fast links) or 'official-bf16' (upstream BF16 fallback + local quantization)",
+        help="'prequantized' installs compatible single-file checkpoints; 'official-bf16' is currently unsupported and fails before downloading",
     )
     p_dl.add_argument(
         "--cleanup-raw",
         action="store_true",
-        help="After local quantization from official-bf16, delete raw BF16 .safetensors files to save disk space",
+        help="With experimental --pack-only quantization, delete source .safetensors files after packing; packed shards are not runtime checkpoints",
     )
     p_dl.add_argument("--auto-detect", action="store_true", help="Auto-select quantization based on detected GPUs")
     p_dl.add_argument(
         "--pack-only",
         action="store_true",
         help="Quantize/pack existing local .safetensors (or build structural shards) without contacting Hugging Face",
+    )
+    p_dl.add_argument(
+        "--runtime-assets-only", action="store_true",
+        help="Repair config/tokenizer files and shared Wan encoder/VAE assets without re-downloading DiT weights",
     )
     p_dl.add_argument("--hf-token", default=None, help="Hugging Face token (or set HF_TOKEN env var)")
     p_dl.add_argument("--repo-id", default=None, help="Optional custom Hugging Face repo ID override")

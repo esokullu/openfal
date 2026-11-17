@@ -1,7 +1,7 @@
 """
 Shared utilities for real PyTorch inference runners:
 - Dependency verification (fail-fast with actionable pip instructions if weights exist)
-- Auto-fetching tiny HF config/tokenizer JSON files (zero giant weight downloads)
+- Verifying local HF config/tokenizer files without network access
 - Device & dtype resolution (CUDA BF16 / MPS BF16-FP16 / CPU)
 - Checkpoint loading (`safetensors.torch.load_file`) + file discovery helpers
 """
@@ -14,10 +14,10 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
-from huggingface_hub import snapshot_download
 from safetensors.torch import load_file as safetensors_load_file
 
 from openfal.config import EngineConfig
+from openfal.model_assets import HF_CONFIGS, unsupported_checkpoint_format
 
 
 def check_inference_dependencies(packages: Iterable[str] = ("diffusers", "transformers", "accelerate")) -> None:
@@ -39,7 +39,7 @@ def check_inference_dependencies(packages: Iterable[str] = ("diffusers", "transf
             "Real model weights are present on disk, but required inference packages are missing: "
             f"{', '.join(missing)}.\n"
             "Install them cleanly into this Python environment with:\n"
-            '  pip install -e ".[inference]"   (or: pip install "diffusers>=0.43.0" "transformers>=5.3.0" '
+            '  pip install -e ".[inference]"   (or: pip install "diffusers>=0.43.0" "transformers>=5.23.0" '
             '"accelerate>=1.0.0" "sentencepiece>=0.2.0" "protobuf>=4.25.0" "einops>=0.7.0")'
         )
 
@@ -87,32 +87,28 @@ def ensure_hf_configs(
     subfolder: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
 ) -> Path:
-    """
-    Ensure lightweight Hugging Face config/tokenizer files exist in `target_dir` without
-    downloading any `.safetensors` checkpoints.
-    """
-    target_dir.mkdir(parents=True, exist_ok=True)
-    missing = [rel for rel in required_files if not (target_dir / rel).exists()]
+    """Require setup assets locally; an inference request must never install models."""
+    root = target_dir / subfolder.strip("/") if subfolder else target_dir
+    missing = [rel for rel in required_files
+               if not (root / rel).is_file() or (root / rel).stat().st_size == 0]
     if missing:
-        if on_log:
-            on_log(
-                f"[HF-Config] Fetching {len(missing)} missing config/tokenizer metadata file(s) "
-                f"from '{repo_id}' -> {target_dir}..."
-            )
-        patterns = list(allow_patterns)
-        if subfolder:
-            patterns = [f"{subfolder.strip('/')}/{p.lstrip('/')}" for p in patterns]
-        snapshot_download(
-            repo_id=repo_id,
-            local_dir=str(target_dir),
-            allow_patterns=patterns,
-            ignore_patterns=["*.safetensors", "*.bin", "*.pt", "*.ckpt", "assets/*"],
+        raise FileNotFoundError(
+            f"Incomplete model setup for '{repo_id}' in {root}: missing {', '.join(missing)}. "
+            "Run `openfal download --component all --runtime-assets-only` with the same "
+            "--weights-dir before starting inference. Runtime model downloads are disabled."
         )
-        # If snapshot fetched under subfolder/, promote or expose cleanly if needed
-        if subfolder:
-            sub_path = target_dir / subfolder.strip("/")
-            return sub_path
-    return (target_dir / subfolder.strip("/")) if subfolder else target_dir
+    return root
+
+
+def ensure_model_configs(
+    config_id: str, weights_dir: Path, on_log: Optional[Callable[[str], None]] = None,
+) -> Path:
+    """Use the same exact metadata manifest as the installer and readiness API."""
+    assets = HF_CONFIGS[config_id]
+    return ensure_hf_configs(
+        repo_id=assets.repo_id, target_dir=weights_dir / assets.subdir,
+        required_files=assets.required_files, allow_patterns=assets.allow_patterns, on_log=on_log,
+    )
 
 
 def find_first_safetensors(root: Path, candidates: Iterable[str]) -> Optional[Path]:
@@ -121,11 +117,16 @@ def find_first_safetensors(root: Path, candidates: Iterable[str]) -> Optional[Pa
         return None
     for rel in candidates:
         p = root / rel
-        if p.is_file():
+        if p.is_file() and p.stat().st_size and not unsupported_checkpoint_format(p.name):
             return p
         # Fallback match anywhere inside root by basename
         basename = Path(rel).name
-        hits = list(root.rglob(basename))
+        # Generic diffusers names are shared by VAEs and transformers. Retain the
+        # requested subdirectory so a missing VAE cannot select a DiT checkpoint.
+        pattern = rel if basename in ("diffusion_pytorch_model.safetensors", "model.safetensors") else basename
+        hits = sorted(p for p in root.rglob(pattern)
+                      if p.is_file() and p.stat().st_size and "strata_blocks" not in p.parts
+                      and not unsupported_checkpoint_format(p.name))
         if hits:
             return hits[0]
     return None
@@ -138,7 +139,8 @@ def find_matching_safetensors(root: Path, substrings: Iterable[str]) -> Optional
     subs = [s.lower() for s in substrings]
     for p in sorted(root.rglob("*.safetensors")):
         name = p.name.lower()
-        if all(s in name for s in subs):
+        if (all(s in name for s in subs) and p.is_file() and p.stat().st_size
+                and "strata_blocks" not in p.parts and not unsupported_checkpoint_format(name)):
             return p
     return None
 

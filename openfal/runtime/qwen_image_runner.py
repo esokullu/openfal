@@ -7,8 +7,8 @@ Uses the downloaded `Comfy-Org/Qwen-Image-2.1` pre-quantized `.safetensors` weig
   - `text_encoders/qwen3vl_8b_int8_convrot.safetensors` (or `*_bf16.safetensors`)
   - `vae/qwen_image_2.1_vae_bf16.safetensors`
 
-Automatically fetches the lightweight Hugging Face config & processor JSONs from
-`Qwen/Qwen-Image-2.1-Turbo` (excluding large weights) on first use, remaps ComfyUI tensor
+Loads local Hugging Face config & processor JSONs installed during setup from
+`Qwen/Qwen-Image-2.1-Turbo`, remaps ComfyUI tensor
 naming into `diffusers.QwenImage21Pipeline` components, preserves 8-bit `int8_convrot`
 weights in RAM/VRAM via `StrataConvRotLinear`, and enforces Stage 1 VRAM eviction +
 Strata Block Streaming (`StrataBlockOffloadManager`) across stages.
@@ -33,7 +33,7 @@ from openfal.runtime.common import (
     check_inference_dependencies,
     clear_device_cache,
     compute_resident_blocks,
-    ensure_hf_configs,
+    ensure_model_configs,
     find_first_safetensors,
     load_safetensors_state_dict,
     resolve_compute_device_and_dtype,
@@ -273,29 +273,8 @@ class RealQwenImage21Runner:
         return dit is not None
 
     def _ensure_configs(self, on_log: Optional[Callable[[str], None]] = None) -> Path:
-        return ensure_hf_configs(
-            repo_id=self.HF_CONFIG_REPO,
-            target_dir=self.cfg_dir,
-            required_files=[
-                "model_index.json",
-                "scheduler/scheduler_config.json",
-                "transformer/config.json",
-                "vae/config.json",
-                "text_encoder/config.json",
-                "processor/processor_config.json",
-                "processor/tokenizer.json",
-                "processor/tokenizer_config.json",
-                "processor/chat_template.jinja",
-            ],
-            allow_patterns=[
-                "model_index.json",
-                "scheduler/*",
-                "transformer/*.json",
-                "vae/*.json",
-                "text_encoder/*.json",
-                "processor/*",
-            ],
-            on_log=on_log,
+        return ensure_model_configs(
+            "qwen_image_21", self.config.weights_dir, on_log=on_log,
         )
 
     def _ensure_loaded(self, on_log: Optional[Callable[[str], None]] = None) -> None:
@@ -338,7 +317,7 @@ class RealQwenImage21Runner:
             )
 
         # 1. Text Encoder (Qwen3-VL-8B INT8 ConvRot -> ~8.3 GB RAM, 0 MB duplicate allocation)
-        te_cfg = Qwen3VLConfig.from_pretrained(str(cfg_dir / "text_encoder"))
+        te_cfg = Qwen3VLConfig.from_pretrained(str(cfg_dir / "text_encoder"), local_files_only=True)
         with init_empty_weights():
             text_encoder = Qwen3VLForConditionalGeneration(te_cfg)
         te_raw = load_safetensors_state_dict(te_path, device="cpu")
@@ -351,6 +330,9 @@ class RealQwenImage21Runner:
             embedding_names=("model.language_model.embed_tokens",),
         )
         del te_mapped
+        if te_missing or te_unexp:
+            raise RuntimeError(f"Qwen text encoder checkpoint mismatch: missing={te_missing}, unexpected={te_unexp}")
+        text_encoder.eval()
         # Re-materialize small non-persistent RoPE buffers (left on `meta` by init_empty_weights)
         from transformers.models.qwen3_vl.modeling_qwen3_vl import (
             Qwen3VLTextRotaryEmbedding,
@@ -370,7 +352,7 @@ class RealQwenImage21Runner:
             )
 
         # 2. Transformer (QwenImage21Transformer2DModel INT8 ConvRot -> ~7.5 GB RAM)
-        tr_cfg = QwenImage21Transformer2DModel.load_config(str(cfg_dir / "transformer"))
+        tr_cfg = QwenImage21Transformer2DModel.load_config(str(cfg_dir / "transformer"), local_files_only=True)
         with init_empty_weights():
             transformer = QwenImage21Transformer2DModel.from_config(tr_cfg)
         tr_raw = load_safetensors_state_dict(dit_path, device="cpu")
@@ -380,6 +362,9 @@ class RealQwenImage21Runner:
             transformer, tr_mapped, compute_dtype=compute_dtype
         )
         del tr_mapped
+        if tr_missing or tr_unexp:
+            raise RuntimeError(f"Qwen transformer checkpoint mismatch: missing={tr_missing}, unexpected={tr_unexp}")
+        transformer.eval()
         from diffusers.models.transformers.transformer_qwenimage21 import (
             QwenImage21Rope,
             QwenImage21TemporalTimesteps,
@@ -397,7 +382,7 @@ class RealQwenImage21Runner:
             )
 
         # 3. VAE (AutoencoderKLQwenImage21 BF16 -> ~0.5 GB RAM)
-        vae_cfg = AutoencoderKLQwenImage21.load_config(str(cfg_dir / "vae"))
+        vae_cfg = AutoencoderKLQwenImage21.load_config(str(cfg_dir / "vae"), local_files_only=True)
         vae = AutoencoderKLQwenImage21.from_config(vae_cfg)
         vae_raw = load_safetensors_state_dict(vae_path, device="cpu")
         vae_mapped = convert_qwen_image21_vae_state_dict(vae_raw)
@@ -409,12 +394,13 @@ class RealQwenImage21Runner:
         )
         del vae_mapped
         vae.to(dtype=compute_dtype)
+        vae.eval()
         if on_log:
             on_log(f"[Qwen-Image-2.1-VAE] Loaded '{vae_path.name}' (238/238 tensors mapped cleanly)")
 
         # 4. Processor & Scheduler
-        processor = Qwen3VLProcessor.from_pretrained(str(cfg_dir / "processor"))
-        scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(str(cfg_dir / "scheduler"))
+        processor = Qwen3VLProcessor.from_pretrained(str(cfg_dir / "processor"), local_files_only=True)
+        scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(str(cfg_dir / "scheduler"), local_files_only=True)
 
         self._pipe = QwenImage21Pipeline(
             scheduler=scheduler,
@@ -500,7 +486,7 @@ class RealQwenImage21Runner:
         width = max(256, (width // 32) * 32)
         height = max(256, (height // 32) * 32)
 
-        do_cfg = bool(negative_prompt and guidance_scale > 1.0)
+        do_cfg = negative_prompt is not None and guidance_scale > 1.0
         cond_imgs = reference_images if reference_images else None
 
         te_input_images: Optional[List[Image.Image]] = None

@@ -5,10 +5,10 @@
  * Usage:
  *   node reference_to_video.mjs
  */
-import { downloadOutput, fal, OPENFAL_URL, uploadSampleFile } from "./config.mjs";
+import { downloadOutput, fal, OPENFAL_URL, PORTRAIT_SAMPLE, STREET_SAMPLE, uploadSampleFile } from "./config.mjs";
 
-const portraitUrl = await uploadSampleFile("sample_portrait.png");
-const streetUrl = await uploadSampleFile("sample_street_scene.png");
+const portraitUrl = await uploadSampleFile(PORTRAIT_SAMPLE);
+const streetUrl = await uploadSampleFile(STREET_SAMPLE);
 console.log("Uploaded references:", { portraitUrl, streetUrl });
 
 console.log(`\n=== [Reference-to-Video] fal-ai/minimax/h3/reference-to-video @ ${OPENFAL_URL} ===`);

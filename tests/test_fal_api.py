@@ -3,9 +3,16 @@ import time
 from pathlib import Path
 from fastapi.testclient import TestClient
 from PIL import Image
+import pytest
 
 from openfal.config import EngineConfig
 from openfal.server.app import create_app
+
+
+@pytest.fixture(autouse=True)
+def synthetic_api_tests(monkeypatch):
+    """API contract tests explicitly use the lightweight demo renderer."""
+    monkeypatch.setenv("OPENFAL_SYNTHETIC_FALLBACK", "1")
 
 
 def _make_client(tmp_path: Path) -> TestClient:
@@ -44,7 +51,8 @@ def test_model_downloader_and_strata_shard_packer(tmp_path: Path) -> None:
 
     st1 = client.get("/v1/models/status").json()
     ref2va_info = next(c for c in st1["components"] if c["component_id"] == "ref2va")
-    assert ref2va_info["installed"] is True
+    assert ref2va_info["installed"] is False
+    assert ref2va_info["missing_assets"]
     assert ref2va_info["strata_50_blocks_ready"] is True
     assert ref2va_info["strata_blocks_count"] == 50
 

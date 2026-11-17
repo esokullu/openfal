@@ -1,7 +1,14 @@
 from pathlib import Path
 from PIL import Image
+import pytest
 from openfal.config import EngineConfig
 from openfal.engine.runner import OpenFalRunner
+
+
+@pytest.fixture(autouse=True)
+def synthetic_engine_tests(monkeypatch):
+    """Unit tests must not accidentally load installed production checkpoints."""
+    monkeypatch.setenv("OPENFAL_SYNTHETIC_FALLBACK", "1")
 
 
 def test_qwen3_vl_cache_and_eviction(tmp_path: Path) -> None:
@@ -114,10 +121,11 @@ def test_per_backend_inference_defaults(tmp_path: Path, monkeypatch) -> None:
     assert schema_req.guidance_scale is None
 
     assert OpenFalRunner.resolve_backend_defaults("qwen_image_21", "Qwen-Image-2.1") == (8, 1.0)
-    assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-T2V-A14B") == (30, 4.0)
+    assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-T2V-A14B") == (40, 4.0)
+    assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-I2V-A14B") == (40, 3.5)
     assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-Animate-14B") == (20, 4.0)
     assert OpenFalRunner.resolve_backend_defaults("minimax_h3", "FL2VA") == (30, 1.0)
-    assert OpenFalRunner.resolve_backend_defaults("minimax_h3", "H3-Image") == (25, 1.0)
+    assert OpenFalRunner.resolve_backend_defaults("minimax_h3", "H3-Image") == (6, 1.0)
 
     cfg = EngineConfig(
         profile_id="single_5090_32gb",
@@ -151,6 +159,6 @@ def test_per_backend_inference_defaults(tmp_path: Path, monkeypatch) -> None:
 
     assert seen_calls == [
         ("qwen", 8, 1.0),
-        ("wan", 30, 4.0),
+        ("wan", 40, 4.0),
         ("wan", 12, 3.5),
     ]

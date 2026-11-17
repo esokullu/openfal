@@ -9,11 +9,13 @@
  *   node video_recast_animate.mjs --model=wan
  *   node video_recast_animate.mjs --model=minimax
  */
-import { downloadOutput, fal, OPENFAL_URL, parseModelFlag, uploadSampleFile } from "./config.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { downloadOutput, fal, OPENFAL_URL, OUTPUTS_DIR, PORTRAIT_SAMPLE, STYLE_SAMPLE, parseModelFlag, uploadSampleFile } from "./config.mjs";
 
 const modelFilter = parseModelFlag("all");
-const portraitUrl = await uploadSampleFile("sample_portrait.png");
-const styleUrl = await uploadSampleFile("sample_style_ref.png");
+const portraitUrl = await uploadSampleFile(PORTRAIT_SAMPLE);
+const styleUrl = await uploadSampleFile(STYLE_SAMPLE);
 
 async function runWanAnimate() {
   console.log(`\n=== [Wan 2.2 Animate / Recast] fal-ai/wan/v2.2/recast @ ${OPENFAL_URL} ===`);
@@ -48,17 +50,24 @@ async function runWanAnimate() {
 }
 
 async function runMiniMaxRecastAndRelight() {
+  const drivingVideoPath = path.join(OUTPUTS_DIR, "minimax_h3_t2v.mp4");
+  if (!fs.existsSync(drivingVideoPath)) {
+    throw new Error("MiniMax recast needs a source video. Run node text_to_video.mjs --model=minimax first.");
+  }
+  const drivingVideoUrl = await uploadSampleFile(drivingVideoPath);
   console.log(`\n=== [MiniMax-H3 Recast] fal-ai/minimax/h3-max/recast @ ${OPENFAL_URL} ===`);
   const recastRes = await fal.subscribe("fal-ai/minimax/h3-max/recast", {
     input: {
       prompt:
-        "Character in <Picture 1> speaking expressively in warm cinematic lighting matching <Picture 2>",
+        "The person in <Picture 1> walks through the cobblestone street shown in <Video 1>, with warm cinematic lighting inspired by <Picture 2>, natural footsteps and ambient street sounds",
       face_image_url: portraitUrl,
+      target_video_url: drivingVideoUrl,
       reference_image_urls: [portraitUrl, styleUrl],
       resolution: "480P",
       aspect_ratio: "16:9",
       duration: 3.0,
       enable_audio: true,
+      seed: 182904,
     },
     logs: true,
     onQueueUpdate(update) {

@@ -14,7 +14,7 @@ mkdir -p "${OUT_DIR}"
 echo "=== [07] Uploading start keyframe sample_street_scene.png ==="
 START_URL="$(curl -sS -X POST "${OPENFAL_URL}/v1/storage/upload" \
   -H "Content-Type: image/png" \
-  --data-binary "@${SAMPLES_DIR}/sample_street_scene.png" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
+  --data-binary "@${SAMPLES_DIR}/${OPENFAL_STREET:-sample_street_photo.png}" | python3 -c "import sys, json; print(json.load(sys.stdin)['url'])")"
 echo "  Start Keyframe URL: ${START_URL}"
 
 echo "=== [07] MiniMax-H3 FL2VA Image-to-Video+Audio (${OPENFAL_URL}) ==="
