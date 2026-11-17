@@ -47,16 +47,20 @@ openfal detect
 
 </details>
 
-### 2. Download Minimal Model & Start the Server
+### 2. Auto-Setup Models & Start the Server
 
-Download just the lightweight 7B **`qwen_image_21`** pack (~16.1 GB pre-quantized INT8; see [all video/face-swap/MiniMax bundles](#built-in-huggingface-model-downloader--strata-50-block-installer) below) and launch `openfal`:
+Run **`openfal autosetup`** to automatically detect your GPU(s), System RAM, and free NVMe disk space—it will recommend and install the best tier (**`minimal`**, **`moderate`**, or **`aggressive`**), or skip prompts with `-y` (defaults to **`moderate`**) / `--tier minimal`:
 
 <details open>
 <summary><b>🪟 Windows (PowerShell)</b></summary>
 
 ```powershell
-# Download minimal pre-quantized Text-to-Image model (~16.1 GB into .\weights\MiniMax-H3\):
-openfal download --component qwen_image_21 --quant fp8_e4m3
+# Interactive guided setup (detects GPU/RAM/disk & asks: minimal / moderate / aggressive):
+openfal autosetup
+
+# Or non-interactive (skip prompt -> defaults to 'moderate', or force '--tier minimal' for ~13–16 GB T2I only):
+openfal autosetup -y
+openfal autosetup --tier minimal -y
 
 # Launch API server + Studio Web UI (auto-selects best GPU & profile):
 openfal serve --port 8000
@@ -68,14 +72,20 @@ openfal serve --port 8000
 <summary><b>🍎 macOS / 🐧 Linux (bash / zsh)</b></summary>
 
 ```bash
-# Download minimal pre-quantized Text-to-Image model (~16.1 GB into ./weights/MiniMax-H3/):
-openfal download --component qwen_image_21 --quant fp8_e4m3
+# Interactive guided setup (detects GPU/RAM/disk & asks: minimal / moderate / aggressive):
+openfal autosetup
+
+# Or non-interactive (skip prompt -> defaults to 'moderate', or force '--tier minimal' for ~13–16 GB T2I only):
+openfal autosetup -y
+openfal autosetup --tier minimal -y
 
 # Launch API server + Studio Web UI (auto-selects best GPU & profile):
 openfal serve --port 8000
 ```
 
 </details>
+
+*(See [all video/face-swap/MiniMax download bundles](#built-in-huggingface-model-downloader--strata-50-block-installer) below if you want to pick individual models manually.)*
 
 Open **`http://localhost:8000/`** in your browser for the interactive **Studio Web UI** (live 50-block VRAM/RAM map + HF Model Hub).
 

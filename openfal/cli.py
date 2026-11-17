@@ -14,7 +14,12 @@ from pathlib import Path
 import uvicorn
 
 from openfal.config import HARDWARE_PROFILES, get_default_config
-from openfal.engine.downloader import COMPONENT_BUNDLES, MODEL_COMPONENTS, StrataModelManager
+from openfal.engine.downloader import (
+    COMPONENT_BUNDLES,
+    MODEL_COMPONENTS,
+    StrataModelManager,
+    recommend_autosetup_plans,
+)
 from openfal.engine.runner import OpenFalRunner
 
 
@@ -151,6 +156,83 @@ def cmd_cleanup(args: argparse.Namespace) -> None:
     print(json.dumps(res, indent=2))
 
 
+def cmd_autosetup(args: argparse.Namespace) -> None:
+    weights_dir = Path(args.weights_dir)
+    mgr = StrataModelManager(weights_dir)
+    hw = mgr.detect_hardware()
+    plans = recommend_autosetup_plans(hw)
+
+    print("==========================================================================")
+    print("  openfal autosetup — Hardware & Disk-Aware Installer")
+    print(f"  Platform         : {hw['platform']}")
+    print(f"  System RAM       : {hw['system_ram_gb']} GB | Free Disk: {hw['free_nvme_gb']} GB")
+    if hw.get("selected_compute_gpus"):
+        gdesc = ", ".join(f"GPU {g['index']}: {g['name']} ({g['vram_gb']} GB)" for g in hw["selected_compute_gpus"])
+        print(f"  Compute GPU(s)   : {gdesc}")
+    if hw.get("ignored_gpus"):
+        idesc = ", ".join(f"GPU {g['index']}: {g['name']} [{g['reason']}]" for g in hw["ignored_gpus"])
+        print(f"  Ignored GPU(s)   : {idesc}")
+    print(f"  Rec. Profile     : {hw['recommended_profile_id']} (quant={hw['recommended_quantization']})")
+    print("==========================================================================")
+    print("  Available installation tiers for your disk & GPU:")
+    for idx, key in enumerate(("minimal", "moderate", "aggressive"), start=1):
+        p = plans[key]
+        default_tag = " [DEFAULT]" if key == "moderate" else ""
+        fit_tag = "" if p["fits_disk"] else " [EXCEEDS FREE DISK]"
+        print(
+            f"    [{idx}] {key.upper()}{default_tag}{fit_tag}: "
+            f"--component {p['component']} --quant {p['quantization']} (~{p['approx_gb']} GB)"
+        )
+        print(f"        {p['description']}")
+
+    chosen_tier = args.tier
+    if chosen_tier is None:
+        if args.yes or args.dry_run:
+            chosen_tier = "moderate"
+        else:
+            raw = input("\nChoose tier [1=minimal, 2=moderate (default), 3=aggressive] or [q]uit: ").strip().lower()
+            if raw in ("q", "quit", "exit"):
+                print("[openfal autosetup] Aborted.")
+                return
+            tier_map = {"": "moderate", "1": "minimal", "minimal": "minimal", "2": "moderate", "moderate": "moderate", "3": "aggressive", "aggressive": "aggressive"}
+            if raw not in tier_map:
+                print(f"[openfal autosetup] Invalid choice '{raw}'. Aborted.", file=sys.stderr)
+                sys.exit(1)
+            chosen_tier = tier_map[raw]
+
+    plan = plans[chosen_tier]
+    print(
+        f"\n[openfal autosetup] Selected '{chosen_tier}' -> component={plan['component']}, "
+        f"quant={plan['quantization']} (~{plan['approx_gb']} GB) -> {weights_dir.resolve()}"
+    )
+
+    if args.dry_run:
+        print("[openfal autosetup] Dry run complete (no files downloaded).")
+        return
+
+    if not args.yes and args.tier is None:
+        confirm = input("Proceed with download/setup? [Y/n]: ").strip().lower()
+        if confirm in ("n", "no"):
+            print("[openfal autosetup] Aborted.")
+            return
+
+    mode = "strata_repack" if args.pack_only else "hf_hub"
+    task = mgr.start_download_or_pack(
+        component_id=plan["component"],
+        quantization=plan["quantization"],
+        mode=mode,
+        hf_token=args.hf_token,
+        run_async=False,
+        on_log=lambda msg: print(f"  {msg}"),
+    )
+    if task.status == "FAILED":
+        print(f"[openfal autosetup] FAILED: {task.error}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\n[openfal autosetup] Complete! Start your server with:")
+    print(f"  openfal serve --profile {hw['recommended_profile_id']} --port 8000")
+
+
 def cmd_benchmark(args: argparse.Namespace) -> None:
     cfg = get_default_config(profile_id=args.profile)
     runner = OpenFalRunner(cfg)
@@ -261,6 +343,28 @@ def main() -> None:
     p_clean.add_argument("--dry-run", action="store_true", help="Show what would be deleted without removing files")
     p_clean.add_argument("-y", "--yes", action="store_true", help="Skip interactive confirmation prompt")
     p_clean.set_defaults(func=cmd_cleanup)
+
+    p_auto = sub.add_parser(
+        "autosetup",
+        help="Auto-detect GPU/RAM/Disk and install the best model tier (minimal, moderate, or aggressive)",
+    )
+    p_auto.add_argument("--weights-dir", default="./weights/MiniMax-H3", help="Target directory for weights")
+    p_auto.add_argument(
+        "--tier",
+        choices=["minimal", "moderate", "aggressive"],
+        default=None,
+        help="Skip tier question and install the specified tier directly",
+    )
+    p_auto.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Non-interactive mode: skip prompts (defaults to 'moderate' tier unless --tier is set)",
+    )
+    p_auto.add_argument("--dry-run", action="store_true", help="Preview detected hardware and tier plans without downloading")
+    p_auto.add_argument("--pack-only", action="store_true", help="Pack structural/local shards without contacting Hugging Face")
+    p_auto.add_argument("--hf-token", default=None, help="Optional Hugging Face token")
+    p_auto.set_defaults(func=cmd_autosetup)
 
     p_bench = sub.add_parser("benchmark", help="Run a local Strata-DiT pipeline benchmark")
     p_bench.add_argument("--profile", choices=list(HARDWARE_PROFILES.keys()), default="dual_5060ti_32gb")

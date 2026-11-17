@@ -2,8 +2,13 @@ from pathlib import Path
 import argparse
 import numpy as np
 from safetensors.numpy import load_file as load_safetensors_numpy, save_file as save_safetensors_numpy
-from openfal.cli import cmd_cleanup
-from openfal.engine.downloader import MODEL_COMPONENTS, StrataModelManager, recommend_hardware_profile
+from openfal.cli import cmd_autosetup, cmd_cleanup
+from openfal.engine.downloader import (
+    MODEL_COMPONENTS,
+    StrataModelManager,
+    recommend_autosetup_plans,
+    recommend_hardware_profile,
+)
 
 
 def test_prequantized_and_official_bf16_source_resolution() -> None:
@@ -231,3 +236,34 @@ def test_cleanup_incomplete_and_component_verification(tmp_path: Path, monkeypat
     monkeypatch.setattr("builtins.input", lambda _: "y")
     cmd_cleanup(args_no)
     assert not comp_dir.exists()
+
+
+def test_autosetup_plans_and_cli_override(tmp_path: Path) -> None:
+    # High disk space (268 GB) + RTX 5090 FP8 -> moderate=alibaba-only, aggressive=all (fp8)
+    plans_268 = recommend_autosetup_plans(
+        {"free_nvme_gb": 268.0, "recommended_quantization": "fp8_e4m3"}
+    )
+    assert plans_268["minimal"]["component"] == "qwen_image_21"
+    assert plans_268["moderate"]["component"] == "alibaba-only"
+    assert plans_268["aggressive"]["component"] == "all"
+    assert plans_268["aggressive"]["quantization"] == "fp8_e4m3"
+
+    # Tighter disk space (45 GB) -> moderate=minimax-omni-compact (int4_awq)
+    plans_45 = recommend_autosetup_plans(
+        {"free_nvme_gb": 45.0, "recommended_quantization": "int4_awq"}
+    )
+    assert plans_45["moderate"]["component"] == "minimax-omni-compact"
+    assert plans_45["moderate"]["quantization"] == "int4_awq"
+
+    # Non-interactive `autosetup -y --pack-only --tier minimal` runs cleanly without input()
+    weights_dir = tmp_path / "weights"
+    args_auto = argparse.Namespace(
+        weights_dir=str(weights_dir),
+        tier="minimal",
+        yes=True,
+        dry_run=False,
+        pack_only=True,
+        hf_token=None,
+    )
+    cmd_autosetup(args_auto)
+    assert (weights_dir / "Qwen-Image-2.1-Turbo" / "strata_blocks" / "strata_manifest.json").exists()

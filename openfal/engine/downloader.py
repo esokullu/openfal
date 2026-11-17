@@ -572,6 +572,92 @@ def recommend_hardware_profile(
     }
 
 
+def _estimate_bundle_gb(component_or_bundle: str, quantization: str) -> float:
+    ids = COMPONENT_BUNDLES.get(component_or_bundle, [component_or_bundle])
+    total = 0.0
+    for cid in ids:
+        spec = MODEL_COMPONENTS[cid]
+        src = StrataModelManager.resolve_download_source(spec, quantization)
+        total += src.approx_gb
+    return round(total, 1)
+
+
+def recommend_autosetup_plans(hw: dict) -> Dict[str, dict]:
+    """
+    Build disk- and VRAM-aware installation plans (`minimal`, `moderate`, `aggressive`)
+    for `openfal autosetup`, reserving ~15 GB OS disk headroom.
+    """
+    free_gb = float(hw.get("free_nvme_gb", 0.0))
+    usable_gb = max(0.0, free_gb - 15.0)
+    rec_quant = hw.get("recommended_quantization", "fp8_e4m3")
+
+    # 1. Minimal: Fast 7B Text-to-Image & Face Edit (~13.3 GB W4A8 or ~16.1 GB INT8)
+    min_quant = "int4_awq" if (rec_quant == "int4_awq" or usable_gb < 17.0) else "fp8_e4m3"
+    min_gb = _estimate_bundle_gb("qwen_image_21", min_quant)
+
+    # 2. Moderate (Default): Balanced everyday Video + Face Swap + Image stack that fits disk
+    if usable_gb >= 96.0:
+        mod_comp, mod_quant = "alibaba-only", rec_quant
+        mod_desc = "Fast Alibaba MoE stack (Wan 2.2 T2V + I2V + Animate Face Swap + Qwen-Image-2.1)"
+    elif usable_gb >= 50.0:
+        mod_comp, mod_quant = "minimax-omni-compact", ("fp8_e4m3" if rec_quant == "fp8_e4m3" else "int4_awq")
+        mod_desc = "All-in-one MiniMax-H3 Ref2VA (Video + Stereo Audio + Face Swap + Image)"
+    elif usable_gb >= 30.0:
+        mod_comp, mod_quant = "minimax-omni-compact", "int4_awq"
+        mod_desc = "Compact INT4/Q4_K MiniMax-H3 Ref2VA (Video + Stereo Audio + Face Swap + Image)"
+    else:
+        mod_comp, mod_quant = "qwen_image_21", min_quant
+        mod_desc = "7B Qwen-Image-2.1-Turbo (Text-to-Image & 10-Ref Face Edit; disk < 30 GB usable)"
+    mod_gb = _estimate_bundle_gb(mod_comp, mod_quant)
+
+    # 3. Aggressive: Full multi-backend or largest family that fits disk
+    all_fp8_gb = _estimate_bundle_gb("all", "fp8_e4m3")
+    all_int4_gb = _estimate_bundle_gb("all", "int4_awq")
+    if usable_gb >= all_fp8_gb and rec_quant == "fp8_e4m3":
+        agg_comp, agg_quant = "all", "fp8_e4m3"
+        agg_desc = "Full multi-backend suite (Alibaba Wan 2.2 MoE + Qwen-Image-2.1 + MiniMax-H3 FP8)"
+    elif usable_gb >= all_int4_gb:
+        agg_comp, agg_quant = "all", "int4_awq"
+        agg_desc = "Full multi-backend suite (Alibaba MoE + MiniMax-H3 INT4/Q4_K)"
+    elif usable_gb >= 95.0:
+        agg_comp, agg_quant = "alibaba-only", rec_quant
+        agg_desc = "Full Fast Alibaba MoE suite (largest bundle fitting available NVMe space)"
+    elif usable_gb >= 55.0:
+        agg_comp, agg_quant = "minimax-only", "int4_awq"
+        agg_desc = "Full MiniMax-H3 suite in INT4/GGUF (largest bundle fitting available NVMe space)"
+    else:
+        agg_comp, agg_quant = mod_comp, mod_quant
+        agg_desc = f"{mod_desc} (capped by available disk space)"
+    agg_gb = _estimate_bundle_gb(agg_comp, agg_quant)
+
+    return {
+        "minimal": {
+            "tier": "minimal",
+            "component": "qwen_image_21",
+            "quantization": min_quant,
+            "approx_gb": min_gb,
+            "fits_disk": free_gb >= min_gb,
+            "description": "7B Qwen-Image-2.1-Turbo (Fast Text-to-Image & 10-Ref Face/Image Edit)",
+        },
+        "moderate": {
+            "tier": "moderate",
+            "component": mod_comp,
+            "quantization": mod_quant,
+            "approx_gb": mod_gb,
+            "fits_disk": free_gb >= mod_gb,
+            "description": mod_desc,
+        },
+        "aggressive": {
+            "tier": "aggressive",
+            "component": agg_comp,
+            "quantization": agg_quant,
+            "approx_gb": agg_gb,
+            "fits_disk": free_gb >= agg_gb,
+            "description": agg_desc,
+        },
+    }
+
+
 class StrataModelManager:
     """
     Manages Hugging Face weight downloads, hardware auto-detection, and Strata 50-block
