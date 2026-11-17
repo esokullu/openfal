@@ -878,6 +878,14 @@ There are **two differences** between those two commands: **which DiT partitions
 
 ---
 
+### Q11: Does `openfal download` / `openfal autosetup` auto-resume if interrupted mid-run?
+**Yes.** `openfal` uses `huggingface_hub.snapshot_download(..., local_dir=...)` under the hood, so if you press `Ctrl+C` or lose internet and re-run the **same** command:
+1. **Finished files are skipped:** Completed `.safetensors` / `.gguf` files are verified by size/ETag and skipped immediately.
+2. **Partial files resume via HTTP Range:** In-progress bytes are saved in `<subdir>/.cache/huggingface/download/*.incomplete` and resume from the exact byte offset where they stopped.
+3. **Discarding partial files instead:** If you decide *not* to resume and want to reclaim disk space, run `openfal cleanup` (add `--dry-run` to preview, or `--component <id>` to remove a whole model folder with confirmation).
+
+---
+
 ## License
 
 Released under the [MIT License](LICENSE).
