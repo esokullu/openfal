@@ -55,6 +55,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
         print(f"  Ignored GPU(s)   : {ign_desc}")
     print(f"  VRAM Counter     : {cfg.profile.resident_vram_blocks}/50 DiT blocks ({cfg.profile.quantization.value})")
     print(f"  Host RAM Pantry  : {50 - cfg.profile.resident_vram_blocks}/50 DiT blocks (Async PCIe DMA)")
+    print(f"  Bind Address     : {cfg.host}:{cfg.port}")
     print(f"  Studio Web UI    : http://{cfg.host if cfg.host != '0.0.0.0' else 'localhost'}:{cfg.port}/")
     print(f"  fal.ai REST API  : http://{cfg.host if cfg.host != '0.0.0.0' else 'localhost'}:{cfg.port}/wan/v2.2/text-to-video")
     print("==========================================================================")

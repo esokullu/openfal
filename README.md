@@ -886,6 +886,19 @@ There are **two differences** between those two commands: **which DiT partitions
 
 ---
 
+### Q12: How do I bind `openfal` to `0.0.0.0` (LAN access) or restrict it to `127.0.0.1`?
+**`openfal serve` already binds to `0.0.0.0` by default** (notice `Uvicorn running on http://0.0.0.0:8008` in the server output — the banner simply prints `http://localhost:<port>/` as a clickable local browser URL). You can also set `--host` explicitly:
+```bash
+# Default (accessible from other machines on your LAN via http://<your-pc-ip>:8008):
+openfal serve --host 0.0.0.0 --port 8008
+
+# Restrict to local machine only (127.0.0.1):
+openfal serve --host 127.0.0.1 --port 8008
+```
+*(If accessing from another device on **Windows** over your LAN and it times out, allow the port through Windows Defender Firewall in an elevated PowerShell prompt: `New-NetFirewallRule -DisplayName "openfal 8008" -Direction Inbound -LocalPort 8008 -Protocol TCP -Action Allow`.)*
+
+---
+
 ## License
 
 Released under the [MIT License](LICENSE).
