@@ -111,11 +111,6 @@ class OpenFalRunner:
                 if loaded is not None:
                     ref_pil.append(loaded)
 
-            actual_steps = (
-                int(payload["num_inference_steps"])
-                if payload.get("num_inference_steps") is not None
-                else 8
-            )
             num_images = max(1, min(4, int(payload.get("num_images") or 1)))
             images_out = []
             for idx in range(num_images):
@@ -125,7 +120,7 @@ class OpenFalRunner:
                     prompt=prompt,
                     width=width,
                     height=height,
-                    num_steps=actual_steps,
+                    num_steps=num_steps,
                     seed=seed + idx,
                     guidance_scale=guidance_scale,
                     negative_prompt=payload.get("negative_prompt"),
@@ -319,6 +314,19 @@ class OpenFalRunner:
         ep = endpoint_id.lower()
         return ep.startswith("qwen") or any(k in ep for k in ("text-to-image", "image-to-image", "h3-image", "/edit"))
 
+    @staticmethod
+    def resolve_backend_defaults(backend_family: str, partition: str) -> tuple[int, float]:
+        """Return native `(num_inference_steps, guidance_scale)` defaults per model family."""
+        if backend_family == "qwen_image_21":
+            return 8, 1.0
+        if backend_family == "wan22_moe":
+            steps = 20 if "animate" in partition.lower() else 30
+            return steps, 4.0
+        # MiniMax-H3 checkpoints are guidance-distilled; base FL2VA/Ref2VA use ~30 steps
+        if partition == "H3-Image":
+            return 25, 1.0
+        return 30, 1.0
+
     def execute(
         self,
         endpoint_id: str,
@@ -327,13 +335,25 @@ class OpenFalRunner:
         on_log: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
         t0 = time.perf_counter()
+        backend_family, partition = self.resolve_backend_and_partition(endpoint_id)
+        is_image = self.is_image_endpoint(endpoint_id)
+        default_steps, default_guidance = self.resolve_backend_defaults(backend_family, partition)
+
         prompt: str = payload.get("prompt") or "Cinematic high-definition shot, natural lighting"
         resolution: str = payload.get("resolution") or "768P"
         aspect_ratio: str = payload.get("aspect_ratio") or "16:9"
         duration: float = float(payload.get("duration") or 5.0)
         fps: int = int(payload.get("fps") or 16)
-        num_steps: int = int(payload.get("num_inference_steps") or self.config.default_num_inference_steps)
-        guidance_scale: float = float(payload.get("guidance_scale") or 4.5)
+        num_steps: int = (
+            int(payload["num_inference_steps"])
+            if payload.get("num_inference_steps") is not None
+            else default_steps
+        )
+        guidance_scale: float = (
+            float(payload["guidance_scale"])
+            if payload.get("guidance_scale") is not None
+            else default_guidance
+        )
         expansion_mode: str = payload.get("prompt_expansion_mode") or "balanced"
         sync_mode: bool = bool(payload.get("sync_mode", False))
         seed: int = int(payload.get("seed") if payload.get("seed") is not None else random.randint(1, 2_147_483_647))
@@ -352,8 +372,6 @@ class OpenFalRunner:
         ref_audios: List[str] = list(payload.get("reference_audio_urls") or [])
         all_refs = ref_images + ref_videos + ref_audios
 
-        backend_family, partition = self.resolve_backend_and_partition(endpoint_id)
-        is_image = self.is_image_endpoint(endpoint_id)
         width, height = self.dit.resolve_dimensions(resolution, aspect_ratio)
 
         # If real PyTorch `.safetensors` checkpoints exist on disk, run genuine neural inference

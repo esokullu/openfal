@@ -44,8 +44,18 @@ class MiniMaxH3Input(BaseModel):
     aspect_ratio: AspectRatioEnum = Field(default=AspectRatioEnum.AR_16_9)
     seed: Optional[int] = Field(default=None, description="Random seed for reproducibility.")
     fps: int = Field(default=16, ge=8, le=60)
-    num_inference_steps: int = Field(default=8, ge=1, le=50)
-    guidance_scale: float = Field(default=4.5, ge=1.0, le=15.0)
+    num_inference_steps: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=100,
+        description="Denoising steps (defaults per backend: 8 for Qwen-Image-2.1-Turbo, 30 for Wan 2.2 MoE & MiniMax-H3).",
+    )
+    guidance_scale: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=20.0,
+        description="CFG guidance scale (defaults per backend: 1.0 for Qwen-Image-2.1-Turbo & MiniMax-H3, 4.0 for Wan 2.2 MoE).",
+    )
     prompt_expansion_mode: PromptExpansionMode = Field(default=PromptExpansionMode.BALANCED)
     enable_safety_checker: bool = Field(default=True)
     enable_audio: bool = Field(default=True, description="Synthesize synchronized native stereo audio.")

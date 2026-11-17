@@ -104,3 +104,53 @@ def test_wan22_moe_and_qwen_image_21_backends(tmp_path: Path) -> None:
     assert wan_vid["strata_engine"]["backend"] == "wan22_moe"
     assert wan_vid["strata_engine"]["partition"] == "Wan2.2-T2V-A14B"
     assert (cfg.output_dir / wan_vid["video"]["file_name"]).exists()
+
+
+def test_per_backend_inference_defaults(tmp_path: Path, monkeypatch) -> None:
+    from openfal.server.schemas import MiniMaxH3Input
+
+    schema_req = MiniMaxH3Input(prompt="Omitted steps & cfg")
+    assert schema_req.num_inference_steps is None
+    assert schema_req.guidance_scale is None
+
+    assert OpenFalRunner.resolve_backend_defaults("qwen_image_21", "Qwen-Image-2.1") == (8, 1.0)
+    assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-T2V-A14B") == (30, 4.0)
+    assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-Animate-14B") == (20, 4.0)
+    assert OpenFalRunner.resolve_backend_defaults("minimax_h3", "FL2VA") == (30, 1.0)
+    assert OpenFalRunner.resolve_backend_defaults("minimax_h3", "H3-Image") == (25, 1.0)
+
+    cfg = EngineConfig(
+        profile_id="single_5090_32gb",
+        output_dir=tmp_path / "outputs",
+        cache_dir=tmp_path / "cache",
+        weights_dir=tmp_path / "empty_weights",
+    )
+    runner = OpenFalRunner(cfg)
+
+    seen_calls = []
+
+    def _capture_wan(**kwargs):
+        seen_calls.append(("wan", kwargs["num_steps"], kwargs["guidance_scale"]))
+        import numpy as np
+
+        return np.zeros((4, 8, 8), dtype=np.float32)
+
+    def _capture_qwen(**kwargs):
+        seen_calls.append(("qwen", kwargs["num_steps"], kwargs["guidance_scale"]))
+        import numpy as np
+
+        return np.zeros((4, 8, 8), dtype=np.float32)
+
+    monkeypatch.setattr(runner.wan_moe_dit, "sample_latents", _capture_wan)
+    monkeypatch.setattr(runner.qwen_image_dit, "sample_latents", _capture_qwen)
+
+    validated = schema_req.model_dump()
+    runner.execute("qwen/image-2.1/text-to-image", validated)
+    runner.execute("wan/v2.2/text-to-video", {**validated, "duration": 1.0})
+    runner.execute("wan/v2.2/text-to-video", {"prompt": "override", "duration": 1.0, "num_inference_steps": 12, "guidance_scale": 3.5})
+
+    assert seen_calls == [
+        ("qwen", 8, 1.0),
+        ("wan", 30, 4.0),
+        ("wan", 12, 3.5),
+    ]
