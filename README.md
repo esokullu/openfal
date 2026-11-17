@@ -5,7 +5,152 @@
 [![Optional Omni: MiniMax-H3 33B](https://img.shields.io/badge/Optional_Omni-MiniMax--H3_33B_DiT-0ea5e9)](https://huggingface.co/MiniMaxAI/MiniMax-H3)
 [![API: fal.ai Compatible](https://img.shields.io/badge/API-fal.ai_Compatible-10b981)](#supported-falai-compatible-endpoints)
 
-**`openfal`** is an open-source, MIT-licensed local inference engine, Hugging Face model installer, and `fal.ai`-compatible API + Studio Web UI engineered to run modern large-scale open-weights video and image generation models on **consumer GPUs** (`2x RTX 5060 Ti` 24GB/32GB, `1x RTX 5090` 32GB, or single `12GB–24GB` GPUs) **without `vLLM-Omni`**.
+**`openfal`** is an open-source, MIT-licensed local inference engine, Hugging Face model installer, and `fal.ai`-compatible API + Studio Web UI engineered to run modern large-scale open-weights video and image generation models (**Alibaba `Wan 2.2 MoE`**, **`Qwen-Image-2.1`**, and optional **`MiniMax-H3`**) on **consumer GPUs** (`2x RTX 5060 Ti`, `1x RTX 5090`, or single `12GB–24GB` cards) **without `vLLM-Omni`**.
+
+[Quick Start](#quick-start) &bull; [Architecture & Why openfal](#why-openfal-openfal-vs-vllm-omni-vs-comfyui) &bull; [VRAM & RAM Matrix](#memory-architecture-how-much-vram--system-ram-does-each-setup-use) &bull; [Model Downloader](#built-in-huggingface-model-downloader--strata-50-block-installer) &bull; [All API Examples](#api-usage-examples) &bull; [FAQ](#frequently-asked-questions-faq)
+
+---
+
+## Quick Start
+
+Get up and running in 3 steps with a minimal **Text-to-Image** setup (`Qwen-Image-2.1-Turbo`, ~16 GB pre-quantized — or skip downloading to test the synthesis pipeline immediately).
+
+### 1. Minimal Install
+
+<details open>
+<summary><b>🪟 Windows (PowerShell)</b></summary>
+
+```powershell
+git clone https://github.com/esokullu/openfal.git
+cd openfal
+pip install -e ".[dev]"
+
+# Verify GPU & VRAM detection (automatically filters out <8GB display GPUs like T400):
+openfal detect
+```
+*(If `openfal` isn't found in your current shell, open a new PowerShell window or use `py -3.11 -m openfal.cli`. Want native CUDA DMA kernels too? See [Advanced Install & Optional CUDA Extension](#advanced-install--optional-cuda-extension).)*
+
+</details>
+
+<details>
+<summary><b>🍎 macOS / 🐧 Linux (bash / zsh)</b></summary>
+
+```bash
+git clone https://github.com/esokullu/openfal.git
+cd openfal
+pip install -e ".[dev]"
+
+# Verify GPU & system RAM detection:
+openfal detect
+```
+*(Want native CUDA DMA kernels on Linux? See [Advanced Install & Optional CUDA Extension](#advanced-install--optional-cuda-extension).)*
+
+</details>
+
+### 2. Download Minimal Model & Start the Server
+
+Download just the lightweight 7B **`qwen_image_21`** pack (~16.1 GB pre-quantized INT8; see [all video/face-swap/MiniMax bundles](#built-in-huggingface-model-downloader--strata-50-block-installer) below) and launch `openfal`:
+
+<details open>
+<summary><b>🪟 Windows (PowerShell)</b></summary>
+
+```powershell
+# Download minimal pre-quantized Text-to-Image model (~16.1 GB into .\weights\MiniMax-H3\):
+openfal download --component qwen_image_21 --quant fp8_e4m3
+
+# Launch API server + Studio Web UI (auto-selects best GPU & profile):
+openfal serve --port 8000
+```
+
+</details>
+
+<details>
+<summary><b>🍎 macOS / 🐧 Linux (bash / zsh)</b></summary>
+
+```bash
+# Download minimal pre-quantized Text-to-Image model (~16.1 GB into ./weights/MiniMax-H3/):
+openfal download --component qwen_image_21 --quant fp8_e4m3
+
+# Launch API server + Studio Web UI (auto-selects best GPU & profile):
+openfal serve --port 8000
+```
+
+</details>
+
+Open **`http://localhost:8000/`** in your browser for the interactive **Studio Web UI** (live 50-block VRAM/RAM map + HF Model Hub).
+
+### 3. "Hello World" — Text-to-Image
+
+Generate your first image via `fal.ai`-compatible API from a second terminal:
+
+<details open>
+<summary><b>🪟 Windows (PowerShell)</b></summary>
+
+```powershell
+# PowerShell REST call (Hello World Text-to-Image):
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/qwen/image-2.1/text-to-image" `
+  -ContentType "application/json" `
+  -Body '{"prompt": "A glowing neon sign reading HELLO OPENFAL on a rainy cyberpunk street", "resolution": "768P", "aspect_ratio": "16:9", "num_inference_steps": 4}' | ConvertTo-Json -Depth 5
+```
+
+Or in **Python** (drop-in `fal_client` style):
+```python
+import openfal
+
+res = openfal.run(
+    "qwen/image-2.1/text-to-image",
+    arguments={
+        "prompt": 'A glowing neon sign reading "HELLO OPENFAL" on a rainy cyberpunk street',
+        "resolution": "768P",
+        "aspect_ratio": "16:9",
+        "num_inference_steps": 4,
+    },
+)
+print("Generated image:", res["images"][0]["url"])
+```
+
+</details>
+
+<details>
+<summary><b>🍎 macOS / 🐧 Linux (bash / zsh)</b></summary>
+
+```bash
+# curl REST call (Hello World Text-to-Image):
+curl -s -X POST http://localhost:8000/qwen/image-2.1/text-to-image \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A glowing neon sign reading HELLO OPENFAL on a rainy cyberpunk street",
+    "resolution": "768P",
+    "aspect_ratio": "16:9",
+    "num_inference_steps": 4
+  }' | python3 -m json.tool
+```
+
+Or in **Python** (drop-in `fal_client` style):
+```python
+import openfal
+
+res = openfal.run(
+    "qwen/image-2.1/text-to-image",
+    arguments={
+        "prompt": 'A glowing neon sign reading "HELLO OPENFAL" on a rainy cyberpunk street',
+        "resolution": "768P",
+        "aspect_ratio": "16:9",
+        "num_inference_steps": 4,
+    },
+)
+print("Generated image:", res["images"][0]["url"])
+```
+
+</details>
+
+> **Next steps:**
+> * Want **Text-to-Video**, **Image-to-Video**, **Video Face Swap (`wan/v2.2/animate` / `minimax/h3-max/recast`)**, or **Stereo Audio**? See [Model Downloader Bundles](#built-in-huggingface-model-downloader--strata-50-block-installer) and [All API Usage Examples](#api-usage-examples).
+> * Want to understand how `openfal` fits 27B–33B models on 12GB–32GB consumer GPUs? Read the architecture & benchmarks below.
+
+---
+
+## Architecture Overview
 
 Inspired by [**`Niko1221/Strata`**](https://github.com/Niko1221/Strata)—which runs 125B+ MoE LLMs on consumer VRAM by treating GPU VRAM, Pinned DDR5 RAM, and NVMe SSDs as a tightly orchestrated 3-tier hierarchy—`openfal` brings the **Counter / Pantry / Storeroom** architecture (`Strata-DiT`) to a **dual-stack multimodal engine**:
 1. **⚡ Primary Fast MoE Stack (Alibaba `Wan 2.2 MoE 27B-A14B` + `Qwen-Image-2.1-Turbo 7B`):**
@@ -198,35 +343,40 @@ openfal cleanup --component all -y              # Remove all downloaded weights 
 
 ---
 
-## Quickstart
+## Advanced Install & Optional CUDA Extension
 
-### 1. Install `openfal`
-
-```bash
-git clone https://github.com/esokullu/openfal.git
-cd openfal
-pip install -e ".[dev]"
-```
+### 1. Windows `PATH` & Launcher Notes
 
 > **Windows:** `pip` installs the `openfal` launcher into your Python **Scripts** directory (e.g. `%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\Scripts`). If `openfal` is not recognized, open a new terminal so `PATH` refreshes, or run `py -3.11 -m openfal.cli detect`. Do **not** run `.\openfal\cli.py` directly — `.py` files are often associated with your editor, and `sys.path` will not include the repository root.
 
-**Optional — Build the native C++/CUDA Strata DMA & FP8/INT4 dequantization extension (`csrc/`):**
+### 2. Optional — Build the Native C++/CUDA Strata DMA & FP8/INT4 Extension (`csrc/`)
 
 Requires an existing PyTorch install with CUDA, the CUDA Toolkit (`nvcc`), and a C++ compiler (MSVC on Windows). This step is optional — the CLI, server, downloader, and engine run in pure Python without it.
 
-* **Linux / macOS (bash / zsh):**
-  ```bash
-  OPENFAL_BUILD_CUDA=1 pip install -e . --no-build-isolation
-  ```
-* **Windows (PowerShell):**
-  ```powershell
-  $env:OPENFAL_BUILD_CUDA = "1"
-  pip install -e . --no-build-isolation
-  ```
-* **Windows (Command Prompt / cmd.exe):**
-  ```bat
-  set "OPENFAL_BUILD_CUDA=1" && pip install -e . --no-build-isolation
-  ```
+<details open>
+<summary><b>🪟 Windows (PowerShell / cmd.exe)</b></summary>
+
+**PowerShell:**
+```powershell
+$env:OPENFAL_BUILD_CUDA = "1"
+pip install -e . --no-build-isolation
+```
+
+**Command Prompt (`cmd.exe`):**
+```bat
+set "OPENFAL_BUILD_CUDA=1" && pip install -e . --no-build-isolation
+```
+
+</details>
+
+<details>
+<summary><b>🐧 Linux / 🍎 macOS (bash / zsh)</b></summary>
+
+```bash
+OPENFAL_BUILD_CUDA=1 pip install -e . --no-build-isolation
+```
+
+</details>
 
 > Notes:
 > * `--no-build-isolation` is required because the build imports your already-installed `torch`.
@@ -234,19 +384,16 @@ Requires an existing PyTorch install with CUDA, the CUDA Toolkit (`nvcc`), and a
 > * On a machine with mixed GPUs, set `TORCH_CUDA_ARCH_LIST` to your target (e.g. `12.0` for RTX 50-series) to avoid compiling for every visible card: PowerShell `$env:TORCH_CUDA_ARCH_LIST = "12.0"`, cmd `set "TORCH_CUDA_ARCH_LIST=12.0"`, bash `export TORCH_CUDA_ARCH_LIST=12.0`.
 > * Verify the extension: `py -3.11 -c "import torch, openfal._strata_C; print(openfal._strata_C.__version__)"`.
 
-### 2. Launch the Server & Studio Web UI
+### 3. Launch the Server with Specific Hardware Profiles
 
 ```bash
-# Start with the 2x RTX 5060 Ti (32GB) profile:
+# Auto-detect compute GPUs & exclude <8GB display cards (default):
+openfal serve --port 8000
+
+# Or force a specific hardware profile:
 openfal serve --profile dual_5060ti_32gb --port 8000
-
-# Or for 2x 5060 Ti (24GB total VRAM):
 openfal serve --profile dual_5060ti_24gb --port 8000
-
-# Or for 1x RTX 5090 (32GB VRAM):
 openfal serve --profile single_5090_32gb --port 8000
-
-# Or for 1x 12GB Minimum Entry GPU:
 openfal serve --profile single_12gb_minimum --port 8000
 ```
 
