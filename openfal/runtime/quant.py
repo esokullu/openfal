@@ -35,10 +35,16 @@ def build_hadamard_matrix(
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """
-    Construct the normalized orthogonal regular Hadamard matrix H_G of order G = 2^k
-    via Kronecker powers of H_2 = (1/sqrt(2)) * [[1, 1], [1, -1]].
+    Construct the normalized regular orthogonal Hadamard matrix H_G used by ConvRot.
 
-    H_G is symmetric (H_G^T == H_G) and orthogonal (H_G @ H_G^T == I_G).
+    For powers of 4 (including group_size=256), matches `comfy_kitchen` via Kronecker
+    powers of the regular H_4 block:
+        [[ 1,  1,  1, -1],
+         [ 1,  1, -1,  1],
+         [ 1, -1,  1,  1],
+         [-1,  1,  1,  1]] / sqrt(G)
+    so activations/outliers spread uniformly across rows while remaining symmetric orthogonal
+    (H_G^T == H_G and H_G @ H_G^T == I_G).
     """
     if group_size <= 0 or (group_size & (group_size - 1)) != 0:
         raise ValueError(f"group_size must be a positive power of 2, got {group_size}")
@@ -49,13 +55,25 @@ def build_hadamard_matrix(
     if cached is not None:
         return cached
 
-    inv_sqrt2 = 1.0 / math.sqrt(2.0)
-    h = torch.tensor([[1.0, 1.0], [1.0, -1.0]], dtype=torch.float32) * inv_sqrt2
-    cur = h
-    size = 2
-    while size < group_size:
-        cur = torch.kron(h, cur)
-        size *= 2
+    if group_size >= 4 and int(round(math.log(group_size, 4))) ** 2 >= 0 and (4 ** int(round(math.log(group_size, 4))) == group_size):
+        h4 = torch.tensor(
+            [[1.0, 1.0, 1.0, -1.0], [1.0, 1.0, -1.0, 1.0], [1.0, -1.0, 1.0, 1.0], [-1.0, 1.0, 1.0, 1.0]],
+            dtype=torch.float32,
+        )
+        cur = h4
+        size = 4
+        while size < group_size:
+            cur = torch.kron(cur, h4)
+            size *= 4
+        cur = cur / math.sqrt(float(group_size))
+    else:
+        inv_sqrt2 = 1.0 / math.sqrt(2.0)
+        h2 = torch.tensor([[1.0, 1.0], [1.0, -1.0]], dtype=torch.float32) * inv_sqrt2
+        cur = h2
+        size = 2
+        while size < group_size:
+            cur = torch.kron(h2, cur)
+            size *= 2
 
     out = cur.to(device=dev, dtype=dtype).contiguous()
     _HADAMARD_CACHE[key] = out

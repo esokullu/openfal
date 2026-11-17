@@ -62,8 +62,17 @@ def _make_convrot_i8(weight_f32: torch.Tensor, group_size: int = 256):
 
 def test_hadamard_and_convrot_linear_equivalence():
     torch.manual_seed(42)
+    h4 = build_hadamard_matrix(4, dtype=torch.float32)
+    expected_h4 = torch.tensor(
+        [[1.0, 1.0, 1.0, -1.0], [1.0, 1.0, -1.0, 1.0], [1.0, -1.0, 1.0, 1.0], [-1.0, 1.0, 1.0, 1.0]],
+        dtype=torch.float32,
+    ) / 2.0
+    assert torch.allclose(h4, expected_h4, atol=1e-6)
+
     h = build_hadamard_matrix(256, dtype=torch.float32)
     assert h.shape == (256, 256)
+    # Regular Hadamard H_4^{\otimes 4}: unnormalized row sum 2^4 = 16 -> 1.0 after dividing by sqrt(256)
+    assert torch.allclose(h.sum(dim=-1), torch.full((256,), 1.0), atol=1e-4)
     # Orthogonal and symmetric
     assert torch.allclose(h @ h.T, torch.eye(256), atol=1e-5, rtol=1e-5)
     assert torch.allclose(h, h.T, atol=1e-6)
