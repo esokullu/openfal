@@ -78,6 +78,130 @@ def cmd_models(args: argparse.Namespace) -> None:
     print(json.dumps(mgr.get_all_status(), indent=2))
 
 
+def _run_download_with_progress(
+    mgr: StrataModelManager,
+    weights_dir: Path,
+    component_id: str,
+    quantization: str,
+    mode: str,
+    source: str = "prequantized",
+    cleanup_raw: bool = False,
+    hf_token: str | None = None,
+    custom_repo_id: str | None = None,
+    verbose: bool = False,
+):
+    log_path = weights_dir.resolve() / "openfal_download.log"
+    print(f"  Detail log : {log_path.as_uri()}")
+    if not verbose:
+        print("  View mode  : Compact overall % + active task (pass --verbose for raw HF bars)")
+
+    if verbose:
+        return mgr.start_download_or_pack(
+            component_id=component_id,
+            quantization=quantization,
+            mode=mode,
+            source=source,
+            cleanup_raw=cleanup_raw,
+            hf_token=hf_token,
+            custom_repo_id=custom_repo_id,
+            run_async=False,
+            on_log=lambda msg: print(f"  {msg}"),
+            log_file=log_path,
+        )
+
+    state = {
+        "component_idx": 0,
+        "total_components": 1,
+        "component_id": component_id,
+        "completed_gb": 0.0,
+        "total_gb": 1.0,
+        "component_approx_gb": 0.0,
+        "current_desc": "Preparing...",
+        "last_render_len": 0,
+        "last_render_t": 0.0,
+    }
+
+    def _render_bar(overall_pct: float, detail_text: str) -> None:
+        filled = int(max(0.0, min(100.0, overall_pct)) / 5.0)
+        bar = "#" * filled + "-" * (20 - filled)
+        line = (
+            f"\r  Overall [{bar}] {overall_pct:5.1f}% "
+            f"({state['completed_gb']:.1f}/{state['total_gb']:.1f} GB) | "
+            f"[{state['component_idx']}/{state['total_components']}] {state['component_id']}: {detail_text}"
+        )
+        pad = max(0, state["last_render_len"] - len(line))
+        state["last_render_len"] = len(line)
+        sys.stdout.write(line + (" " * pad))
+        sys.stdout.flush()
+
+    def _on_progress(ev: dict) -> None:
+        phase = ev.get("phase")
+        state["component_idx"] = ev.get("component_idx", state["component_idx"])
+        state["total_components"] = ev.get("total_components", state["total_components"])
+        state["component_id"] = ev.get("component_id", state["component_id"])
+        state["completed_gb"] = ev.get("completed_gb", state["completed_gb"])
+        state["total_gb"] = ev.get("total_gb", state["total_gb"])
+        state["component_approx_gb"] = ev.get("component_approx_gb", state["component_approx_gb"])
+        if phase == "component_start":
+            _render_bar(ev.get("overall_pct", 0.0), f"connecting to {ev.get('repo_id', 'HF')}...")
+        elif phase == "component_done":
+            _render_bar(ev.get("overall_pct", 100.0), "done")
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            state["last_render_len"] = 0
+
+    tqdm_cls = None
+    try:
+        from tqdm.auto import tqdm as _BaseTqdm
+
+        class _CompactHFTqdm(_BaseTqdm):
+            def __init__(self, *args, **kwargs):
+                kwargs["disable"] = True
+                super().__init__(*args, **kwargs)
+                self._t_start = time.perf_counter()
+
+            def update(self, n=1):
+                super().update(n)
+                now = time.perf_counter()
+                if now - state["last_render_t"] < 0.25 and self.n < (self.total or 0):
+                    return
+                state["last_render_t"] = now
+                desc = (self.desc or "downloading").strip()
+                if self.total and self.total > 0:
+                    frac = min(1.0, self.n / self.total)
+                    if self.total > 1024 * 1024:
+                        # Byte-level progress bar -> estimate overall GB smoothly
+                        est_done_gb = state["completed_gb"] + frac * state["component_approx_gb"]
+                        overall_pct = min(99.9, (est_done_gb / max(0.01, state["total_gb"])) * 100.0)
+                        elapsed = max(0.01, now - self._t_start)
+                        mbps = (self.n / (1024 * 1024)) / elapsed
+                        done_gb = self.n / (1024**3)
+                        tot_gb = self.total / (1024**3)
+                        _render_bar(overall_pct, f"{desc} {frac * 100:.1f}% ({done_gb:.1f}/{tot_gb:.1f} GB, {mbps:.1f} MB/s)")
+                    else:
+                        overall_pct = (state["completed_gb"] / max(0.01, state["total_gb"])) * 100.0
+                        _render_bar(overall_pct, f"{desc} {self.n}/{self.total}")
+
+        tqdm_cls = _CompactHFTqdm
+    except Exception:
+        tqdm_cls = None
+
+    return mgr.start_download_or_pack(
+        component_id=component_id,
+        quantization=quantization,
+        mode=mode,
+        source=source,
+        cleanup_raw=cleanup_raw,
+        hf_token=hf_token,
+        custom_repo_id=custom_repo_id,
+        run_async=False,
+        on_log=None,
+        progress_callback=_on_progress,
+        tqdm_class=tqdm_cls,
+        log_file=log_path,
+    )
+
+
 def cmd_download(args: argparse.Namespace) -> None:
     weights_dir = Path(args.weights_dir)
     mgr = StrataModelManager(weights_dir)
@@ -98,7 +222,9 @@ def cmd_download(args: argparse.Namespace) -> None:
         f"Mode={mode} | Source={args.source} | Quant={quant} | CleanupRaw={args.cleanup_raw}"
     )
 
-    task = mgr.start_download_or_pack(
+    task = _run_download_with_progress(
+        mgr=mgr,
+        weights_dir=weights_dir,
         component_id=args.component,
         quantization=quant,
         mode=mode,
@@ -106,13 +232,12 @@ def cmd_download(args: argparse.Namespace) -> None:
         cleanup_raw=args.cleanup_raw,
         hf_token=args.hf_token,
         custom_repo_id=args.repo_id,
-        run_async=False,
-        on_log=lambda msg: print(f"  {msg}"),
+        verbose=getattr(args, "verbose", False),
     )
     if task.status == "FAILED":
-        print(f"[openfal download] FAILED: {task.error}", file=sys.stderr)
+        print(f"\n[openfal download] FAILED: {task.error}", file=sys.stderr)
         sys.exit(1)
-    print(f"[openfal download] SUCCESS ({task.downloaded_mb} MB processed at {task.speed_mbps} MB/s)")
+    print(f"[openfal download] SUCCESS ({task.downloaded_mb} MB processed) — Full log: {(weights_dir.resolve() / 'openfal_download.log').as_uri()}")
 
 
 def cmd_cleanup(args: argparse.Namespace) -> None:
@@ -217,13 +342,14 @@ def cmd_autosetup(args: argparse.Namespace) -> None:
             return
 
     mode = "strata_repack" if args.pack_only else "hf_hub"
-    task = mgr.start_download_or_pack(
+    task = _run_download_with_progress(
+        mgr=mgr,
+        weights_dir=weights_dir,
         component_id=plan["component"],
         quantization=plan["quantization"],
         mode=mode,
         hf_token=args.hf_token,
-        run_async=False,
-        on_log=lambda msg: print(f"  {msg}"),
+        verbose=getattr(args, "verbose", False),
     )
     if task.status == "FAILED":
         print(f"[openfal autosetup] FAILED: {task.error}", file=sys.stderr)
@@ -323,6 +449,7 @@ def main() -> None:
     )
     p_dl.add_argument("--hf-token", default=None, help="Hugging Face token (or set HF_TOKEN env var)")
     p_dl.add_argument("--repo-id", default=None, help="Optional custom Hugging Face repo ID override")
+    p_dl.add_argument("-v", "--verbose", action="store_true", help="Show full raw Hugging Face tqdm bars and inline logs")
     p_dl.set_defaults(func=cmd_download)
 
     p_clean = sub.add_parser(
@@ -364,6 +491,7 @@ def main() -> None:
     p_auto.add_argument("--dry-run", action="store_true", help="Preview detected hardware and tier plans without downloading")
     p_auto.add_argument("--pack-only", action="store_true", help="Pack structural/local shards without contacting Hugging Face")
     p_auto.add_argument("--hf-token", default=None, help="Optional Hugging Face token")
+    p_auto.add_argument("-v", "--verbose", action="store_true", help="Show full raw Hugging Face tqdm bars and inline logs")
     p_auto.set_defaults(func=cmd_autosetup)
 
     p_bench = sub.add_parser("benchmark", help="Run a local Strata-DiT pipeline benchmark")

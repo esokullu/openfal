@@ -815,6 +815,9 @@ class StrataModelManager:
         custom_repo_id: Optional[str] = None,
         run_async: bool = True,
         on_log: Optional[Callable[[str], None]] = None,
+        progress_callback: Optional[Callable[[dict], None]] = None,
+        tqdm_class: Optional[Any] = None,
+        log_file: Optional[Path] = None,
     ) -> DownloadTaskState:
         comp_key = component_id.lower()
         if comp_key in COMPONENT_BUNDLES:
@@ -829,74 +832,135 @@ class StrataModelManager:
             raise ValueError(f"Invalid source '{source}'. Use 'prequantized' or 'official-bf16'.")
 
         task_id = f"dl_{int(time.time() * 1000)}_{component_id}"
-        first_source = self.resolve_download_source(
-            MODEL_COMPONENTS[target_ids[0]],
-            quantization=quantization,
-            custom_repo_id=custom_repo_id,
-            source=source,
-        )
+        resolved_sources = [
+            self.resolve_download_source(
+                MODEL_COMPONENTS[cid],
+                quantization=quantization,
+                custom_repo_id=custom_repo_id,
+                source=source,
+            )
+            for cid in target_ids
+        ]
+        total_approx_gb = max(0.01, sum(s.approx_gb for s in resolved_sources))
+        detail_log_path = log_file or (self.weights_dir / "openfal_download.log")
+
         task = DownloadTaskState(
             task_id=task_id,
             component_id=component_id,
-            repo_id=first_source.repo_id,
+            repo_id=resolved_sources[0].repo_id,
             quantization=quantization,
             mode=mode,
         )
         with self._lock:
             self._tasks[task_id] = task
 
+        def _append_log_file(msg: str) -> None:
+            try:
+                detail_log_path.parent.mkdir(parents=True, exist_ok=True)
+                ts = time.strftime("%Y-%m-%d %H:%M:%S")
+                with detail_log_path.open("a", encoding="utf-8") as fh:
+                    fh.write(f"[{ts}] {msg}\n")
+            except Exception:
+                pass
+
         def _worker() -> None:
             try:
                 total_targets = len(target_ids)
+                completed_gb = 0.0
                 for idx, cid in enumerate(target_ids):
                     spec = MODEL_COMPONENTS[cid]
-                    src = self.resolve_download_source(
-                        spec=spec,
-                        quantization=quantization,
-                        custom_repo_id=custom_repo_id,
-                        source=source,
-                    )
+                    src = resolved_sources[idx]
 
                     def _emit(msg: str) -> None:
                         task.add_log(msg)
+                        _append_log_file(msg)
                         if on_log:
                             on_log(msg)
+
+                    if progress_callback:
+                        progress_callback(
+                            {
+                                "phase": "component_start",
+                                "component_idx": idx + 1,
+                                "total_components": total_targets,
+                                "component_id": cid,
+                                "repo_id": src.repo_id,
+                                "component_approx_gb": src.approx_gb,
+                                "completed_gb": round(completed_gb, 2),
+                                "total_gb": round(total_approx_gb, 2),
+                                "overall_pct": round((completed_gb / total_approx_gb) * 100.0, 1),
+                                "detail": f"Starting {cid} (~{src.approx_gb} GB from {src.repo_id})",
+                            }
+                        )
 
                     if mode == "hf_hub":
                         self._download_from_hf_hub(
                             spec=spec,
                             source=src,
+                            source_mode=source,
                             hf_token=hf_token or os.environ.get("HF_TOKEN"),
                             quantization=quantization,
                             cleanup_raw=cleanup_raw,
                             task=task,
                             emit=_emit,
+                            tqdm_class=tqdm_class,
+                            progress_callback=progress_callback,
+                            progress_ctx={
+                                "component_idx": idx + 1,
+                                "total_components": total_targets,
+                                "component_id": cid,
+                                "repo_id": src.repo_id,
+                                "component_approx_gb": src.approx_gb,
+                                "completed_gb": completed_gb,
+                                "total_gb": total_approx_gb,
+                            },
                         )
                     elif mode == "strata_repack":
                         self._build_strata_50_block_shards(
                             spec=spec,
                             quantization=quantization,
                             cleanup_raw=cleanup_raw,
+                            quantize_existing=True,
                             task=task,
                             emit=_emit,
                         )
                     else:
                         raise ValueError(f"Unsupported mode '{mode}'. Use 'hf_hub' or 'strata_repack'.")
 
-                    task.progress_pct = round(((idx + 1) / total_targets) * 100.0, 1)
+                    completed_gb += src.approx_gb
+                    task.progress_pct = round(min(100.0, (completed_gb / total_approx_gb) * 100.0), 1)
+                    if progress_callback:
+                        progress_callback(
+                            {
+                                "phase": "component_done",
+                                "component_idx": idx + 1,
+                                "total_components": total_targets,
+                                "component_id": cid,
+                                "repo_id": src.repo_id,
+                                "component_approx_gb": src.approx_gb,
+                                "completed_gb": round(completed_gb, 2),
+                                "total_gb": round(total_approx_gb, 2),
+                                "overall_pct": task.progress_pct,
+                                "detail": f"Completed {cid}",
+                            }
+                        )
 
                 task.status = "COMPLETED"
                 task.progress_pct = 100.0
                 task.completed_at = time.time()
-                task.add_log(
+                done_msg = (
                     f"[Strata-Installer] Finished '{component_id}' ({mode}, source={source}, quant={quantization}) in "
                     f"{task.completed_at - task.started_at:.1f}s"
                 )
+                task.add_log(done_msg)
+                _append_log_file(done_msg)
             except Exception as exc:
                 task.status = "FAILED"
                 task.error = str(exc)
                 task.completed_at = time.time()
-                task.add_log(f"[Strata-Installer] ERROR: {exc}")
+                err_msg = f"[Strata-Installer] ERROR: {exc}"
+                task.add_log(err_msg)
+                _append_log_file(err_msg)
 
         if run_async:
             t = threading.Thread(target=_worker, daemon=True)
@@ -910,11 +974,15 @@ class StrataModelManager:
         self,
         spec: ModelComponentSpec,
         source: QuantSourceSpec,
+        source_mode: str,
         hf_token: Optional[str],
         quantization: str,
         cleanup_raw: bool,
         task: DownloadTaskState,
         emit: Callable[[str], None],
+        tqdm_class: Optional[Any] = None,
+        progress_callback: Optional[Callable[[dict], None]] = None,
+        progress_ctx: Optional[dict] = None,
     ) -> None:
         from huggingface_hub import HfApi, snapshot_download
 
@@ -936,21 +1004,27 @@ class StrataModelManager:
             emit(f"[HF-Hub] Note: Could not pre-query repo metadata ({exc}); attempting direct snapshot_download...")
 
         t0 = time.perf_counter()
-        local_path = snapshot_download(
-            repo_id=repo_id,
-            local_dir=str(target_dir),
-            allow_patterns=source.allow_patterns,
-            token=hf_token,
-            max_workers=4,
-        )
+        dl_kwargs: Dict[str, Any] = {
+            "repo_id": repo_id,
+            "local_dir": str(target_dir),
+            "allow_patterns": source.allow_patterns,
+            "token": hf_token,
+            "max_workers": 4,
+        }
+        if tqdm_class is not None:
+            dl_kwargs["tqdm_class"] = tqdm_class
+        local_path = snapshot_download(**dl_kwargs)
         dt = max(0.001, time.perf_counter() - t0)
         emit(f"[HF-Hub] Downloaded '{spec.component_id}' to {local_path} in {dt:.1f}s.")
 
-        if spec.is_dit_partition or cleanup_raw:
+        # Only run local tensor quantization when pulling unquantized official BF16 weights
+        should_quantize_raw = (source_mode == "official-bf16")
+        if spec.is_dit_partition or should_quantize_raw:
             self._build_strata_50_block_shards(
                 spec=spec,
                 quantization=quantization,
-                cleanup_raw=cleanup_raw,
+                cleanup_raw=cleanup_raw and should_quantize_raw,
+                quantize_existing=should_quantize_raw,
                 task=task,
                 emit=emit,
             )
@@ -1032,15 +1106,20 @@ class StrataModelManager:
         task: DownloadTaskState,
         emit: Callable[[str], None],
         cleanup_raw: bool = False,
+        quantize_existing: bool = True,
     ) -> None:
         comp_dir = self.weights_dir / spec.subdir
         blocks_dir = comp_dir / "strata_blocks"
         blocks_dir.mkdir(parents=True, exist_ok=True)
 
         num_blocks = 50 if spec.is_dit_partition else 8
-        raw_files = sorted(
-            f for f in comp_dir.rglob("*.safetensors")
-            if blocks_dir not in f.parents
+        raw_files = (
+            sorted(
+                f for f in comp_dir.rglob("*.safetensors")
+                if blocks_dir not in f.parents
+            )
+            if quantize_existing
+            else []
         )
 
         t0 = time.perf_counter()
