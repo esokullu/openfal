@@ -631,6 +631,62 @@ def test_diffusers_models_accept_converted_state_dicts():
     assert mp_stub.proj_in.weight.dtype == torch.float32
     assert mp_stub.norm.weight.dtype == torch.bfloat16
 
+    # 8. Verify MiniMax-H3 Video VAE INT8 ConvRot fused `to_qkv.weight_scale` & `ff.w1.weight_scale` decode
+    from openfal.runtime.minimax_h3_runner import convert_minimax_h3_video_vae_state_dict
+
+    vvae_tiny = diffusers.AutoencoderKLMiniMaxH3(
+        block_out_channels=(8, 16, 16),
+        layers_per_block=1,
+        spatial_downsample_factors=(2, 2, 2),
+        temporal_downsample_factors=(1, 2, 2),
+        norm_num_groups=8,
+        latent_channels=8,
+        latents_mean=(0.0,) * 8,
+        latents_std=(1.0,) * 8,
+        decoder_num_layers=1,
+        decoder_num_attention_heads=2,
+        decoder_attention_head_dim=8,
+    )
+    dim_v = 16
+    raw_vvae = {}
+    for k, val in vvae_tiny.state_dict().items():
+        if k.startswith("decoder.transformer_blocks.0."):
+            continue
+        raw_vvae[k] = val.clone()
+    raw_vvae.update(
+        {
+            "decoder.transformer_blocks.0.norm1.weight": torch.ones(dim_v),
+            "decoder.transformer_blocks.0.norm2.weight": torch.ones(dim_v),
+            "decoder.transformer_blocks.0.scale1": torch.ones(dim_v),
+            "decoder.transformer_blocks.0.scale2": torch.ones(dim_v),
+            "decoder.transformer_blocks.0.attn.to_qkv.weight": torch.randint(-5, 5, (3 * dim_v, dim_v), dtype=torch.int8),
+            "decoder.transformer_blocks.0.attn.to_qkv.weight_scale": torch.full((3 * dim_v, 1), 0.01),
+            "decoder.transformer_blocks.0.attn.to_qkv.bias": torch.zeros(3 * dim_v),
+            "decoder.transformer_blocks.0.attn.to_out.weight": torch.randint(-5, 5, (dim_v, dim_v), dtype=torch.int8),
+            "decoder.transformer_blocks.0.attn.to_out.weight_scale": torch.full((dim_v, 1), 0.01),
+            "decoder.transformer_blocks.0.attn.to_out.bias": torch.zeros(dim_v),
+            "decoder.transformer_blocks.0.ff.w1.weight": torch.randint(-5, 5, (8 * dim_v, dim_v), dtype=torch.int8),
+            "decoder.transformer_blocks.0.ff.w1.weight_scale": torch.cat(
+                [torch.full((4 * dim_v, 1), 0.02), torch.full((4 * dim_v, 1), 0.05)], dim=0
+            ),
+            "decoder.transformer_blocks.0.ff.w1.bias": torch.zeros(8 * dim_v),
+            "decoder.transformer_blocks.0.ff.w2.weight": torch.randint(-5, 5, (dim_v, 4 * dim_v), dtype=torch.int8),
+            "decoder.transformer_blocks.0.ff.w2.weight_scale": torch.full((dim_v, 1), 0.01),
+            "decoder.transformer_blocks.0.ff.w2.bias": torch.zeros(dim_v),
+        }
+    )
+    mapped_vvae = convert_minimax_h3_video_vae_state_dict(raw_vvae)
+    assert mapped_vvae["decoder.transformer_blocks.0.attn.to_q.weight_scale"].shape == (dim_v, 1)
+    assert torch.allclose(
+        mapped_vvae["decoder.transformer_blocks.0.ff.net.0.proj.weight_scale"][: 4 * dim_v],
+        torch.full((4 * dim_v, 1), 0.05),
+    )
+    mv_miss, mv_unexp = quantized_module_swap_from_state_dict(vvae_tiny, mapped_vvae, compute_dtype=torch.bfloat16)
+    assert mv_miss == []
+    assert mv_unexp == []
+    dec_vvae = vvae_tiny.decode(torch.randn(1, 8, 5, 4, 4, dtype=torch.float32)).sample
+    assert dec_vvae.shape[0] == 1 and dec_vvae.shape[1] == 3
+
 
 def test_real_weights_do_not_silently_fallback(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("OPENFAL_SYNTHETIC_FALLBACK", raising=False)

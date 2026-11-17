@@ -217,6 +217,13 @@ def encode_frames_to_mp4(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg_bin = shutil.which("ffmpeg")
+    if not ffmpeg_bin:
+        try:
+            import imageio_ffmpeg  # type: ignore
+
+            ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            ffmpeg_bin = None
     if ffmpeg_bin:
         with tempfile.TemporaryDirectory(prefix="openfal_mp4_") as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)

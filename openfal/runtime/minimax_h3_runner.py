@@ -218,15 +218,31 @@ def convert_minimax_h3_video_vae_state_dict(raw_sd: Dict[str, torch.Tensor]) -> 
             nk = k
         out[nk] = v
 
+    # Track w1 / to_qkv weight row counts for accurate per-row scale & ConvRot metadata splitting
+    w1_rows = {k.removesuffix(".weight"): v.shape[0] for k, v in out.items() if k.endswith(".ff.net.0.proj.weight")}
+    qkv_rows = {k.removesuffix(".weight"): v.shape[0] for k, v in out.items() if k.endswith(".attn.to_qkv.weight")}
+
+    def _swap_gate_value(tensor: torch.Tensor) -> torch.Tensor:
+        gate, val = torch.chunk(tensor, 2, dim=0)
+        return torch.cat([val, gate], dim=0).contiguous()
+
     # Split ViT decoder fused to_qkv -> to_q/to_k/to_v and swap gated w1 -> [value; gate]
     for k in list(out.keys()):
         if k.endswith(".ff.net.0.proj.weight") or k.endswith(".ff.net.0.proj.bias"):
-            gate, val = torch.chunk(out[k], 2, dim=0)
-            out[k] = torch.cat([val, gate], dim=0).contiguous()
+            out[k] = _swap_gate_value(out[k])
+        elif k.endswith(".ff.net.0.proj.weight_scale") or k.endswith(".ff.net.0.proj.scale_weight"):
+            base = k.rsplit(".", 1)[0]
+            rows = w1_rows.get(base)
+            if out[k].ndim >= 1 and rows and out[k].shape[0] == rows:
+                out[k] = _swap_gate_value(out[k])
         elif ".attn.to_qkv." in k:
             tensor = out.pop(k)
             base, suffix = k.split(".attn.to_qkv.", 1)
             if suffix in ("weight", "bias"):
+                q, kk, vv = torch.chunk(tensor, 3, dim=0)
+            elif suffix in ("weight_scale", "scale_weight") and tensor.ndim >= 1 and tensor.shape[0] == qkv_rows.get(
+                f"{base}.attn.to_qkv"
+            ):
                 q, kk, vv = torch.chunk(tensor, 3, dim=0)
             else:
                 q, kk, vv = tensor, tensor.clone(), tensor.clone()
@@ -438,6 +454,18 @@ class RealMiniMaxH3Runner:
         te_mapped = convert_qwen3vl_text_encoder_state_dict(te_raw)
         del te_raw
         has_lm_head = "lm_head.weight" in te_mapped
+        has_layer_50 = any(k.startswith("model.language_model.layers.50.") for k in te_mapped)
+        if not has_lm_head:
+            # Pruned Qwen3-VL-32B conditioner stops at Layer 50 and omits lm_head (~1.5 GB saved)
+            text_encoder.lm_head = nn.Identity()
+
+        # Truncate unpopulated layers >= 50 BEFORE swap so missing count reflects only active layers
+        orig_layers = text_encoder.model.language_model.layers
+        if len(orig_layers) > 51 and not has_layer_50:
+            text_encoder.model.language_model.layers = nn.ModuleList(
+                list(orig_layers[:50]) + [_PassthroughDecoderLayer()]
+            )
+
         te_missing, _ = quantized_module_swap_from_state_dict(
             text_encoder,
             te_mapped,
@@ -445,17 +473,6 @@ class RealMiniMaxH3Runner:
             embedding_names=("model.language_model.embed_tokens",),
         )
         del te_mapped
-        if not has_lm_head:
-            # Pruned Qwen3-VL-32B conditioner stops at Layer 50 and omits lm_head (~1.5 GB saved)
-            text_encoder.lm_head = nn.Identity()
-
-        # If the checkpoint omits decoder layers >= 50 (e.g. pruned Layer-50 Comfy checkpoint), replace
-        # unpopulated trailing layers with a zero-param passthrough so hidden_states[50] stays valid.
-        orig_layers = text_encoder.model.language_model.layers
-        if len(orig_layers) > 51 and any(p.is_meta for p in orig_layers[50].parameters()):
-            text_encoder.model.language_model.layers = nn.ModuleList(
-                list(orig_layers[:50]) + [_PassthroughDecoderLayer()]
-            )
 
         text_encoder.model.language_model.rotary_emb = Qwen3VLTextRotaryEmbedding(config=te_cfg.text_config)
         try:
