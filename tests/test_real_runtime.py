@@ -313,8 +313,8 @@ def test_minimax_h3_pruned_converters_and_table():
     )
 
     emb = _PrunedAdalnTableEmbedder(table)
-    # t=0.0005 -> idx=0.5 interpolated between row 0 and row 1
-    out = emb(torch.tensor([0.0, 0.0005, 0.002]))
+    # t in [0, 1] maps linearly to [0, table.shape[0] - 1] (= [0, 2] here; t=0.25 -> idx=0.5)
+    out = emb(torch.tensor([0.0, 0.25, 1.0]))
     assert torch.allclose(out[0], torch.tensor([0.0, 1.0]))
     assert torch.allclose(out[1], torch.tensor([5.0, 10.5]))
     assert torch.allclose(out[2], torch.tensor([20.0, 40.0]))
@@ -479,7 +479,7 @@ def test_diffusers_models_accept_converted_state_dicts():
     )[0]
     assert wan_out.shape == (1, 16, 2, 4, 4)
 
-    # 4. Tiny MiniMaxH3Transformer3DModel pruned checkpoint load & patched AdaLN check
+    # 4. Tiny MiniMaxH3Transformer3DModel & MiniMaxH3ImageTransformer2DModel pruned forward pass check
     mm = diffusers.MiniMaxH3Transformer3DModel(
         num_attention_heads=2,
         attention_head_dim=32,
@@ -494,17 +494,65 @@ def test_diffusers_models_accept_converted_state_dicts():
         freq_dim=16,
         time_embed_hidden_dim=64,
         time_embed_dim=8,
-        rope_freq_dim=8,
+        rope_freq_dim=4,
     )
     mm.time_proj = nn.Identity()
-    mm.time_embedder = _PrunedAdalnTableEmbedder(torch.randn(16, 8))
+    mm.time_embedder = _PrunedAdalnTableEmbedder(torch.randn(1025, 8))
     mm.norm_out = _PrunedAdaLayerNormOut(mm.norm_out.norm, mm.norm_out.linear)
     mm.transformer_blocks[0].adaln_proj = _PrunedAdaLayerNormModulation(
         hidden_size=64, orig_linear=mm.transformer_blocks[0].adaln_proj.linear
     )
-    t_emb = mm.time_embedder(mm.time_proj(torch.tensor([0.005])))
-    mod_chunks = mm.transformer_blocks[0].adaln_proj(t_emb)
-    assert len(mod_chunks) == 6
+    vid_out, aud_out = mm(
+        hidden_states=torch.randn(1, 4, 16),
+        audio_hidden_states=torch.randn(1, 2, 8),
+        encoder_hidden_states=torch.randn(1, 3, 32),
+        timestep=torch.tensor([0.5]),
+        timestep_indices=torch.zeros(9, dtype=torch.long),
+        token_tags=torch.tensor([1, 1, 1, 2, 2, 0, 0, 0, 0], dtype=torch.long),
+        position_ids=torch.zeros(9, 3, dtype=torch.float32),
+        video_indices=torch.tensor([5, 6, 7, 8], dtype=torch.long),
+        audio_indices=torch.tensor([3, 4], dtype=torch.long),
+        text_indices=torch.tensor([0, 1, 2], dtype=torch.long),
+        return_dict=False,
+    )
+    assert vid_out.shape == (1, 4, 16)
+    assert aud_out.shape == (1, 2, 8)
+
+    mm_img = diffusers.MiniMaxH3ImageTransformer2DModel(
+        num_attention_heads=2,
+        attention_head_dim=32,
+        hidden_size=64,
+        num_layers=1,
+        num_refiner_layers=1,
+        ffn_dim=128,
+        in_channels=4,
+        patch_size=(1, 2, 2),
+        text_dim=32,
+        freq_dim=16,
+        time_embed_hidden_dim=64,
+        time_embed_dim=8,
+        rope_freq_dim=4,
+        num_pdd_heads=6,
+    )
+    mm_img.time_proj = nn.Identity()
+    mm_img.time_embedder = _PrunedAdalnTableEmbedder(torch.randn(1025, 8))
+    mm_img.norm_out = _PrunedAdaLayerNormOut(mm_img.norm_out.norm, mm_img.norm_out.linear)
+    mm_img.transformer_blocks[0].adaln_proj = _PrunedAdaLayerNormModulation(
+        hidden_size=64, orig_linear=mm_img.transformer_blocks[0].adaln_proj.linear
+    )
+    img_out = mm_img(
+        hidden_states=torch.randn(1, 4, 16),
+        encoder_hidden_states=torch.randn(1, 3, 32),
+        timestep=torch.tensor([0.5]),
+        timestep_indices=torch.zeros(7, dtype=torch.long),
+        token_tags=torch.tensor([1, 1, 1, 0, 0, 0, 0], dtype=torch.long),
+        position_ids=torch.zeros(7, 3, dtype=torch.float32),
+        image_indices=torch.tensor([3, 4, 5, 6], dtype=torch.long),
+        text_indices=torch.tensor([0, 1, 2], dtype=torch.long),
+        pdd_step_index=0,
+        return_dict=False,
+    )[0]
+    assert img_out.shape == (1, 4, 16)
 
     # 5. Tiny MiniMaxH3AudioVAE weight_norm removal roundtrip
     avae = diffusers.AutoencoderKLMiniMaxH3Audio(
@@ -523,9 +571,9 @@ def test_diffusers_models_accept_converted_state_dicts():
     sd_keys = list(avae.state_dict().keys())
     assert not any(k.endswith(("weight_g", "weight_v", "original0", "original1")) for k in sd_keys)
 
-    # 6. Verify MiniMaxH3Blocks pipeline state builder
+    # 6. Verify MiniMaxH3Blocks pipeline state builder, H3-Image PDD split, & WanAnimate blur kernels
     from diffusers.modular_pipelines.minimax_h3 import MiniMaxH3Blocks
-    from openfal.runtime.minimax_h3_runner import _build_minimax_pipeline_state
+    from openfal.runtime.minimax_h3_runner import _PassthroughDecoderLayer, _build_minimax_pipeline_state
 
     blocks_pipe = MiniMaxH3Blocks().init_pipeline()
     state = _build_minimax_pipeline_state(
@@ -534,6 +582,54 @@ def test_diffusers_models_accept_converted_state_dicts():
     )
     assert state.get("prompt") == "cat chasing poodle"
     assert state.get("num_inference_steps") == 12
+
+    h3_img_sd, _ = convert_minimax_h3_dit_state_dict(
+        {
+            "adaln_t_table": torch.randn(1025, 8),
+            "final_layer.video_out.weight": torch.arange(6 * 4 * 8, dtype=torch.float32).reshape(24, 8),
+            "final_layer.video_out.bias": torch.arange(24, dtype=torch.float32),
+        },
+        num_pdd_heads=6,
+    )
+    assert all(f"pdd_proj_out.{idx}.weight" in h3_img_sd for idx in range(6))
+    assert h3_img_sd["pdd_proj_out.2.weight"].shape == (4, 8)
+    assert h3_img_sd["pdd_proj_out.2.bias"].shape == (4,)
+
+    anim_mapped = convert_wan22_transformer_state_dict(
+        {
+            "motion_encoder.enc.net_app.convs.1.conv2.0.kernel": torch.ones(4, 4),
+            "motion_encoder.enc.net_app.convs.1.skip.0.kernel": torch.full((4, 4), 2.0),
+        }
+    )
+    assert "motion_encoder.res_blocks.0.conv2.blur_kernel" in anim_mapped
+    assert "motion_encoder.res_blocks.0.conv_skip.blur_kernel" in anim_mapped
+
+    pass_blk = _PassthroughDecoderLayer()
+    x_pass = torch.randn(1, 5, 16)
+    assert torch.equal(pass_blk(x_pass), x_pass)
+
+    # 7. Verify `_keep_in_fp32_modules` stays float32 while remaining modules convert to bf16
+    class _MixedPrecisionStub(nn.Module):
+        _keep_in_fp32_modules = ["proj_in"]
+
+        def __init__(self):
+            super().__init__()
+            self.proj_in = nn.Linear(4, 4)
+            self.norm = nn.LayerNorm(4)
+
+    mp_stub = _MixedPrecisionStub()
+    quantized_module_swap_from_state_dict(
+        mp_stub,
+        {
+            "proj_in.weight": torch.ones(4, 4),
+            "proj_in.bias": torch.zeros(4),
+            "norm.weight": torch.ones(4),
+            "norm.bias": torch.zeros(4),
+        },
+        compute_dtype=torch.bfloat16,
+    )
+    assert mp_stub.proj_in.weight.dtype == torch.float32
+    assert mp_stub.norm.weight.dtype == torch.bfloat16
 
 
 def test_real_weights_do_not_silently_fallback(tmp_path: Path, monkeypatch):

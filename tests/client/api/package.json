@@ -1,0 +1,30 @@
+{
+  "name": "openfal-client-api-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "fal.ai-compatible Node.js client test suite for openfal (Qwen-Image-2.1, Wan 2.2 MoE, MiniMax-H3)",
+  "scripts": {
+    "engine:status": "node engine_control.mjs",
+    "t2i": "node text_to_image.mjs",
+    "t2i:qwen": "node text_to_image.mjs --model=qwen",
+    "t2i:minimax": "node text_to_image.mjs --model=minimax",
+    "edit": "node image_to_image_edit.mjs",
+    "edit:qwen": "node image_to_image_edit.mjs --model=qwen",
+    "edit:minimax": "node image_to_image_edit.mjs --model=minimax",
+    "t2v": "node text_to_video.mjs",
+    "t2v:wan": "node text_to_video.mjs --model=wan",
+    "t2v:minimax": "node text_to_video.mjs --model=minimax",
+    "i2v": "node image_to_video.mjs",
+    "i2v:wan": "node image_to_video.mjs --model=wan",
+    "i2v:minimax": "node image_to_video.mjs --model=minimax",
+    "ref2v": "node reference_to_video.mjs",
+    "recast": "node video_recast_animate.mjs",
+    "recast:wan": "node video_recast_animate.mjs --model=wan",
+    "recast:minimax": "node video_recast_animate.mjs --model=minimax",
+    "all": "node run_all.mjs"
+  },
+  "dependencies": {
+    "@fal-ai/client": "^1.2.0"
+  }
+}

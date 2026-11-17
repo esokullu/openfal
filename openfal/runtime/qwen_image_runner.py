@@ -357,17 +357,12 @@ class RealQwenImage21Runner:
             Qwen3VLVisionRotaryEmbedding,
         )
 
-        lang_rope = text_encoder.model.language_model.rotary_emb
-        if any(b is not None and b.is_meta for b in lang_rope.buffers()):
-            fresh_lang = Qwen3VLTextRotaryEmbedding(config=te_cfg.text_config)
-            lang_rope._buffers["inv_freq"] = fresh_lang.inv_freq.clone()
-            lang_rope.original_inv_freq = fresh_lang.original_inv_freq.clone()
-
-        vis_rope = text_encoder.model.visual.rotary_pos_emb
-        if any(b is not None and b.is_meta for b in vis_rope.buffers()):
+        text_encoder.model.language_model.rotary_emb = Qwen3VLTextRotaryEmbedding(config=te_cfg.text_config)
+        try:
+            text_encoder.model.visual.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(te_cfg.vision_config)
+        except (TypeError, AttributeError):
             head_dim = te_cfg.vision_config.hidden_size // te_cfg.vision_config.num_heads
-            fresh_vis = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
-            vis_rope._buffers["inv_freq"] = fresh_vis.inv_freq.clone()
+            text_encoder.model.visual.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
         if on_log:
             on_log(
                 f"[Qwen3-VL-8B] Loaded '{te_path.name}' "

@@ -170,7 +170,13 @@ class OpenFalRunner:
                 return None
 
             self._evict_other_backends("wan22_moe")
-            start_url = payload.get("start_image_url") or payload.get("image_url")
+            start_url = (
+                payload.get("start_image_url")
+                or payload.get("image_url")
+                or payload.get("face_image_url")
+                or payload.get("source_face_url")
+                or (ref_images[0] if ref_images else None)
+            )
             start_img = self.face_conditioner.load_image_from_url_or_path(start_url) if start_url else None
             fname = f"openfal_vid_{short_id}.mp4"
             out_path = self.config.output_dir / fname
@@ -231,14 +237,74 @@ class OpenFalRunner:
                 return None
 
             self._evict_other_backends("minimax_h3")
+            ref_pil = []
+            for url in ref_images[:9]:
+                loaded = self.face_conditioner.load_image_from_url_or_path(url)
+                if loaded is not None:
+                    ref_pil.append(loaded)
+
+            if partition == "H3-Image":
+                num_images = max(1, min(4, int(payload.get("num_images") or 1)))
+                images_out = []
+                for idx in range(num_images):
+                    fname = f"openfal_img_{short_id}_{idx}.png"
+                    out_path = self.config.output_dir / fname
+                    img = self._real_minimax_runner.generate_image(
+                        prompt=prompt,
+                        width=width,
+                        height=height,
+                        seed=seed + idx,
+                        reference_images=ref_pil or None,
+                        output_path=out_path,
+                        on_log=on_log if idx == 0 else None,
+                    )
+                    file_bytes = out_path.read_bytes()
+                    url_val = (
+                        "data:image/png;base64," + base64.b64encode(file_bytes).decode("ascii")
+                        if sync_mode
+                        else f"{base_url_clean}/files/{fname}"
+                    )
+                    images_out.append(
+                        {
+                            "url": url_val,
+                            "file_name": fname,
+                            "file_size": len(file_bytes),
+                            "content_type": "image/png",
+                            "width": img.size[0],
+                            "height": img.size[1],
+                        }
+                    )
+                elapsed = round(time.perf_counter() - t0, 3)
+                return {
+                    "images": images_out,
+                    "seed": seed,
+                    "prompt": prompt,
+                    "timings": {"inference": elapsed},
+                    "has_nsfw_concepts": [False] * len(images_out),
+                    "strata_engine": {
+                        "backend": backend_family,
+                        "partition": partition,
+                        "mode": "real_pytorch",
+                        "profile_id": self.config.profile_id,
+                        "vram_counter_blocks": self.config.profile.resident_vram_blocks,
+                        "ram_pantry_blocks": self.config.profile.total_dit_blocks - self.config.profile.resident_vram_blocks,
+                    },
+                }
+
             start_url = payload.get("start_image_url") or payload.get("image_url")
             end_url = payload.get("end_image_url")
             start_img = self.face_conditioner.load_image_from_url_or_path(start_url) if start_url else None
             end_img = self.face_conditioner.load_image_from_url_or_path(end_url) if end_url else None
+            ref_vids = list(payload.get("reference_video_urls") or [])
+            for vk in ("video_url", "target_video_url"):
+                if payload.get(vk) and payload[vk] not in ref_vids:
+                    ref_vids.append(payload[vk])
+            ref_auds = list(payload.get("reference_audio_urls") or [])
+
             fname = f"openfal_vid_{short_id}.mp4"
             out_path = self.config.output_dir / fname
             enable_audio = bool(payload.get("enable_audio", self.config.enable_native_stereo_audio))
-            num_frames = max(17, int(duration * 24))
+            num_frames = max(22, int(round(duration * 24)))
             self._real_minimax_runner.generate_video(
                 partition=partition,
                 prompt=prompt,
@@ -249,6 +315,9 @@ class OpenFalRunner:
                 seed=seed,
                 start_image=start_img,
                 end_image=end_img,
+                reference_images=ref_pil or None,
+                reference_videos=ref_vids or None,
+                reference_audios=ref_auds or None,
                 output_path=out_path,
                 enable_audio=enable_audio,
                 on_log=on_log,

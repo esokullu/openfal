@@ -387,13 +387,21 @@ def quantized_module_swap_from_state_dict(
             swapped += 1
 
     # Load all remaining unquantized tensors (norms, RoPE tables, biases, BF16/FP16 layers, etc.)
+    keep_fp32 = list(getattr(model, "_keep_in_fp32_modules", None) or [])
+    if "quant_conv" in keep_fp32 and "decoder.proj_in" not in keep_fp32:
+        keep_fp32.append("decoder.proj_in")
+
     remainder: Dict[str, torch.Tensor] = {}
     for k, v in state_dict.items():
         if k in consumed:
             continue
         if k.endswith((".comfy_quant", ".config", ".scale_input", ".input_scale", "scaled_fp8")):
             continue
-        remainder[k] = v.to(dtype=compute_dtype) if v.is_floating_point() else v
+        if v.is_floating_point():
+            target_dt = torch.float32 if any(pat in k for pat in keep_fp32) else compute_dtype
+            remainder[k] = v.to(dtype=target_dt)
+        else:
+            remainder[k] = v
 
     res = model.load_state_dict(remainder, strict=False, assign=True)
     # Filter out keys owned by swapped modules from missing_keys if assign didn't touch them

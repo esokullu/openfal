@@ -16,4 +16,7 @@ weights/
 *.mp4
 *.png
 *.webp
+!tests/client/samples/*.png
+tests/client/*/outputs/
+tests/client/api/node_modules/
 .DS_Store
