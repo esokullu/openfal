@@ -23,7 +23,7 @@ Get up and running in 3 steps with a minimal **Text-to-Image** setup (`Qwen-Imag
 ```powershell
 git clone https://github.com/esokullu/openfal.git
 cd openfal
-pip install -e ".[dev]"
+pip install -e ".[inference]"
 
 # Verify GPU & VRAM detection (automatically filters out <8GB display GPUs like T400):
 openfal detect
@@ -38,7 +38,7 @@ openfal detect
 ```bash
 git clone https://github.com/esokullu/openfal.git
 cd openfal
-pip install -e ".[dev]"
+pip install -e ".[inference]"
 
 # Verify GPU & system RAM detection:
 openfal detect

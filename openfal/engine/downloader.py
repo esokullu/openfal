@@ -65,7 +65,7 @@ MODEL_COMPONENTS: Dict[str, ModelComponentSpec] = {
         allow_patterns=[
             "split_files/diffusion_models/wan2.2_t2v_*_fp8_scaled.safetensors",
             "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-            "split_files/vae/wan2.2_vae.safetensors",
+            "split_files/vae/wan_2.1_vae.safetensors",
         ],
         approx_bf16_gb=65.1,
         approx_fp8_gb=34.2,
@@ -78,7 +78,7 @@ MODEL_COMPONENTS: Dict[str, ModelComponentSpec] = {
                 allow_patterns=[
                     "split_files/diffusion_models/wan2.2_t2v_*_fp8_scaled.safetensors",
                     "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-                    "split_files/vae/wan2.2_vae.safetensors",
+                    "split_files/vae/wan_2.1_vae.safetensors",
                 ],
                 approx_gb=34.2,
             ),
@@ -1017,6 +1017,8 @@ class StrataModelManager:
         dt = max(0.001, time.perf_counter() - t0)
         emit(f"[HF-Hub] Downloaded '{spec.component_id}' to {local_path} in {dt:.1f}s.")
 
+        self._ensure_component_hf_configs(spec=spec, target_dir=target_dir, hf_token=hf_token, emit=emit)
+
         # Only run local tensor quantization when pulling unquantized official BF16 weights
         should_quantize_raw = (source_mode == "official-bf16")
         if spec.is_dit_partition or should_quantize_raw:
@@ -1028,6 +1030,51 @@ class StrataModelManager:
                 task=task,
                 emit=emit,
             )
+
+    @staticmethod
+    def _ensure_component_hf_configs(
+        spec: ModelComponentSpec,
+        target_dir: Path,
+        hf_token: Optional[str],
+        emit: Callable[[str], None],
+    ) -> None:
+        """Fetch lightweight (~2-12 MB) config & tokenizer JSONs alongside Comfy-Org single-file weights."""
+        from huggingface_hub import snapshot_download
+
+        cfg_specs = {
+            "qwen_image_21": (
+                "Qwen/Qwen-Image-2.1-Turbo",
+                ["model_index.json", "scheduler/*", "transformer/*.json", "vae/*.json", "text_encoder/*.json", "processor/*"],
+            ),
+            "wan22_t2v_moe": (
+                "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+                ["model_index.json", "scheduler/*", "transformer/*.json", "transformer_2/*.json", "vae/*.json", "text_encoder/*.json", "tokenizer/*"],
+            ),
+            "wan22_i2v_moe": (
+                "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+                ["model_index.json", "scheduler/*", "transformer/*.json", "transformer_2/*.json", "vae/*.json", "text_encoder/*.json", "tokenizer/*"],
+            ),
+            "wan22_animate": (
+                "Wan-AI/Wan2.2-Animate-14B-Diffusers",
+                ["model_index.json", "scheduler/*", "transformer/*.json", "vae/*.json", "text_encoder/*.json", "tokenizer/*"],
+            ),
+        }
+        entry = cfg_specs.get(spec.component_id)
+        if not entry:
+            return
+        cfg_repo, cfg_patterns = entry
+        cfg_dir = target_dir / "hf_configs"
+        try:
+            emit(f"[HF-Config] Syncing config/tokenizer metadata from '{cfg_repo}' -> {cfg_dir}...")
+            snapshot_download(
+                repo_id=cfg_repo,
+                local_dir=str(cfg_dir),
+                allow_patterns=cfg_patterns,
+                ignore_patterns=["*.safetensors", "*.bin", "*.pt", "*.ckpt", "assets/*"],
+                token=hf_token,
+            )
+        except Exception as exc:
+            emit(f"[HF-Config] Note: Deferred config metadata fetch ({exc}); will retry cleanly at inference time.")
 
     @staticmethod
     def _extract_block_index(tensor_name: str, num_blocks: int) -> int:

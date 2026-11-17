@@ -53,6 +53,244 @@ class OpenFalRunner:
             output_dir=config.output_dir,
             face_conditioner=self.face_conditioner,
         )
+        self._real_qwen_runner = None
+        self._real_wan_runner = None
+        self._real_minimax_runner = None
+        self._active_real_family: Optional[str] = None
+
+    def _evict_other_backends(self, next_family: str) -> None:
+        if self._active_real_family and self._active_real_family != next_family:
+            if self._active_real_family == "qwen_image_21" and self._real_qwen_runner is not None:
+                self._real_qwen_runner.evict()
+            elif self._active_real_family == "wan22_moe" and self._real_wan_runner is not None:
+                self._real_wan_runner.evict()
+            elif self._active_real_family == "minimax_h3" and self._real_minimax_runner is not None:
+                self._real_minimax_runner.evict()
+        self._active_real_family = next_family
+
+    def _try_execute_real(
+        self,
+        backend_family: str,
+        partition: str,
+        endpoint_id: str,
+        payload: Dict[str, Any],
+        prompt: str,
+        width: int,
+        height: int,
+        duration: float,
+        fps: int,
+        num_steps: int,
+        guidance_scale: float,
+        seed: int,
+        ref_images: List[str],
+        base_url: str,
+        sync_mode: bool,
+        on_log: Optional[Callable[[str], None]],
+        t0: float,
+    ) -> Optional[Dict[str, Any]]:
+        from openfal.runtime.common import use_synthetic_fallback
+
+        if use_synthetic_fallback():
+            return None
+
+        short_id = uuid.uuid4().hex[:10]
+        base_url_clean = base_url.rstrip("/")
+
+        if backend_family == "qwen_image_21":
+            from openfal.runtime.qwen_image_runner import RealQwenImage21Runner
+
+            if self._real_qwen_runner is None:
+                self._real_qwen_runner = RealQwenImage21Runner(self.config, self.memory)
+            if not self._real_qwen_runner.has_weights():
+                return None
+
+            self._evict_other_backends("qwen_image_21")
+            ref_pil = []
+            for url in ref_images[:10]:
+                loaded = self.face_conditioner.load_image_from_url_or_path(url)
+                if loaded is not None:
+                    ref_pil.append(loaded)
+
+            actual_steps = (
+                int(payload["num_inference_steps"])
+                if payload.get("num_inference_steps") is not None
+                else 8
+            )
+            num_images = max(1, min(4, int(payload.get("num_images") or 1)))
+            images_out = []
+            for idx in range(num_images):
+                fname = f"openfal_img_{short_id}_{idx}.png"
+                out_path = self.config.output_dir / fname
+                img = self._real_qwen_runner.generate(
+                    prompt=prompt,
+                    width=width,
+                    height=height,
+                    num_steps=actual_steps,
+                    seed=seed + idx,
+                    guidance_scale=guidance_scale,
+                    negative_prompt=payload.get("negative_prompt"),
+                    reference_images=ref_pil or None,
+                    output_path=out_path,
+                    on_log=on_log if idx == 0 else None,
+                )
+                file_bytes = out_path.read_bytes()
+                url_val = (
+                    "data:image/png;base64," + base64.b64encode(file_bytes).decode("ascii")
+                    if sync_mode
+                    else f"{base_url_clean}/files/{fname}"
+                )
+                images_out.append(
+                    {
+                        "url": url_val,
+                        "file_name": fname,
+                        "file_size": len(file_bytes),
+                        "content_type": "image/png",
+                        "width": img.size[0],
+                        "height": img.size[1],
+                    }
+                )
+            elapsed = round(time.perf_counter() - t0, 3)
+            return {
+                "images": images_out,
+                "seed": seed,
+                "prompt": prompt,
+                "timings": {"inference": elapsed},
+                "has_nsfw_concepts": [False] * len(images_out),
+                "strata_engine": {
+                    "backend": backend_family,
+                    "partition": partition,
+                    "mode": "real_pytorch",
+                    "profile_id": self.config.profile_id,
+                    "vram_counter_blocks": self.config.profile.resident_vram_blocks,
+                    "ram_pantry_blocks": self.config.profile.total_dit_blocks - self.config.profile.resident_vram_blocks,
+                },
+            }
+
+        if backend_family == "wan22_moe":
+            from openfal.runtime.wan22_runner import RealWan22Runner
+
+            if self._real_wan_runner is None:
+                self._real_wan_runner = RealWan22Runner(self.config, self.memory)
+            if not self._real_wan_runner.has_weights_for(partition):
+                return None
+
+            self._evict_other_backends("wan22_moe")
+            start_url = payload.get("start_image_url") or payload.get("image_url")
+            start_img = self.face_conditioner.load_image_from_url_or_path(start_url) if start_url else None
+            fname = f"openfal_vid_{short_id}.mp4"
+            out_path = self.config.output_dir / fname
+            num_frames = max(17, int(duration * fps))
+            self._real_wan_runner.generate_video(
+                variant=partition,
+                prompt=prompt,
+                width=width,
+                height=height,
+                num_frames=num_frames,
+                fps=fps,
+                num_steps=num_steps,
+                seed=seed,
+                guidance_scale=guidance_scale,
+                negative_prompt=payload.get("negative_prompt") or "",
+                start_image=start_img,
+                output_path=out_path,
+                on_log=on_log,
+            )
+            file_bytes = out_path.read_bytes()
+            url_val = (
+                "data:video/mp4;base64," + base64.b64encode(file_bytes).decode("ascii")
+                if sync_mode
+                else f"{base_url_clean}/files/{fname}"
+            )
+            elapsed = round(time.perf_counter() - t0, 3)
+            return {
+                "video": {
+                    "url": url_val,
+                    "file_name": fname,
+                    "file_size": len(file_bytes),
+                    "content_type": "video/mp4",
+                    "width": width,
+                    "height": height,
+                    "duration": duration,
+                    "fps": fps,
+                    "stereo_audio": False,
+                },
+                "seed": seed,
+                "prompt": prompt,
+                "timings": {"inference": elapsed},
+                "strata_engine": {
+                    "backend": backend_family,
+                    "partition": partition,
+                    "mode": "real_pytorch",
+                    "profile_id": self.config.profile_id,
+                    "vram_counter_blocks": self.config.profile.resident_vram_blocks,
+                    "ram_pantry_blocks": self.config.profile.total_dit_blocks - self.config.profile.resident_vram_blocks,
+                },
+            }
+
+        if backend_family == "minimax_h3":
+            from openfal.runtime.minimax_h3_runner import RealMiniMaxH3Runner
+
+            if self._real_minimax_runner is None:
+                self._real_minimax_runner = RealMiniMaxH3Runner(self.config, self.memory)
+            if not self._real_minimax_runner.has_weights_for(partition):
+                return None
+
+            self._evict_other_backends("minimax_h3")
+            start_url = payload.get("start_image_url") or payload.get("image_url")
+            end_url = payload.get("end_image_url")
+            start_img = self.face_conditioner.load_image_from_url_or_path(start_url) if start_url else None
+            end_img = self.face_conditioner.load_image_from_url_or_path(end_url) if end_url else None
+            fname = f"openfal_vid_{short_id}.mp4"
+            out_path = self.config.output_dir / fname
+            enable_audio = bool(payload.get("enable_audio", self.config.enable_native_stereo_audio))
+            num_frames = max(17, int(duration * 24))
+            self._real_minimax_runner.generate_video(
+                partition=partition,
+                prompt=prompt,
+                width=width,
+                height=height,
+                num_frames=num_frames,
+                num_steps=num_steps,
+                seed=seed,
+                start_image=start_img,
+                end_image=end_img,
+                output_path=out_path,
+                enable_audio=enable_audio,
+                on_log=on_log,
+            )
+            file_bytes = out_path.read_bytes()
+            url_val = (
+                "data:video/mp4;base64," + base64.b64encode(file_bytes).decode("ascii")
+                if sync_mode
+                else f"{base_url_clean}/files/{fname}"
+            )
+            elapsed = round(time.perf_counter() - t0, 3)
+            return {
+                "video": {
+                    "url": url_val,
+                    "file_name": fname,
+                    "file_size": len(file_bytes),
+                    "content_type": "video/mp4",
+                    "width": width,
+                    "height": height,
+                    "duration": duration,
+                    "fps": 24,
+                    "stereo_audio": enable_audio,
+                },
+                "seed": seed,
+                "prompt": prompt,
+                "timings": {"inference": elapsed},
+                "strata_engine": {
+                    "backend": backend_family,
+                    "partition": partition,
+                    "mode": "real_pytorch",
+                    "profile_id": self.config.profile_id,
+                    "vram_counter_blocks": self.config.profile.resident_vram_blocks,
+                    "ram_pantry_blocks": self.config.profile.total_dit_blocks - self.config.profile.resident_vram_blocks,
+                },
+            }
+
+        return None
 
     @staticmethod
     def resolve_backend_and_partition(endpoint_id: str) -> tuple[str, str]:
@@ -117,6 +355,30 @@ class OpenFalRunner:
         backend_family, partition = self.resolve_backend_and_partition(endpoint_id)
         is_image = self.is_image_endpoint(endpoint_id)
         width, height = self.dit.resolve_dimensions(resolution, aspect_ratio)
+
+        # If real PyTorch `.safetensors` checkpoints exist on disk, run genuine neural inference
+        # (raising an actionable RuntimeError if inference deps are missing rather than faking).
+        real_result = self._try_execute_real(
+            backend_family=backend_family,
+            partition=partition,
+            endpoint_id=endpoint_id,
+            payload=payload,
+            prompt=prompt,
+            width=width,
+            height=height,
+            duration=duration,
+            fps=fps,
+            num_steps=num_steps,
+            guidance_scale=guidance_scale,
+            seed=seed,
+            ref_images=ref_images,
+            base_url=base_url,
+            sync_mode=sync_mode,
+            on_log=on_log,
+            t0=t0,
+        )
+        if real_result is not None:
+            return real_result
 
         # Stage 1: Streamed Text/Multimodal Encoding + Immediate VRAM Eviction
         ctx_embedding = self.qwen_encoder.encode(
