@@ -13,7 +13,7 @@
 # ==============================================================================
 set -euo pipefail
 
-OPENFAL_URL="${OPENFAL_URL:-http://192.168.1.47:8008}"
+OPENFAL_URL="${OPENFAL_URL:-http://127.0.0.1:8000}"
 
 echo "=== [10.1] GET /health ==="
 curl -sS "${OPENFAL_URL}/health" | python3 -m json.tool

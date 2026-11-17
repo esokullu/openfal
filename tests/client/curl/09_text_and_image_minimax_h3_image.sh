@@ -7,7 +7,7 @@
 # ==============================================================================
 set -euo pipefail
 
-OPENFAL_URL="${OPENFAL_URL:-http://192.168.1.47:8008}"
+OPENFAL_URL="${OPENFAL_URL:-http://127.0.0.1:8000}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SAMPLES_DIR="${SCRIPT_DIR}/../samples"
 OUT_DIR="${SCRIPT_DIR}/outputs"

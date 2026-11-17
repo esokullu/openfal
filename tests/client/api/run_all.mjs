@@ -2,7 +2,7 @@
  * Master runner executing the full openfal Node.js client suite.
  *
  * Usage:
- *   OPENFAL_URL=http://192.168.1.47:8008 node run_all.mjs
+ *   OPENFAL_URL=http://127.0.0.1:8000 node run_all.mjs
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";

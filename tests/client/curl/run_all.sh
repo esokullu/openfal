@@ -2,12 +2,12 @@
 # ==============================================================================
 # Run all openfal curl client suites sequentially against OPENFAL_URL
 # Usage:
-#   OPENFAL_URL=http://192.168.1.47:8008 ./run_all.sh
+#   OPENFAL_URL=http://127.0.0.1:8000 ./run_all.sh
 # ==============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export OPENFAL_URL="${OPENFAL_URL:-http://192.168.1.47:8008}"
+export OPENFAL_URL="${OPENFAL_URL:-http://127.0.0.1:8000}"
 
 for script in \
   "10_engine_telemetry_and_queue.sh" \

@@ -2,7 +2,7 @@
 
 End-to-end client scripts exercising every engine (`Qwen-Image-2.1-Turbo`, `Wan 2.2 MoE`, and `MiniMax-H3`) and every task endpoint supported by `openfal`.
 
-By default, all scripts target `OPENFAL_URL=http://192.168.1.47:8008`. Override with:
+By default, all scripts target `OPENFAL_URL=http://127.0.0.1:8000`. Override with:
 
 ```bash
 export OPENFAL_URL="http://localhost:8008"

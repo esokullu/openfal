@@ -4,14 +4,14 @@
  * Works both with `@fal-ai/client` (when `npm install` has been run) AND zero-dependency
  * out-of-the-box with Node 18+ built-in `fetch` + SSE streaming.
  *
- * Set `OPENFAL_URL` env var (defaults to `http://192.168.1.47:8008`).
+ * Set `OPENFAL_URL` env var (defaults to `http://127.0.0.1:8000`).
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const OPENFAL_URL = (process.env.OPENFAL_URL || "http://192.168.1.47:8008").replace(/\/+$/, "");
+export const OPENFAL_URL = (process.env.OPENFAL_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 export const SAMPLES_DIR = path.resolve(__dirname, "../samples");
 export const OUTPUTS_DIR = path.resolve(__dirname, "outputs");
 fs.mkdirSync(OUTPUTS_DIR, { recursive: true });
