@@ -523,6 +523,18 @@ def test_diffusers_models_accept_converted_state_dicts():
     sd_keys = list(avae.state_dict().keys())
     assert not any(k.endswith(("weight_g", "weight_v", "original0", "original1")) for k in sd_keys)
 
+    # 6. Verify MiniMaxH3Blocks pipeline state builder
+    from diffusers.modular_pipelines.minimax_h3 import MiniMaxH3Blocks
+    from openfal.runtime.minimax_h3_runner import _build_minimax_pipeline_state
+
+    blocks_pipe = MiniMaxH3Blocks().init_pipeline()
+    state = _build_minimax_pipeline_state(
+        blocks_pipe,
+        {"prompt": "cat chasing poodle", "height": 512, "width": 768, "num_frames": 22, "num_inference_steps": 12},
+    )
+    assert state.get("prompt") == "cat chasing poodle"
+    assert state.get("num_inference_steps") == 12
+
 
 def test_real_weights_do_not_silently_fallback(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("OPENFAL_SYNTHETIC_FALLBACK", raising=False)

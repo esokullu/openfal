@@ -228,6 +228,38 @@ def _strip_audio_weight_norm(audio_vae: nn.Module) -> None:
                 pass
 
 
+def _materialize_remaining_meta(module: nn.Module, dtype: torch.dtype) -> None:
+    """Replace any unpopulated meta parameters (e.g. pruned trailing norms) on CPU."""
+    for name, param in module.named_parameters(recurse=True):
+        if param.is_meta:
+            fill = torch.ones if "norm" in name else torch.zeros
+            param.data = fill(param.shape, dtype=dtype, device="cpu")
+    for mod in module.modules():
+        for bname, buf in list(mod._buffers.items()):
+            if buf is not None and buf.is_meta:
+                mod._buffers[bname] = torch.zeros(buf.shape, dtype=buf.dtype, device="cpu")
+
+
+def _build_minimax_pipeline_state(pipe: Any, init_inputs: Dict[str, Any]) -> Any:
+    """Populate a `diffusers.modular_pipelines.PipelineState` from named inputs & defaults."""
+    from diffusers.modular_pipelines.modular_pipeline import PipelineState
+
+    state = PipelineState()
+    passed_kwargs = dict(init_inputs)
+    for expected in pipe.blocks.inputs:
+        name = expected.name
+        default = expected.default
+        kt = expected.kwargs_type
+        if name in passed_kwargs:
+            state.set(name, passed_kwargs.pop(name), kt)
+        elif kt is not None and kt in passed_kwargs:
+            for k, v in passed_kwargs.pop(kt).items():
+                state.set(k, v, kt)
+        elif name is not None and name not in state.values and default is not None:
+            state.set(name, default, kt)
+    return state
+
+
 class RealMiniMaxH3Runner:
     """Real neural network inference runner for MiniMax-H3 `FL2VA` & `Ref2VA`."""
 
@@ -353,6 +385,7 @@ class RealMiniMaxH3Runner:
         te_raw = load_safetensors_state_dict(paths["text_encoder"], device="cpu")
         te_mapped = convert_qwen3vl_text_encoder_state_dict(te_raw)
         del te_raw
+        has_lm_head = "lm_head.weight" in te_mapped
         te_missing, te_unexp = quantized_module_swap_from_state_dict(
             text_encoder,
             te_mapped,
@@ -360,6 +393,9 @@ class RealMiniMaxH3Runner:
             embedding_names=("model.language_model.embed_tokens",),
         )
         del te_mapped
+        if not has_lm_head:
+            # Pruned Qwen3-VL-32B conditioner stops at Layer 50 and omits lm_head (~1.5 GB saved)
+            text_encoder.lm_head = nn.Identity()
         from transformers.models.qwen3_vl.modeling_qwen3_vl import (
             Qwen3VLTextRotaryEmbedding,
             Qwen3VLVisionRotaryEmbedding,
@@ -371,9 +407,14 @@ class RealMiniMaxH3Runner:
         head_dim = te_cfg.vision_config.hidden_size // te_cfg.vision_config.num_heads
         fresh_vis = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
         text_encoder.model.visual.rotary_pos_emb._buffers["inv_freq"] = fresh_vis.inv_freq.clone()
+        _materialize_remaining_meta(text_encoder, compute_dtype)
 
         te_layers = text_encoder.model.language_model.layers
-        te_resident = compute_resident_blocks(self.config, len(te_layers), estimated_model_vram_gb=25.3)
+        # Stream Qwen3-VL-32B (~25.3 GB INT8) through a rolling layer window on <=48 GB GPUs
+        if self.config.profile.total_vram_gb < 48.0:
+            te_resident = min(len(te_layers), max(4, min(16, int((self.config.profile.total_vram_gb - 12.0) // 0.5))))
+        else:
+            te_resident = len(te_layers)
         self._te_offloader = (
             StrataBlockOffloadManager(te_layers, device=device, resident_vram_blocks=te_resident)
             if te_resident < len(te_layers)
@@ -429,7 +470,13 @@ class RealMiniMaxH3Runner:
                 )
 
         num_blocks = len(transformer.transformer_blocks)
-        dit_resident = compute_resident_blocks(self.config, num_blocks, estimated_model_vram_gb=20.0)
+        dit_resident = min(
+            num_blocks,
+            min(
+                self.config.profile.resident_vram_blocks,
+                compute_resident_blocks(self.config, num_blocks, estimated_model_vram_gb=20.0),
+            ),
+        )
         self._dit_offloader = (
             StrataBlockOffloadManager(
                 transformer.transformer_blocks, device=device, resident_vram_blocks=dit_resident
@@ -459,6 +506,7 @@ class RealMiniMaxH3Runner:
             int(vvae_cfg.get("decoder_attention_head_dim", 64) * vvae_cfg.get("decoder_rope_dim_ratio", 0.5)),
             theta=vvae_cfg.get("decoder_rope_theta", 100.0),
         )
+        _materialize_remaining_meta(video_vae, compute_dtype)
 
         # 4. Audio VAE (BigVGAN 32kHz Stereo)
         avae_cfg = AutoencoderKLMiniMaxH3Audio.load_config(str(cfg_dir / "audio_vae"))
@@ -487,6 +535,21 @@ class RealMiniMaxH3Runner:
             **{tr_key: transformer},
         )
         pipe.set_progress_bar_config(disable=True)
+
+        # Ensure modular sub-blocks always resolve the active compute device even when upstream
+        # components (e.g. text_encoder) have already been evicted to CPU.
+        base_cls = pipe.__class__
+
+        class _StrataMiniMaxModularPipeline(base_cls):  # type: ignore[misc,valid-type]
+            @property
+            def _execution_device(self):
+                override = getattr(self, "_strata_device", None)
+                if override is not None:
+                    return torch.device(override)
+                return super()._execution_device
+
+        pipe.__class__ = _StrataMiniMaxModularPipeline
+        pipe._strata_device = device
         self._pipe = pipe
         self._loaded_partition = partition
 
@@ -520,11 +583,8 @@ class RealMiniMaxH3Runner:
         width = max(256, round(width / 32) * 32)
         height = max(256, round(height / 32) * 32)
 
-        from diffusers.modular_pipelines.modular_pipeline import PipelineState
-
         gen_dev = "cpu" if device.type == "mps" else device
         generator = torch.Generator(device=gen_dev).manual_seed(int(seed))
-
         init_inputs: Dict[str, Any] = {
             "prompt": prompt,
             "height": height,
@@ -539,7 +599,8 @@ class RealMiniMaxH3Runner:
         if end_image is not None:
             init_inputs["last_image"] = end_image
 
-        state = PipelineState(**init_inputs)
+        state = _build_minimax_pipeline_state(pipe, init_inputs)
+        pipe._strata_device = device
         sub_blocks = pipe.blocks.sub_blocks
 
         # Stage 0: Layout / pre-encode preparation (lightweight)
