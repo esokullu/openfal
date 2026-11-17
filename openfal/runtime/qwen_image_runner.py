@@ -486,7 +486,11 @@ class RealQwenImage21Runner:
         self.memory.switch_partition("Qwen-Image-2.1")
         self._ensure_loaded(on_log=on_log)
 
-        from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_shift, retrieve_timesteps
+        from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import (
+            calculate_dimensions,
+            calculate_shift,
+            retrieve_timesteps,
+        )
         from diffusers.models.transformers.transformer_qwenimage21 import QwenImage21KVCache
 
         pipe = self._pipe
@@ -498,6 +502,21 @@ class RealQwenImage21Runner:
 
         do_cfg = bool(negative_prompt and guidance_scale > 1.0)
         cond_imgs = reference_images if reference_images else None
+
+        te_input_images: Optional[List[Image.Image]] = None
+        vae_images: Optional[List[torch.Tensor]] = None
+        input_image_sizes: List[Tuple[int, int]] = []
+        if cond_imgs is not None:
+            output_res = max(width, height)
+            te_input_images = []
+            vae_images = []
+            for raw_img in cond_imgs:
+                img_rgba = raw_img if raw_img.mode == "RGBA" else raw_img.convert("RGBA")
+                w0, h0 = img_rgba.size
+                rw, rh, _ = calculate_dimensions(output_res * output_res, w0 / h0)
+                input_image_sizes.append((rw, rh))
+                te_input_images.append(pipe.image_processor.resize(img_rgba, height=rh, width=rw))
+                vae_images.append(pipe.image_processor.preprocess(img_rgba, height=rh, width=rw).unsqueeze(2))
 
         # ---------------- Stage 1: Qwen3-VL-8B Conditioning ----------------
         t2i_cache_key = f"{prompt}|{do_cfg}|{negative_prompt or ''}" if cond_imgs is None else None
@@ -533,14 +552,14 @@ class RealQwenImage21Runner:
 
             prompt_embeds, prompt_embeds_mask, image_pad_mask = pipe.encode_prompt(
                 prompt=prompt,
-                image=cond_imgs,
+                image=te_input_images,
                 device=device,
                 num_images_per_prompt=1,
             )
             if do_cfg:
                 neg_embeds, neg_mask, neg_img_pad_mask = pipe.encode_prompt(
                     prompt=negative_prompt or "",
-                    image=cond_imgs,
+                    image=te_input_images,
                     device=device,
                     num_images_per_prompt=1,
                 )
@@ -566,21 +585,8 @@ class RealQwenImage21Runner:
                 on_log("[Qwen3-VL-8B] Extracted multimodal embeddings & evicted text encoder from VRAM")
 
         # ---------------- Stage 2: QwenImage21Transformer2DModel Denoising ----------------
-        vae_images: Optional[List[torch.Tensor]] = None
-        input_image_sizes: List[Tuple[int, int]] = []
         if cond_imgs is not None:
-            from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_dimensions
-
-            output_res = max(width, height)
-            vae_images = []
             pipe.vae.to(device)
-            for img in cond_imgs:
-                w0, h0 = img.size
-                rw, rh, _ = calculate_dimensions(output_res * output_res, w0 / h0)
-                input_image_sizes.append((rw, rh))
-                if img.mode not in ("RGB", "RGBA"):
-                    img = img.convert("RGB")
-                vae_images.append(pipe.image_processor.preprocess(img, rh, rw))
 
         gen_dev = "cpu" if device.type == "mps" else device
         generator = torch.Generator(device=gen_dev).manual_seed(int(seed))

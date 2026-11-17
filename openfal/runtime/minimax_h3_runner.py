@@ -381,7 +381,9 @@ class RealMiniMaxH3Runner:
         elif partition == "FL2VA":
             dit = find_matching_safetensors(self.weights_dir / "FL2VA", ["minimax_h3_fl2va"])
         elif partition == "H3-Image":
-            dit = find_matching_safetensors(self.weights_dir / "H3-Image", ["minimax_h3_image", "diffusion_models"])
+            dit = find_matching_safetensors(self.weights_dir / "H3-Image" / "diffusion_models", ["minimax_h3_image"])
+            if dit is None:
+                dit = find_matching_safetensors(self.weights_dir / "H3-Image", ["minimax_h3_image_pruned"])
 
         te = find_matching_safetensors(self.weights_dir / "text_encoder", ["qwen3vl_32b"])
         vvae = find_matching_safetensors(self.weights_dir / "vae", ["minimax_h3_video_vae"])

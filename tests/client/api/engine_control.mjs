@@ -25,10 +25,10 @@ console.log("\n1. /health:", health);
 
 const status = await getJson("/v1/engine/status");
 console.log("\n2. /v1/engine/status:", {
-  profile_id: status.profile_id,
+  profile_id: status.profile?.profile_id ?? status.profile_id,
   active_partition: status.active_partition,
-  vram_counter: status.tiers?.vram_counter,
-  ram_pantry: status.tiers?.ram_pantry,
+  vram_counter: status.tiers?.tier1_vram_counter,
+  ram_pantry: status.tiers?.tier2_ram_pantry,
 });
 
 const hw = await getJson("/v1/models/hardware-detect");

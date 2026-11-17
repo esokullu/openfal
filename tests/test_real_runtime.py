@@ -411,6 +411,15 @@ def test_diffusers_models_accept_converted_state_dicts():
     img_out = vae.decode(lat, return_dict=False)[0]
     assert img_out.shape[:3] == (1, 4, 1)
 
+    # Verify Qwen-Image-2.1 Edit 5D RGBA VAE condition image encode (RGB -> RGBA + unsqueeze(2))
+    from PIL import Image
+    from diffusers.image_processor import VaeImageProcessor
+
+    rgb_ref = Image.new("RGB", (32, 32), (120, 180, 220))
+    rgba_5d = VaeImageProcessor(vae_scale_factor=8).preprocess(rgb_ref.convert("RGBA"), height=32, width=32).unsqueeze(2)
+    assert rgba_5d.shape == (1, 4, 1, 32, 32)
+    assert vae.encode(rgba_5d).latent_dist.mode().shape[:3] == (1, 4, 1)
+
     # 3. Tiny WanTransformer3DModel with scaled FP8 blocks -> convert + swap + forward pass
     wan = diffusers.WanTransformer3DModel(
         patch_size=(1, 2, 2),
@@ -755,5 +764,26 @@ def test_real_weights_do_not_silently_fallback(tmp_path: Path, monkeypatch):
     with pytest.raises(RuntimeError, match="missing component"):
         runner.execute(
             endpoint_id="qwen/image-2.1/text-to-image",
+            payload={"prompt": "test"},
+        )
+
+    # Verify H3-Image DiT discovery resolves inside `H3-Image/diffusion_models/` cleanly (not VAE)
+    from openfal.runtime.minimax_h3_runner import RealMiniMaxH3Runner
+
+    h3_dit = cfg.weights_dir / "H3-Image" / "diffusion_models" / "minimax_h3_image_pruned_int8_convrot.safetensors"
+    h3_vae = cfg.weights_dir / "H3-Image" / "vae" / "minimax_h3_image_vae_fp16.safetensors"
+    h3_dit.parent.mkdir(parents=True, exist_ok=True)
+    h3_vae.parent.mkdir(parents=True, exist_ok=True)
+    safetensors_save_file({"video_patch_proj.weight": torch.zeros(2, 2)}, str(h3_dit))
+    safetensors_save_file({"encoder.conv_in.weight": torch.zeros(2, 2)}, str(h3_vae))
+
+    mm_runner = RealMiniMaxH3Runner(cfg, StrataMemoryHierarchy(cfg))
+    resolved = mm_runner._find_weights("H3-Image")
+    assert resolved["dit"] == h3_dit
+    assert resolved["image_vae"] == h3_vae
+    assert mm_runner.has_weights_for("H3-Image") is True
+    with pytest.raises(RuntimeError, match="missing:"):
+        runner.execute(
+            endpoint_id="minimax/h3/text-to-image",
             payload={"prompt": "test"},
         )
