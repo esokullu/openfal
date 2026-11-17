@@ -684,6 +684,7 @@ class RealMiniMaxH3Runner:
             image_vae.decoder.rope = _VaeRope(
                 int(ivae_cfg.get("decoder_attention_head_dim", 64) * ivae_cfg.get("decoder_rope_dim_ratio", 0.5)),
                 theta=ivae_cfg.get("decoder_rope_theta", 100.0),
+                num_axes=2,
             )
             _materialize_remaining_meta(image_vae, compute_dtype)
 

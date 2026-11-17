@@ -745,6 +745,29 @@ def test_diffusers_models_accept_converted_state_dicts():
     )
     assert torch.allclose(mapped_pdd_full["pdd_proj_out.4.weight"], torch.full((8, 16), 5.0))
 
+    # 10. Verify MiniMax-H3-Image ViT VAE 2-axis RoPE (`num_axes=2`, dim=32 from 64*0.5) & decode
+    from diffusers.models.autoencoders.autoencoder_kl_minimax_h3_image import (
+        MiniMaxH3ImageRotaryPosEmbed as _ImgVaeRope,
+    )
+
+    ivae_tiny = diffusers.AutoencoderKLMiniMaxH3Image(
+        block_out_channels=(8, 16, 16),
+        layers_per_block=1,
+        spatial_downsample_factors=(2, 2, 2),
+        temporal_downsample_factors=(1, 2, 2),
+        norm_num_groups=8,
+        latent_channels=8,
+        latents_mean=(0.0,) * 8,
+        latents_std=(1.0,) * 8,
+        decoder_num_layers=1,
+        decoder_num_attention_heads=1,
+        decoder_attention_head_dim=64,
+        decoder_rope_dim_ratio=0.5,
+    )
+    ivae_tiny.decoder.rope = _ImgVaeRope(int(64 * 0.5), theta=100.0, num_axes=2)
+    dec_ivae = ivae_tiny.decode(torch.randn(1, 8, 2, 2, dtype=torch.float32)).sample
+    assert dec_ivae.shape[0] == 1 and dec_ivae.shape[1] == 3
+
 
 def test_real_weights_do_not_silently_fallback(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("OPENFAL_SYNTHETIC_FALLBACK", raising=False)
