@@ -46,14 +46,23 @@ class StrataDiTBlockStreamer:
         total_blocks = profile.total_dit_blocks
         block_mb = profile.block_size_mb
         bw_gbps = max(10.0, profile.pcie_bandwidth_gbps)
+        is_unified = profile.offload_strategy.value == "unified_memory"
 
         if on_log:
-            on_log(
-                f"[Strata-DiT] Starting {num_steps}-step denoising on '{profile.display_name}' "
-                f"(Partition={self.memory.active_partition}, Quant={profile.quantization.value}, "
-                f"VRAM Counter={profile.resident_vram_blocks}/{total_blocks} blocks, "
-                f"RAM Pantry={total_blocks - profile.resident_vram_blocks} blocks)"
-            )
+            if is_unified:
+                on_log(
+                    f"[Strata-MPS] Starting {num_steps}-step Zero-Copy Unified Memory denoising on "
+                    f"'{profile.display_name}' (Partition={self.memory.active_partition}, "
+                    f"Quant={profile.quantization.value}, Wired MPS Blocks={profile.resident_vram_blocks}/{total_blocks}, "
+                    f"Zero-Copy Unified RAM={total_blocks - profile.resident_vram_blocks} blocks @ {bw_gbps:.0f} GB/s)"
+                )
+            else:
+                on_log(
+                    f"[Strata-DiT] Starting {num_steps}-step denoising on '{profile.display_name}' "
+                    f"(Partition={self.memory.active_partition}, Quant={profile.quantization.value}, "
+                    f"VRAM Counter={profile.resident_vram_blocks}/{total_blocks} blocks, "
+                    f"RAM Pantry={total_blocks - profile.resident_vram_blocks} blocks)"
+                )
 
         hidden = latents
         for step in range(1, num_steps + 1):
@@ -69,8 +78,12 @@ class StrataDiTBlockStreamer:
                         prefetch_id = lookahead
                         break
 
-                # Theoretical PCIe DMA transfer time (overlapped with compute)
-                dma_ms = 0.0 if blk_state.pinned_resident else round((block_mb / 1024.0) / bw_gbps * 1000.0, 2)
+                # Theoretical PCIe DMA or Unified Memory zero-copy remap time
+                dma_ms = (
+                    0.0
+                    if (blk_state.pinned_resident or is_unified)
+                    else round((block_mb / 1024.0) / bw_gbps * 1000.0, 2)
+                )
 
                 # Dual-GPU P2P latent relay at block 25 boundary (for 2x RTX 5060 Ti)
                 if profile.num_gpus > 1 and blk_id == profile.gpus[1].assigned_block_start and not p2p_relayed:

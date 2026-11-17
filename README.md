@@ -236,6 +236,9 @@ Below is the exact breakdown of **GPU VRAM (`Tier 1`)** and **System RAM (`Tier 
 | **`single_4090_24gb`** | **1x RTX 4090 / 3090 (24GB)** | `fp8_e4m3` | **15.5 GB / 24 GB** *(20 blocks + 2 DMA slots)* | **23.3 GB RAM** *(30 blocks + 4GB buffer)* | **36.2 GB RAM** *(all 50 blocks pinned)* | **32 GB** | **64 GB DDR4/5** |
 | **`single_16gb_lowvram`** | **1x RTX 5060 Ti / 4080 / 4060 Ti (16GB)** | `int4_awq` | **5.9 GB / 16 GB** *(12 blocks + 2 DMA slots)* | **16.6 GB RAM** *(38 blocks + 4GB buffer)* | **20.6 GB RAM** *(all 50 blocks pinned)* | **32 GB** | **48 GB DDR4/5** |
 | **`single_12gb_minimum`** | **1x RTX 4070 / 3060 / 5060 (12GB Entry)** | `int4_awq` | **3.9 GB / 12 GB** *(6 blocks + 2 DMA slots)* | **18.6 GB RAM** *(44 blocks + 4GB buffer)* | **20.6 GB RAM** *(all 50 blocks pinned)* | **32 GB** | **48 GB DDR4/5** |
+| **`apple_silicon_64gb`** | **Apple Silicon M1–M4 Max / Ultra (64GB+ Unified)** | `int4_awq` | **15.2 GB / 48 GB MPS** *(40 blocks wired in MPS)* | **7.3 GB Unified** *(10 blocks zero-copy)* | **20.6 GB Unified** *(all 50 blocks mapped)* | **64 GB** | **64–128 GB Unified** |
+| **`apple_silicon_36gb`** | **Apple Silicon M3/M4 Max or Pro (32–48GB Unified)** | `int4_awq` | **9.9 GB / 24 GB MPS** *(24 blocks wired in MPS)* | **12.6 GB Unified** *(26 blocks zero-copy)* | **20.6 GB Unified** *(all 50 blocks mapped)* | **32 GB** | **36–48 GB Unified** |
+| **`apple_silicon_24gb`** | **Apple Silicon M2–M4 Pro / Base (24GB Entry Mac)** | `int4_awq` | **6.6 GB / 16 GB MPS** *(14 blocks wired in MPS)* | **16.0 GB Unified** *(36 blocks zero-copy)* | **20.6 GB Unified** *(all 50 blocks mapped)* | **24 GB** | **24–32 GB Unified** |
 
 > **Why are there two System RAM columns ("Active Pinned RAM" vs. "Full-Partition Pinned RAM")?**
 > * **Active Pinned RAM (`24GB–32GB` System RAM machines):** Only the $50 - K$ offloaded DiT blocks sit in `cudaHostAlloc` RAM (`12.6 GB – 23.3 GB`), while the $K$ resident blocks live solely in GPU VRAM.
@@ -247,7 +250,7 @@ Below is the exact breakdown of **GPU VRAM (`Tier 1`)** and **System RAM (`Tier 
 
 | Component | Minimum Configuration (768P Video / 2K Image) | Recommended Configuration (1080P–4K + Fast Queue) |
 | :--- | :--- | :--- |
-| **GPU & VRAM** | **1x 12 GB VRAM** NVIDIA GPU (RTX 3060 12GB / 4070 / 5060) using `single_12gb_minimum` (`int4_awq`) | **2x RTX 5060 Ti (24GB–32GB total)** or **1x RTX 5090 (32GB)** or **1x RTX 4090 (24GB)** using `fp8_e4m3` |
+| **GPU & VRAM** | **1x 12 GB VRAM** NVIDIA GPU (`single_12gb_minimum`) **or 24 GB Apple Silicon Mac** (`apple_silicon_24gb`, `int4_awq`) | **2x RTX 5060 Ti (24–32GB)**, **1x RTX 5090 (32GB)**, **1x RTX 4090 (24GB)**, **or 48–64GB+ Apple M-Max/Ultra** |
 | **System RAM** | **24 GB – 32 GB RAM** (`~12.6–18.6 GB` pinned for `INT4_AWQ` Pantry) | **64 GB Dual-Channel DDR5 RAM** (`~36.2 GB` pinned for `FP8_E4M3` Pantry) |
 | **PCIe Bus** | PCIe 4.0 x8 / x16 (`~14–28 GB/s`) | PCIe 5.0 x8 / x16 (`~30–60 GB/s` — hides 100% of FP8 block DMA behind compute) |
 | **NVMe SSD (`Storeroom`)** | **45 GB free space** (1 DiT partition + `Qwen3-VL` + `VAE` in `INT4_AWQ`) | **120 GB+ PCIe 4.0/5.0 NVMe SSD** (All 3 partitions `FL2VA` + `Ref2VA` + `H3-Image` in `FP8_E4M3`) |
@@ -854,6 +857,14 @@ There are **two differences** between those two commands: **which DiT partitions
    openfal download --component fl2va --pack-only --quant int4_awq --cleanup-raw
    ```
 4. **Custom Hugging Face Repo Override (`--repo-id`):** Point any component at any mirror with `--repo-id <org/repo>`.
+
+---
+
+### Q10: Does `openfal` work on macOS (Apple Silicon M1/M2/M3/M4), and what are the minimum Unified Memory requirements?
+**Yes!** On Apple Silicon (`Darwin arm64`), `openfal detect` and `openfal serve` automatically detect the Apple GPU (`sysctl -n machdep.cpu.brand_string` + PyTorch `mps` backend) and select one of the three **Zero-Copy Unified Memory (`OffloadStrategy.UNIFIED_MEMORY`)** profiles:
+* **`apple_silicon_24gb` (Minimum — 24 GB Unified Memory, e.g., M2/M3/M4 Pro):** Ideal for **7B `Qwen-Image-2.1-Turbo`** (~13.3 GB W4A8) and **`Wan 2.2` INT4**.
+* **`apple_silicon_36gb` (Mid-Tier — 32 GB – 48 GB Unified Memory, e.g., M3/M4 Max):** Runs **`Wan 2.2 MoE` (`27B-A14B`)**, **`Wan 2.2 Animate 14B`**, and **`Qwen-Image-2.1`** comfortably in Unified Memory.
+* **`apple_silicon_64gb` (Recommended — 64 GB – 128 GB Unified Memory, e.g., M1–M4 Max / Ultra):** Runs all models including **33B `MiniMax-H3` (`minimax-omni-compact` / `minimax-only`)** with 40/50 blocks wired in the Metal MPS working set and `torch.mps.empty_cache()` wired into `/v1/engine/sleep`.
 
 ---
 

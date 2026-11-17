@@ -307,6 +307,102 @@ HARDWARE_PROFILES: Dict[str, HardwareProfile] = {
             ),
         ],
     ),
+    "apple_silicon_64gb": HardwareProfile(
+        profile_id="apple_silicon_64gb",
+        display_name="Apple Silicon M1/M2/M3/M4 Max or Ultra (64GB+ Unified Memory)",
+        description=(
+            "Zero-copy Unified Memory MPS profile for 64GB+ Macs. Keeps 40 INT4-AWQ DiT blocks "
+            "wired in active Metal MPS working set and maps the remaining 10 blocks via zero-copy Unified RAM."
+        ),
+        num_gpus=1,
+        total_vram_gb=48.0,
+        min_system_ram_gb=64,
+        recommended_system_ram_gb=64,
+        quantization=QuantizationMode.INT4_AWQ,
+        offload_strategy=OffloadStrategy.UNIFIED_MEMORY,
+        total_dit_blocks=50,
+        resident_vram_blocks=40,
+        ping_pong_prefetch_slots=2,
+        qwen3_vl_stream_layers=12,
+        vae_tiled_decode=True,
+        pcie_bandwidth_gbps=400.0,
+        gpus=[
+            GPUDeviceSpec(
+                device_id=0,
+                name="Apple Silicon GPU (48GB MPS Working Set / 64GB+ Unified)",
+                vram_gb=48.0,
+                pcie_gen=5,
+                pcie_lanes=16,
+                assigned_block_start=0,
+                assigned_block_end=50,
+                resident_blocks=40,
+            ),
+        ],
+    ),
+    "apple_silicon_36gb": HardwareProfile(
+        profile_id="apple_silicon_36gb",
+        display_name="Apple Silicon M3/M4 Max or Pro (32GB–48GB Unified Memory)",
+        description=(
+            "Zero-copy Unified Memory MPS profile for 32GB/36GB/48GB Macs. Keeps 24 INT4-AWQ DiT "
+            "blocks in active Metal MPS working set and streams 26 blocks via zero-copy Unified RAM."
+        ),
+        num_gpus=1,
+        total_vram_gb=24.0,
+        min_system_ram_gb=32,
+        recommended_system_ram_gb=36,
+        quantization=QuantizationMode.INT4_AWQ,
+        offload_strategy=OffloadStrategy.UNIFIED_MEMORY,
+        total_dit_blocks=50,
+        resident_vram_blocks=24,
+        ping_pong_prefetch_slots=2,
+        qwen3_vl_stream_layers=8,
+        vae_tiled_decode=True,
+        pcie_bandwidth_gbps=300.0,
+        gpus=[
+            GPUDeviceSpec(
+                device_id=0,
+                name="Apple Silicon GPU (24GB MPS Working Set / 36GB Unified)",
+                vram_gb=24.0,
+                pcie_gen=5,
+                pcie_lanes=16,
+                assigned_block_start=0,
+                assigned_block_end=50,
+                resident_blocks=24,
+            ),
+        ],
+    ),
+    "apple_silicon_24gb": HardwareProfile(
+        profile_id="apple_silicon_24gb",
+        display_name="Apple Silicon M2/M3/M4 Pro or Base (24GB Unified Memory Minimum)",
+        description=(
+            "Entry Apple Silicon Unified Memory MPS profile for 24GB Macs (ideal for 7B Qwen-Image-2.1 "
+            "and INT4 Wan 2.2). Keeps 14 INT4-AWQ blocks in MPS working set."
+        ),
+        num_gpus=1,
+        total_vram_gb=16.0,
+        min_system_ram_gb=24,
+        recommended_system_ram_gb=24,
+        quantization=QuantizationMode.INT4_AWQ,
+        offload_strategy=OffloadStrategy.UNIFIED_MEMORY,
+        total_dit_blocks=50,
+        resident_vram_blocks=14,
+        ping_pong_prefetch_slots=2,
+        qwen3_vl_stream_layers=4,
+        vae_tiled_decode=True,
+        pcie_bandwidth_gbps=200.0,
+        gpus=[
+            GPUDeviceSpec(
+                device_id=0,
+                name="Apple Silicon GPU (16GB MPS Working Set / 24GB Unified)",
+                vram_gb=16.0,
+                pcie_gen=5,
+                pcie_lanes=16,
+                assigned_block_start=0,
+                assigned_block_end=50,
+                resident_blocks=14,
+            ),
+        ],
+    ),
 }
 
 

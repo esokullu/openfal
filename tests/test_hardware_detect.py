@@ -150,6 +150,46 @@ def test_single_12gb_and_cuda_visible_devices_mask() -> None:
     assert masked["recommended_cuda_visible_devices"] == "1"
 
 
+def test_apple_silicon_unified_memory_profile_selection() -> None:
+    mac_64 = [
+        {
+            "index": 0,
+            "name": "Apple M3 Max (Unified Memory MPS)",
+            "vram_gb": 48.0,
+            "unified_memory": True,
+            "total_unified_gb": 64.0,
+        }
+    ]
+    rec64 = recommend_hardware_profile(mac_64)
+    assert rec64["recommended_profile_id"] == "apple_silicon_64gb"
+    assert rec64["recommended_quantization"] == "int4_awq"
+    assert rec64["recommended_cuda_visible_devices"] is None
+
+    mac_36 = [
+        {
+            "index": 0,
+            "name": "Apple M3 Max (Unified Memory MPS)",
+            "vram_gb": 27.0,
+            "unified_memory": True,
+            "total_unified_gb": 36.0,
+        }
+    ]
+    rec36 = recommend_hardware_profile(mac_36)
+    assert rec36["recommended_profile_id"] == "apple_silicon_36gb"
+
+    mac_24 = [
+        {
+            "index": 0,
+            "name": "Apple M4 Pro (Unified Memory MPS)",
+            "vram_gb": 18.0,
+            "unified_memory": True,
+            "total_unified_gb": 24.0,
+        }
+    ]
+    rec24 = recommend_hardware_profile(mac_24)
+    assert rec24["recommended_profile_id"] == "apple_silicon_24gb"
+
+
 def test_cleanup_incomplete_and_component_verification(tmp_path: Path, monkeypatch) -> None:
     weights_dir = tmp_path / "weights"
     comp_dir = weights_dir / "Wan2.2-T2V-A14B"

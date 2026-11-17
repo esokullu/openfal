@@ -213,11 +213,24 @@ class StrataMemoryHierarchy:
             for blk in self.blocks:
                 blk.tier = TierName.VRAM_COUNTER if (blk.pinned_resident and not self.sleeping) else TierName.RAM_PANTRY
 
+    @staticmethod
+    def detect_compute_backend() -> str:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                return "cuda"
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                return "mps"
+        except Exception:
+            pass
+        return "cpu"
+
     def sleep(self) -> dict:
         """
         Strata signature feature: Evict all GPU VRAM Counter weights back to Pinned Host RAM
-        so other local workflows (e.g. ComfyUI, games, local LLMs) can use 100% of VRAM
-        without terminating the openfal server.
+        (or release wired Metal MPS Unified Memory back to macOS) so other local workflows
+        can use 100% of GPU memory without terminating the openfal server.
         """
         with self._lock:
             self.sleeping = True
@@ -226,6 +239,15 @@ class StrataMemoryHierarchy:
             self.vae_vram_mb = 0.0
             for blk in self.blocks:
                 blk.tier = TierName.RAM_PANTRY
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                elif hasattr(torch, "mps") and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
+            except Exception:
+                pass
             return self.get_telemetry()
 
     def wake(self) -> dict:
@@ -273,6 +295,7 @@ class StrataMemoryHierarchy:
 
             return {
                 "engine": "openfal-strata-dit",
+                "compute_backend": self.detect_compute_backend(),
                 "backend_model": "MiniMaxAI/MiniMax-H3 (33B Single-Stream DiT + Qwen3-VL-32B + Hybrid CNN-ViT VAE)",
                 "active_partition": self.active_partition,
                 "active_stage": self.active_stage,

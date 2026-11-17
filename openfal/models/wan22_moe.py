@@ -82,9 +82,16 @@ class Wan22MoEDiT:
 
         midpoint_step = max(1, num_steps // 2)
         expert_size_gb = 14.0 if profile.quantization.value == "fp8_e4m3" else 7.2
+        is_unified = profile.offload_strategy.value == "unified_memory"
 
         if on_log:
-            if profile.num_gpus >= 2:
+            if is_unified:
+                on_log(
+                    f"[Wan2.2-MoE-MPS] Zero-Copy Unified Memory Mode on '{profile.display_name}': "
+                    f"14B High-Noise & Low-Noise Experts mapped in Unified RAM ({expert_size_gb}GB/expert) "
+                    f"-> zero PCIe transfer overhead!"
+                )
+            elif profile.num_gpus >= 2:
                 on_log(
                     f"[Wan2.2-MoE] Dual-GPU Zero-Stream Mode on '{profile.display_name}': "
                     f"GPU 0 holds High-Noise Expert (14B, {expert_size_gb}GB) | "
@@ -105,9 +112,14 @@ class Wan22MoEDiT:
             expert_name = "High-Noise Expert (Layout & Motion)" if is_high_noise else "Low-Noise Expert (Face & Detail)"
             active_gpu = 0 if (is_high_noise or profile.num_gpus == 1) else 1
 
-            # At midpoint transition, either hop P2P (Dual GPU) or swap Expert 0 -> Expert 1 from Pantry
+            # At midpoint transition, either hop P2P (Dual GPU), zero-copy remap (MPS), or swap Expert 0 -> Expert 1
             if step == midpoint_step + 1 and on_log:
-                if profile.num_gpus >= 2:
+                if is_unified:
+                    on_log(
+                        f"[Wan2.2-MoE-MPS] Step {step}/{num_steps}: Zero-copy Unified Memory pointer switch "
+                        f"from High-Noise 14B -> Low-Noise 14B Expert in 0.05ms"
+                    )
+                elif profile.num_gpus >= 2:
                     on_log(
                         f"[Wan2.2-MoE-P2P] Step {step}/{num_steps}: Handing off latents from "
                         f"GPU 0 (High-Noise 14B) -> GPU 1 (Low-Noise 14B) in 0.4ms via cudaMemcpyPeerAsync"

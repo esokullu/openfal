@@ -408,6 +408,42 @@ def _detect_system_ram_gb() -> float:
     return 64.0
 
 
+def _detect_apple_silicon_gpu(sys_ram_gb: float) -> Optional[dict]:
+    """Detect Apple Silicon Unified Memory GPU (Metal / PyTorch MPS) on macOS arm64."""
+    if platform.system() != "Darwin" or platform.machine() != "arm64":
+        return None
+    chip_name = "Apple Silicon"
+    try:
+        brand = subprocess.check_output(
+            ["sysctl", "-n", "machdep.cpu.brand_string"],
+            text=True,
+            timeout=2.0,
+        ).strip()
+        if brand:
+            chip_name = brand
+    except Exception:
+        pass
+
+    mps_available = False
+    try:
+        import torch
+
+        mps_available = bool(hasattr(torch.backends, "mps") and torch.backends.mps.is_available())
+    except Exception:
+        pass
+
+    # macOS Metal allows ~75% of Unified Memory as active wired GPU working set
+    allocatable_gb = round(sys_ram_gb * 0.75, 1)
+    suffix = "Unified Memory MPS" if mps_available else "Unified Memory"
+    return {
+        "index": 0,
+        "name": f"{chip_name} ({suffix})",
+        "vram_gb": allocatable_gb,
+        "unified_memory": True,
+        "total_unified_gb": sys_ram_gb,
+    }
+
+
 def recommend_hardware_profile(
     detected_gpus: List[dict],
     cuda_visible_devices: Optional[str] = None,
@@ -488,8 +524,18 @@ def recommend_hardware_profile(
             rec_profile = "single_12gb_minimum"
             rec_quant = "int4_awq"
     elif compute_num_gpus == 1:
-        vram = selected_gpus[0]["vram_gb"]
-        if vram >= 28.0:
+        g0 = selected_gpus[0]
+        vram = g0["vram_gb"]
+        if g0.get("unified_memory"):
+            unified_gb = float(g0.get("total_unified_gb") or round(vram / 0.75, 1))
+            if unified_gb >= 56.0:
+                rec_profile = "apple_silicon_64gb"
+            elif unified_gb >= 30.0:
+                rec_profile = "apple_silicon_36gb"
+            else:
+                rec_profile = "apple_silicon_24gb"
+            rec_quant = "int4_awq"
+        elif vram >= 28.0:
             rec_profile = "single_5090_32gb"
             rec_quant = "fp8_e4m3"
         elif vram >= 21.0:
@@ -502,11 +548,16 @@ def recommend_hardware_profile(
             rec_profile = "single_12gb_minimum"
             rec_quant = "int4_awq"
     else:
-        # No CUDA GPUs detected (e.g. macOS / CPU dev host)
+        # No CUDA or Apple Silicon GPUs detected (CPU dev host)
         rec_profile = "dual_5060ti_32gb"
         rec_quant = "fp8_e4m3"
 
-    rec_cuda_visible = ",".join(str(g["index"]) for g in selected_gpus) if selected_gpus else None
+    has_unified_only = compute_num_gpus == 1 and bool(selected_gpus[0].get("unified_memory"))
+    rec_cuda_visible = (
+        None
+        if (not selected_gpus or has_unified_only)
+        else ",".join(str(g["index"]) for g in selected_gpus)
+    )
 
     return {
         "selected_compute_gpus": selected_gpus,
@@ -577,6 +628,11 @@ class StrataModelManager:
         free_disk_gb = round(disk_usage.free / (1024**3), 1)
         total_disk_gb = round(disk_usage.total / (1024**3), 1)
         sys_ram_gb = _detect_system_ram_gb()
+
+        if not gpus:
+            apple_gpu = _detect_apple_silicon_gpu(sys_ram_gb)
+            if apple_gpu is not None:
+                gpus.append(apple_gpu)
 
         rec = recommend_hardware_profile(
             detected_gpus=gpus,
