@@ -327,7 +327,9 @@ def test_minimax_h3_pruned_converters_and_table():
             "decoder.transformer_blocks.0.attn.to_qkv.weight": torch.ones(12, 8),
             "decoder.transformer_blocks.0.ff.w1.weight": torch.cat([torch.ones(6, 8), torch.zeros(6, 8)], dim=0),
             "decoder.mask_token": torch.zeros(1, 1, 8),
-        }
+        },
+        num_attention_heads=2,
+        attention_head_dim=2,
     )
     assert "encoder.down_blocks.1.resnets.0.conv_shortcut.weight" in vvae_sd
     assert "decoder.proj_in.weight" in vvae_sd
@@ -631,7 +633,7 @@ def test_diffusers_models_accept_converted_state_dicts():
     assert mp_stub.proj_in.weight.dtype == torch.float32
     assert mp_stub.norm.weight.dtype == torch.bfloat16
 
-    # 8. Verify MiniMax-H3 Video VAE INT8 ConvRot fused `to_qkv.weight_scale` & `ff.w1.weight_scale` decode
+    # 8. Verify MiniMax-H3 Video VAE INT8 ConvRot head-interleaved `to_qkv` & `ff.w1` decode
     from openfal.runtime.minimax_h3_runner import convert_minimax_h3_video_vae_state_dict
 
     vvae_tiny = diffusers.AutoencoderKLMiniMaxH3(
@@ -653,15 +655,27 @@ def test_diffusers_models_accept_converted_state_dicts():
         if k.startswith("decoder.transformer_blocks.0."):
             continue
         raw_vvae[k] = val.clone()
+
+    q_ref = torch.full((2, 8, dim_v), 1, dtype=torch.int8)
+    k_ref = torch.full((2, 8, dim_v), 2, dtype=torch.int8)
+    v_ref = torch.full((2, 8, dim_v), 3, dtype=torch.int8)
+    qkv_interleaved_w = torch.stack([q_ref, k_ref, v_ref], dim=1).reshape(3 * dim_v, dim_v)
+    qkv_interleaved_s = torch.stack(
+        [torch.full((2, 8, 1), 0.01), torch.full((2, 8, 1), 0.02), torch.full((2, 8, 1), 0.03)], dim=1
+    ).reshape(3 * dim_v, 1)
+    qkv_interleaved_b = torch.stack(
+        [torch.full((2, 8), 1.0), torch.full((2, 8), 2.0), torch.full((2, 8), 3.0)], dim=1
+    ).reshape(3 * dim_v)
+
     raw_vvae.update(
         {
             "decoder.transformer_blocks.0.norm1.weight": torch.ones(dim_v),
             "decoder.transformer_blocks.0.norm2.weight": torch.ones(dim_v),
             "decoder.transformer_blocks.0.scale1": torch.ones(dim_v),
             "decoder.transformer_blocks.0.scale2": torch.ones(dim_v),
-            "decoder.transformer_blocks.0.attn.to_qkv.weight": torch.randint(-5, 5, (3 * dim_v, dim_v), dtype=torch.int8),
-            "decoder.transformer_blocks.0.attn.to_qkv.weight_scale": torch.full((3 * dim_v, 1), 0.01),
-            "decoder.transformer_blocks.0.attn.to_qkv.bias": torch.zeros(3 * dim_v),
+            "decoder.transformer_blocks.0.attn.to_qkv.weight": qkv_interleaved_w,
+            "decoder.transformer_blocks.0.attn.to_qkv.weight_scale": qkv_interleaved_s,
+            "decoder.transformer_blocks.0.attn.to_qkv.bias": qkv_interleaved_b,
             "decoder.transformer_blocks.0.attn.to_out.weight": torch.randint(-5, 5, (dim_v, dim_v), dtype=torch.int8),
             "decoder.transformer_blocks.0.attn.to_out.weight_scale": torch.full((dim_v, 1), 0.01),
             "decoder.transformer_blocks.0.attn.to_out.bias": torch.zeros(dim_v),
@@ -675,8 +689,19 @@ def test_diffusers_models_accept_converted_state_dicts():
             "decoder.transformer_blocks.0.ff.w2.bias": torch.zeros(dim_v),
         }
     )
-    mapped_vvae = convert_minimax_h3_video_vae_state_dict(raw_vvae)
-    assert mapped_vvae["decoder.transformer_blocks.0.attn.to_q.weight_scale"].shape == (dim_v, 1)
+    mapped_vvae = convert_minimax_h3_video_vae_state_dict(
+        raw_vvae, num_attention_heads=2, attention_head_dim=8
+    )
+    assert torch.equal(mapped_vvae["decoder.transformer_blocks.0.attn.to_q.weight"], q_ref.reshape(dim_v, dim_v))
+    assert torch.equal(mapped_vvae["decoder.transformer_blocks.0.attn.to_k.weight"], k_ref.reshape(dim_v, dim_v))
+    assert torch.equal(mapped_vvae["decoder.transformer_blocks.0.attn.to_v.weight"], v_ref.reshape(dim_v, dim_v))
+    assert torch.allclose(
+        mapped_vvae["decoder.transformer_blocks.0.attn.to_q.weight_scale"], torch.full((dim_v, 1), 0.01)
+    )
+    assert torch.allclose(
+        mapped_vvae["decoder.transformer_blocks.0.attn.to_k.weight_scale"], torch.full((dim_v, 1), 0.02)
+    )
+    assert torch.allclose(mapped_vvae["decoder.transformer_blocks.0.attn.to_v.bias"], torch.full((dim_v,), 3.0))
     assert torch.allclose(
         mapped_vvae["decoder.transformer_blocks.0.ff.net.0.proj.weight_scale"][: 4 * dim_v],
         torch.full((4 * dim_v, 1), 0.05),
@@ -686,6 +711,30 @@ def test_diffusers_models_accept_converted_state_dicts():
     assert mv_unexp == []
     dec_vvae = vvae_tiny.decode(torch.randn(1, 8, 5, 4, 4, dtype=torch.float32)).sample
     assert dec_vvae.shape[0] == 1 and dec_vvae.shape[1] == 3
+
+    # 9. Verify MiniMax-H3-Image Comfy PDD delta-encoded output heads (`base + delta_i`)
+    pdd_base_w = torch.full((8, 16), 2.0)
+    pdd_deltas_w = [torch.full((8, 16), 0.05 * i) for i in range(1, 6)]
+    pdd_base_b = torch.full((8,), 1.0)
+    pdd_deltas_b = [torch.full((8,), 0.02 * i) for i in range(1, 6)]
+    mapped_pdd, _ = convert_minimax_h3_dit_state_dict(
+        {
+            "final_layer.video_out.weight": torch.cat([pdd_base_w, *pdd_deltas_w], dim=0),
+            "final_layer.video_out.bias": torch.cat([pdd_base_b, *pdd_deltas_b], dim=0),
+        },
+        num_pdd_heads=6,
+    )
+    assert torch.allclose(mapped_pdd["pdd_proj_out.0.weight"], pdd_base_w)
+    assert torch.allclose(mapped_pdd["pdd_proj_out.3.weight"], pdd_base_w + pdd_deltas_w[2])
+    assert torch.allclose(mapped_pdd["pdd_proj_out.5.bias"], pdd_base_b + pdd_deltas_b[4])
+
+    # Standalone (non-delta) PDD heads remain unmodified when head norms match base
+    full_heads_w = torch.cat([torch.full((8, 16), float(i + 1)) for i in range(6)], dim=0)
+    mapped_pdd_full, _ = convert_minimax_h3_dit_state_dict(
+        {"final_layer.video_out.weight": full_heads_w},
+        num_pdd_heads=6,
+    )
+    assert torch.allclose(mapped_pdd_full["pdd_proj_out.4.weight"], torch.full((8, 16), 5.0))
 
 
 def test_real_weights_do_not_silently_fallback(tmp_path: Path, monkeypatch):

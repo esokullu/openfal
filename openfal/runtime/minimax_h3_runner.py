@@ -92,6 +92,80 @@ class _PrunedAdaLayerNormOut(nn.Module):
         return hidden_states * (1.0 + scale) + shift
 
 
+def _swap_swiglu_gate_value(tensor: torch.Tensor) -> torch.Tensor:
+    """Reorder fused SwiGLU projections between Comfy `[gate; value]` and Diffusers `[value; gate]`."""
+    gate, val = torch.chunk(tensor, 2, dim=0)
+    return torch.cat([val, gate], dim=0).contiguous()
+
+
+def _split_qkv_tensor(
+    tensor: torch.Tensor,
+    qkv_layout: str = "stacked",
+    num_attention_heads: Optional[int] = None,
+    attention_head_dim: int = 64,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Split fused QKV tensors (`stacked` [Q;K;V] or head-`interleaved` [H,3,D,...]) into `(to_q, to_k, to_v)`."""
+    if qkv_layout == "interleaved":
+        rows = tensor.shape[0]
+        if (
+            num_attention_heads is not None
+            and attention_head_dim > 0
+            and rows == num_attention_heads * 3 * attention_head_dim
+        ):
+            n_heads, head_dim = num_attention_heads, attention_head_dim
+        elif attention_head_dim > 0 and rows % (3 * attention_head_dim) == 0:
+            n_heads, head_dim = rows // (3 * attention_head_dim), attention_head_dim
+        elif num_attention_heads is not None and num_attention_heads > 0 and rows % (3 * num_attention_heads) == 0:
+            n_heads, head_dim = num_attention_heads, rows // (3 * num_attention_heads)
+        else:
+            raise ValueError(
+                f"Cannot split interleaved QKV tensor of shape {tuple(tensor.shape)} "
+                f"with num_attention_heads={num_attention_heads}, attention_head_dim={attention_head_dim}"
+            )
+        unflat = tensor.unflatten(0, (n_heads, 3, head_dim))
+        q, k, v = [w.flatten(0, 1).contiguous() for w in unflat.unbind(dim=1)]
+        return q, k, v
+
+    q, k, v = torch.chunk(tensor, 3, dim=0)
+    return q.contiguous(), k.contiguous(), v.contiguous()
+
+
+def _split_qkv_and_swap_swiglu_in_place(
+    out: Dict[str, torch.Tensor],
+    qkv_token: str,
+    qkv_layout: str,
+    num_attention_heads: Optional[int],
+    attention_head_dim: int,
+) -> None:
+    """In-place reorder fused `.ff.net.0.proj.*` and split fused QKV attention tensors + quant scales."""
+    fc1_rows = {k.removesuffix(".weight"): v.shape[0] for k, v in out.items() if k.endswith(".ff.net.0.proj.weight")}
+    qkv_weight_suffix = f"{qkv_token}weight"
+    qkv_base_trim = len(".weight")
+    qkv_rows = {k[:-qkv_base_trim]: v.shape[0] for k, v in out.items() if k.endswith(qkv_weight_suffix)}
+
+    for k in list(out.keys()):
+        if k.endswith(".ff.net.0.proj.weight") or k.endswith(".ff.net.0.proj.bias"):
+            out[k] = _swap_swiglu_gate_value(out[k])
+        elif k.endswith(".ff.net.0.proj.weight_scale") or k.endswith(".ff.net.0.proj.scale_weight"):
+            base = k.rsplit(".", 1)[0]
+            rows = fc1_rows.get(base)
+            if out[k].ndim >= 1 and rows and out[k].shape[0] == rows:
+                out[k] = _swap_swiglu_gate_value(out[k])
+        elif qkv_token in k:
+            val = out.pop(k)
+            prefix, suffix = k.split(qkv_token, 1)
+            qkv_base = f"{prefix}{qkv_token[:-1]}"
+            if suffix in ("weight", "bias"):
+                q, kk, vv = _split_qkv_tensor(val, qkv_layout, num_attention_heads, attention_head_dim)
+            elif suffix in ("weight_scale", "scale_weight") and val.ndim >= 1 and val.shape[0] == qkv_rows.get(qkv_base):
+                q, kk, vv = _split_qkv_tensor(val, qkv_layout, num_attention_heads, attention_head_dim)
+            else:
+                q, kk, vv = val, val.clone(), val.clone()
+            out[f"{prefix}.attn.to_q.{suffix}"] = q
+            out[f"{prefix}.attn.to_k.{suffix}"] = kk
+            out[f"{prefix}.attn.to_v.{suffix}"] = vv
+
+
 def convert_minimax_h3_dit_state_dict(
     raw_sd: Dict[str, torch.Tensor],
     qkv_layout: str = "stacked",
@@ -135,60 +209,52 @@ def convert_minimax_h3_dit_state_dict(
             nk = nk.replace(old, new)
         out[nk] = v
 
-    # Split stacked PDD output heads (`proj_out.{weight,bias}` of shape [6*96, ...]) for MiniMax-H3-Image
+    # Split Comfy `final_layer.video_out` (`[num_pdd_heads * 96, ...]`) for MiniMax-H3-Image.
+    # Comfy stores `chunk[0]` as head 0 and `chunks[1..H-1]` as residual deltas `(head_i - head_0)`.
     if num_pdd_heads > 0:
+        delta_mode: Optional[bool] = None
+        if "proj_out.weight" in out and out["proj_out.weight"].shape[0] % num_pdd_heads == 0:
+            w_chunks = torch.chunk(out["proj_out.weight"], num_pdd_heads, dim=0)
+            base_norm = w_chunks[0].float().norm()
+            delta_mode = len(w_chunks) > 1 and base_norm > 0 and all(
+                c.float().norm() < 0.5 * base_norm for c in w_chunks[1:]
+            )
         for suffix in ("weight", "bias"):
             pk = f"proj_out.{suffix}"
             if pk in out and out[pk].shape[0] % num_pdd_heads == 0:
                 chunks = torch.chunk(out.pop(pk), num_pdd_heads, dim=0)
-                for h_idx, chunk in enumerate(chunks):
-                    out[f"pdd_proj_out.{h_idx}.{suffix}"] = chunk.contiguous()
+                base = chunks[0]
+                is_delta = delta_mode
+                if is_delta is None and len(chunks) > 1 and base.float().norm() > 0:
+                    is_delta = all(c.float().norm() < 0.5 * base.float().norm() for c in chunks[1:])
+                out[f"pdd_proj_out.0.{suffix}"] = base.contiguous()
+                for h_idx in range(1, len(chunks)):
+                    head_tensor = (
+                        (base.float() + chunks[h_idx].float()).to(base.dtype) if is_delta else chunks[h_idx]
+                    )
+                    out[f"pdd_proj_out.{h_idx}.{suffix}"] = head_tensor.contiguous()
 
-    # Track fc1 / qkv weight row counts for accurate per-row scale splitting
-    fc1_rows = {k.removesuffix(".weight"): v.shape[0] for k, v in out.items() if k.endswith(".ff.net.0.proj.weight")}
-    qkv_rows = {k.removesuffix(".weight"): v.shape[0] for k, v in out.items() if k.endswith(".attn.qkv_proj.weight")}
-
-    def _swap_gate_value(tensor: torch.Tensor) -> torch.Tensor:
-        gate, val = torch.chunk(tensor, 2, dim=0)
-        return torch.cat([val, gate], dim=0).contiguous()
-
-    def _split_qkv(tensor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        if qkv_layout == "interleaved":
-            unflat = tensor.unflatten(0, (num_attention_heads, 3, attention_head_dim))
-            q, k, v = [w.flatten(0, 1).contiguous() for w in unflat.unbind(dim=1)]
-            return q, k, v
-        q, k, v = torch.chunk(tensor, 3, dim=0)
-        return q.contiguous(), k.contiguous(), v.contiguous()
-
-    # Transform fused SwiGLU ([gate; value] -> [value; gate]) and QKV
-    for k in list(out.keys()):
-        if k.endswith(".ff.net.0.proj.weight") or k.endswith(".ff.net.0.proj.bias"):
-            out[k] = _swap_gate_value(out[k])
-        elif k.endswith(".ff.net.0.proj.weight_scale") or k.endswith(".ff.net.0.proj.scale_weight"):
-            base = k.rsplit(".", 1)[0]
-            rows = fc1_rows.get(base)
-            if out[k].ndim >= 1 and rows and out[k].shape[0] == rows:
-                out[k] = _swap_gate_value(out[k])
-        elif ".attn.qkv_proj." in k:
-            val = out.pop(k)
-            base, suffix = k.split(".attn.qkv_proj.", 1)
-            if suffix in ("weight", "bias"):
-                q, kk, vv = _split_qkv(val)
-            elif suffix in ("weight_scale", "scale_weight") and val.ndim >= 1 and val.shape[0] == qkv_rows.get(
-                f"{base}.attn.qkv_proj"
-            ):
-                q, kk, vv = _split_qkv(val)
-            else:
-                q, kk, vv = val, val.clone(), val.clone()
-            out[f"{base}.attn.to_q.{suffix}"] = q
-            out[f"{base}.attn.to_k.{suffix}"] = kk
-            out[f"{base}.attn.to_v.{suffix}"] = vv
-
+    _split_qkv_and_swap_swiglu_in_place(
+        out,
+        qkv_token=".attn.qkv_proj.",
+        qkv_layout=qkv_layout,
+        num_attention_heads=num_attention_heads,
+        attention_head_dim=attention_head_dim,
+    )
     return out, adaln_t_table
 
 
-def convert_minimax_h3_video_vae_state_dict(raw_sd: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    """Convert `Comfy-Org/MiniMax-H3 :: minimax_h3_video_vae_*` keys -> `diffusers.AutoencoderKLMiniMaxH3`."""
+def convert_minimax_h3_video_vae_state_dict(
+    raw_sd: Dict[str, torch.Tensor],
+    num_attention_heads: Optional[int] = None,
+    attention_head_dim: int = 64,
+    qkv_layout: str = "interleaved",
+) -> Dict[str, torch.Tensor]:
+    """
+    Convert `Comfy-Org/MiniMax-H3` Video VAE or `Comfy-Org/MiniMax-H3-Image` Image VAE keys
+    to Diffusers `AutoencoderKLMiniMaxH3` / `AutoencoderKLMiniMaxH3Image`, splitting fused
+    head-interleaved `to_qkv` (`(num_heads, 3, head_dim)`) and reordering SwiGLU `[value; gate]`.
+    """
     out: Dict[str, torch.Tensor] = {}
     down_blk_re = re.compile(r"^encoder\.down\.(\d+)\.block\.(\d+)\.(.+)$")
     down_samp_re = re.compile(r"^encoder\.down\.(\d+)\.downsample\.(.+)$")
@@ -218,38 +284,13 @@ def convert_minimax_h3_video_vae_state_dict(raw_sd: Dict[str, torch.Tensor]) -> 
             nk = k
         out[nk] = v
 
-    # Track w1 / to_qkv weight row counts for accurate per-row scale & ConvRot metadata splitting
-    w1_rows = {k.removesuffix(".weight"): v.shape[0] for k, v in out.items() if k.endswith(".ff.net.0.proj.weight")}
-    qkv_rows = {k.removesuffix(".weight"): v.shape[0] for k, v in out.items() if k.endswith(".attn.to_qkv.weight")}
-
-    def _swap_gate_value(tensor: torch.Tensor) -> torch.Tensor:
-        gate, val = torch.chunk(tensor, 2, dim=0)
-        return torch.cat([val, gate], dim=0).contiguous()
-
-    # Split ViT decoder fused to_qkv -> to_q/to_k/to_v and swap gated w1 -> [value; gate]
-    for k in list(out.keys()):
-        if k.endswith(".ff.net.0.proj.weight") or k.endswith(".ff.net.0.proj.bias"):
-            out[k] = _swap_gate_value(out[k])
-        elif k.endswith(".ff.net.0.proj.weight_scale") or k.endswith(".ff.net.0.proj.scale_weight"):
-            base = k.rsplit(".", 1)[0]
-            rows = w1_rows.get(base)
-            if out[k].ndim >= 1 and rows and out[k].shape[0] == rows:
-                out[k] = _swap_gate_value(out[k])
-        elif ".attn.to_qkv." in k:
-            tensor = out.pop(k)
-            base, suffix = k.split(".attn.to_qkv.", 1)
-            if suffix in ("weight", "bias"):
-                q, kk, vv = torch.chunk(tensor, 3, dim=0)
-            elif suffix in ("weight_scale", "scale_weight") and tensor.ndim >= 1 and tensor.shape[0] == qkv_rows.get(
-                f"{base}.attn.to_qkv"
-            ):
-                q, kk, vv = torch.chunk(tensor, 3, dim=0)
-            else:
-                q, kk, vv = tensor, tensor.clone(), tensor.clone()
-            out[f"{base}.attn.to_q.{suffix}"] = q.contiguous()
-            out[f"{base}.attn.to_k.{suffix}"] = kk.contiguous()
-            out[f"{base}.attn.to_v.{suffix}"] = vv.contiguous()
-
+    _split_qkv_and_swap_swiglu_in_place(
+        out,
+        qkv_token=".attn.to_qkv.",
+        qkv_layout=qkv_layout,
+        num_attention_heads=num_attention_heads,
+        attention_head_dim=attention_head_dim,
+    )
     return out
 
 
@@ -628,7 +669,11 @@ class RealMiniMaxH3Runner:
             with init_empty_weights():
                 image_vae = AutoencoderKLMiniMaxH3Image.from_config(ivae_cfg)
             ivae_raw = load_safetensors_state_dict(paths["image_vae"], device="cpu")
-            ivae_mapped = convert_minimax_h3_video_vae_state_dict(ivae_raw)
+            ivae_mapped = convert_minimax_h3_video_vae_state_dict(
+                ivae_raw,
+                num_attention_heads=int(ivae_cfg.get("decoder_num_attention_heads", 16)),
+                attention_head_dim=int(ivae_cfg.get("decoder_attention_head_dim", 64)),
+            )
             del ivae_raw
             quantized_module_swap_from_state_dict(image_vae, ivae_mapped, compute_dtype=compute_dtype)
             del ivae_mapped
@@ -727,7 +772,11 @@ class RealMiniMaxH3Runner:
         with init_empty_weights():
             video_vae = AutoencoderKLMiniMaxH3.from_config(vvae_cfg)
         vvae_raw = load_safetensors_state_dict(paths["video_vae"], device="cpu")
-        vvae_mapped = convert_minimax_h3_video_vae_state_dict(vvae_raw)
+        vvae_mapped = convert_minimax_h3_video_vae_state_dict(
+            vvae_raw,
+            num_attention_heads=int(vvae_cfg.get("decoder_num_attention_heads", 32)),
+            attention_head_dim=int(vvae_cfg.get("decoder_attention_head_dim", 64)),
+        )
         del vvae_raw
         quantized_module_swap_from_state_dict(video_vae, vvae_mapped, compute_dtype=compute_dtype)
         del vvae_mapped
