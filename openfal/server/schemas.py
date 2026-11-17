@@ -39,7 +39,7 @@ class MiniMaxH3Input(BaseModel):
         default="Cinematic drone shot rolling over a misty mountain ridge at dawn, sweeping motion, wind howling.",
         description="Text prompt describing the shot, action, visual style, and stereo soundscape cues.",
     )
-    duration: float = Field(default=5.0, ge=1.0, le=15.0, description="Video length in seconds (5 to 15s).")
+    duration: float = Field(default=5.0, ge=1.0, le=15.0, description="Video length in seconds (1 to 15s; Animate is capped to the driving clip).")
     resolution: ResolutionEnum = Field(default=ResolutionEnum.R_768P)
     aspect_ratio: AspectRatioEnum = Field(default=AspectRatioEnum.AR_16_9)
     seed: Optional[int] = Field(default=None, description="Random seed for reproducibility.")
@@ -48,7 +48,7 @@ class MiniMaxH3Input(BaseModel):
         default=None,
         ge=1,
         le=100,
-        description="Denoising steps (defaults: Qwen Turbo 8, Wan 2.2 40, MiniMax video 30; MiniMax Image uses its 6-step PDD schedule).",
+        description="Denoising steps (defaults: Qwen Turbo 8, Wan MoE 40, Wan Animate 20, MiniMax video 30; MiniMax Image uses its 6-step PDD schedule).",
     )
     guidance_scale: Optional[float] = Field(
         default=None,
@@ -76,6 +76,11 @@ class MiniMaxH3Input(BaseModel):
         description="Target video URL for minimax/h3-max/recast (video face swap) or relight.",
     )
     video_url: Optional[str] = Field(default=None, description="Alias for target_video_url.")
+    driving_video_url: Optional[str] = Field(default=None, description="Driving motion clip for Wan Animate; video_url and target_video_url are aliases.")
+    animate_mode: Optional[Literal["animate", "replace"]] = Field(default=None, description="Wan Animate mode; /animate defaults to animate and /recast to replace.")
+    segment_frame_length: Literal[77] = Field(default=77, description="Wan Animate uses its native 77-frame context window; duration controls output length independently.")
+    prev_segment_conditioning_frames: Literal[1, 5] = Field(default=1, description="Wan Animate overlap between segments.")
+    motion_encode_batch_size: int = Field(default=1, ge=1, le=16, description="Face motion encoder batch size; one minimizes memory use.")
     reference_image_urls: List[str] = Field(
         default_factory=list,
         description="Up to 9 reference images for subject/face consistency and omni-reference conditioning.",

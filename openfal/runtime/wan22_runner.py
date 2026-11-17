@@ -405,9 +405,9 @@ class RealWan22Runner:
     ) -> Path:
         """Execute full 3-stage Stage-wise MoE Wan 2.2 video generation -> `.mp4`."""
         if variant == "Wan2.2-Animate-14B":
-            raise NotImplementedError(
-                "Wan Animate/Recast requires a driving video, extracted pose/face motion, and a CLIP image encoder. "
-                "This runtime does not yet implement that conditioning; use Wan text-to-video or image-to-video."
+            raise ValueError(
+                "Wan Animate uses RealWanAnimateRunner with pose/face conditioning. "
+                "Use the wan/v2.2/animate or wan/v2.2/recast API with image_url and driving_video_url."
             )
         if variant == "Wan2.2-I2V-A14B" and start_image is None:
             raise ValueError("Wan image-to-video requires a start image.")

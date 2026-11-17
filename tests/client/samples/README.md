@@ -1,10 +1,39 @@
 # Reference fixtures
 
+`sample_driving_portrait.mp4` drives the Wan Animate and replacement tests. It
+depicts the same fictional adult as the portrait, with visible facial motion.
+Generated locally by MiniMax H3 FL2VA on 2026-11-17, seed `20261118`, 30 steps,
+480P square, requested duration 2 seconds, audio disabled. The native model
+returned 56 frames at 24 fps (2.333 seconds). This is an input fixture, not a
+golden expected result. Set `OPENFAL_DRIVING_VIDEO` to test another local clip.
+
+Driving fixture prompt:
+
+> A realistic fixed-camera studio portrait of this same man. He looks directly
+> toward the camera, gently turns his head a little to his left and back, blinks
+> and gives a small natural smile. Keep his face visible and sharp throughout,
+> shoulders visible, plain warm grey studio background, soft even daylight.
+> No camera movement, no cuts.
+
 `sample_portrait_photo.png` is the default photographic identity fixture for manual
 quality checks. It depicts a fictional adult and was generated with the built-in
 imagegen tool on 2026-11-17. Look for stable face shape, hair, freckles and age,
 natural skin texture, and the requested change in clothing, light or medium.
 An HTTP success and a decodable PNG alone do not establish those properties.
+
+`sample_replacement_photo.png` is a different fictional adult used by Wan
+replacement tests. A different identity makes mask/outline failures visible;
+reusing the driving subject alone can hide them. Generated locally by Qwen
+Image 2.1 Turbo on 2026-11-17, seed `20261119`, 8 steps, guidance 1, 512x512.
+Set `OPENFAL_REPLACEMENT_PORTRAIT` to select another replacement identity.
+
+Replacement fixture prompt:
+
+> A realistic studio photograph of a fictional adult woman around forty years
+> old, short straight copper red bob haircut, green eyes, fair freckled skin,
+> wearing a plain dark green cotton crewneck shirt. Frontal shoulders-up portrait,
+> calm neutral expression, looking directly toward camera, plain warm grey studio
+> background, soft even daylight, natural skin texture, no text or accessories.
 
 `sample_portrait.png` remains a deliberately simple drawing for smoke tests.
 Preserving its cartoon face is correct identity conditioning, not evidence that

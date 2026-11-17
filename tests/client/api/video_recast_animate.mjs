@@ -11,20 +11,23 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { downloadOutput, fal, OPENFAL_URL, OUTPUTS_DIR, PORTRAIT_SAMPLE, STYLE_SAMPLE, parseModelFlag, uploadSampleFile } from "./config.mjs";
+import { downloadOutput, fal, OPENFAL_URL, OUTPUTS_DIR, PORTRAIT_SAMPLE, REPLACEMENT_SAMPLE, STYLE_SAMPLE, parseModelFlag, uploadSampleFile } from "./config.mjs";
 
 const modelFilter = parseModelFlag("all");
 const portraitUrl = await uploadSampleFile(PORTRAIT_SAMPLE);
 const styleUrl = await uploadSampleFile(STYLE_SAMPLE);
 
-async function runWanAnimate() {
-  console.log(`\n=== [Wan 2.2 Animate / Recast] fal-ai/wan/v2.2/recast @ ${OPENFAL_URL} ===`);
-  const result = await fal.subscribe("fal-ai/wan/v2.2/recast", {
+async function runWanAnimate(mode) {
+  const endpoint = mode === "replace" ? "recast" : "animate";
+  const identityUrl = mode === "replace" ? await uploadSampleFile(REPLACEMENT_SAMPLE) : portraitUrl;
+  const drivingVideoUrl = await uploadSampleFile(process.env.OPENFAL_DRIVING_VIDEO || "sample_driving_portrait.mp4");
+  console.log(`\n=== [Wan 2.2 ${mode}] fal-ai/wan/v2.2/${endpoint} @ ${OPENFAL_URL} ===`);
+  const result = await fal.subscribe(`fal-ai/wan/v2.2/${endpoint}`, {
     input: {
       prompt:
         "Natural expressive portrait animation, subtle head turn, warm studio lighting, high detail",
-      face_image_url: portraitUrl,
-      start_image_url: portraitUrl,
+      face_image_url: identityUrl,
+      driving_video_url: drivingVideoUrl,
       resolution: "480P",
       aspect_ratio: "1:1",
       duration: 2.0,
@@ -45,7 +48,7 @@ async function runWanAnimate() {
     video: result.data.video,
   });
 
-  const saved = await downloadOutput(result.data.video.url, "wan22_animate_recast.mp4");
+  const saved = await downloadOutput(result.data.video.url, `wan22_${endpoint}.mp4`);
   console.log(`Saved -> ${saved}`);
 }
 
@@ -82,7 +85,9 @@ async function runMiniMaxRecastAndRelight() {
 }
 
 if (modelFilter === "all" || modelFilter === "wan") {
-  await runWanAnimate();
+  const mode = process.argv.find((value) => value.startsWith("--mode="))?.split("=")[1] || "all";
+  if (!["all", "animate", "replace"].includes(mode)) throw new Error("--mode must be animate, replace or all");
+  for (const selected of (mode === "all" ? ["animate", "replace"] : [mode])) await runWanAnimate(selected);
 }
 if (modelFilter === "all" || modelFilter === "minimax") {
   await runMiniMaxRecastAndRelight();

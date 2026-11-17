@@ -32,7 +32,8 @@ const scripts = [
   ["image_to_video.mjs", "--model=wan"],
   ["image_to_video.mjs", "--model=minimax"],
   ["reference_to_video.mjs"],
-  ["video_recast_animate.mjs", "--model=wan"],
+  ["video_recast_animate.mjs", "--model=wan", "--mode=animate"],
+  ["video_recast_animate.mjs", "--model=wan", "--mode=replace"],
   ["video_recast_animate.mjs", "--model=minimax"],
 ];
 

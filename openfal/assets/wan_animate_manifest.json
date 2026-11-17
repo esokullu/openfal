@@ -1,0 +1,1641 @@
+{
+  "version": 1,
+  "asset_groups": [
+    {
+      "id": "clip",
+      "repo_id": "Wan-AI/Wan2.2-Animate-14B-Diffusers",
+      "revision": "6f4df10861c758af86ac3c979aacc1bf5c03eff0",
+      "target_dir": "Wan2.2-Animate-14B/hf_configs",
+      "files": [
+        {
+          "path": "image_encoder/config.json",
+          "size": 498
+        },
+        {
+          "path": "image_encoder/model.safetensors",
+          "size": 1261596224
+        },
+        {
+          "path": "image_processor/preprocessor_config.json",
+          "size": 466
+        }
+      ]
+    },
+    {
+      "id": "motion",
+      "repo_id": "Wan-AI/Wan2.2-Animate-14B",
+      "revision": "cb93a225fbaf1ca100f54e79da8f994995b689b3",
+      "target_dir": "Wan2.2-Animate-14B",
+      "files": [
+        {
+          "path": "process_checkpoint/det/yolov10m.onnx",
+          "size": 61659339
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.0.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.0.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.0.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.0.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.0.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.0.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.0.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.0.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.1.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.1.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.1.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.1.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.1.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.1.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.1.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.1.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.10.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.10.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.10.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.10.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.10.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.10.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.10.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.10.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.11.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.11.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.11.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.11.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.11.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.11.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.11.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.11.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.12.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.12.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.12.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.12.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.12.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.12.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.12.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.12.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.13.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.13.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.13.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.13.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.13.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.13.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.13.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.13.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.14.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.14.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.14.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.14.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.14.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.14.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.14.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.14.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.15.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.15.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.15.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.15.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.15.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.15.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.15.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.15.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.16.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.16.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.16.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.16.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.16.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.16.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.16.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.16.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.17.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.17.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.17.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.17.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.17.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.17.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.17.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.17.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.18.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.18.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.18.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.18.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.18.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.18.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.18.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.18.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.19.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.19.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.19.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.19.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.19.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.19.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.19.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.19.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.2.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.2.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.2.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.2.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.2.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.2.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.2.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.2.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.20.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.20.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.20.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.20.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.20.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.20.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.20.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.20.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.21.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.21.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.21.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.21.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.21.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.21.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.21.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.21.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.22.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.22.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.22.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.22.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.22.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.22.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.22.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.22.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.23.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.23.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.23.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.23.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.23.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.23.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.23.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.23.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.24.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.24.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.24.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.24.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.24.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.24.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.24.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.24.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.25.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.25.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.25.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.25.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.25.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.25.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.25.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.25.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.26.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.26.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.26.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.26.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.26.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.26.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.26.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.26.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.27.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.27.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.27.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.27.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.27.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.27.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.27.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.27.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.28.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.28.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.28.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.28.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.28.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.28.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.28.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.28.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.29.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.29.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.29.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.29.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.29.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.29.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.29.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.29.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.3.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.3.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.3.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.3.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.3.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.3.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.3.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.3.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.30.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.30.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.30.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.30.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.30.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.30.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.30.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.30.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.31.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.31.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.31.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.31.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.31.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.31.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.31.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.31.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.4.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.4.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.4.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.4.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.4.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.4.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.4.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.4.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.5.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.5.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.5.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.5.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.5.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.5.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.5.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.5.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.6.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.6.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.6.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.6.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.6.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.6.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.6.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.6.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.7.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.7.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.7.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.7.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.7.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.7.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.7.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.7.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.8.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.8.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.8.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.8.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.8.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.8.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.8.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.8.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.9.attn.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.9.attn.qkv.bias",
+          "size": 15360
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.9.mlp.fc1.bias",
+          "size": 20480
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.9.mlp.fc2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.9.norm1.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.9.norm1.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.9.norm2.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.blocks.9.norm2.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.last_norm.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.last_norm.weight",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.patch_embed.proj.bias",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/backbone.patch_embed.proj.weight",
+          "size": 3932160
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/end2end.onnx",
+          "size": 412883
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/keypoint_head.deconv_layers.0.weight",
+          "size": 20971520
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/keypoint_head.deconv_layers.3.weight",
+          "size": 4194304
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/keypoint_head.final_layer.weight",
+          "size": 136192
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__Add_2802",
+          "size": 983040
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__Add_2803",
+          "size": 5120
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2804",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2809",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2810",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2811",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2812",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2817",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2818",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2819",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2820",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2825",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2826",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2827",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2828",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2833",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2834",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2835",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2836",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2841",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2842",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2843",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2844",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2849",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2850",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2851",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2852",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2857",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2858",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2859",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2860",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2865",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2866",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2867",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2868",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2873",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2874",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2875",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2876",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2881",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2882",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2883",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2884",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2889",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2890",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2891",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2892",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2897",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2898",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2899",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2900",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2905",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2906",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2907",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2908",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2913",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2914",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2915",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2916",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2921",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2922",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2923",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2924",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2929",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2930",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2931",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2932",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2937",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2938",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2939",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2940",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2945",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2946",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2947",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2948",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2953",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2954",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2955",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2956",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2961",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2962",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2963",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2964",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2969",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2970",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2971",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2972",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2977",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2978",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2979",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2980",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2985",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2986",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2987",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2988",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2993",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2994",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2995",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_2996",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3001",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3002",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3003",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3004",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3009",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3010",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3011",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3012",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3017",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3018",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3019",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3020",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3025",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3026",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3027",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3028",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3033",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3034",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3035",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3036",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3041",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3042",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3043",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3044",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3049",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3050",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3051",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3052",
+          "size": 19660800
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3057",
+          "size": 6553600
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3058",
+          "size": 26214400
+        },
+        {
+          "path": "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/onnx__MatMul_3059",
+          "size": 26214400
+        }
+      ]
+    },
+    {
+      "id": "segmentation",
+      "repo_id": "facebook/sam2.1-hiera-large",
+      "revision": "665f8e2ad61cf5f53d65644ff27c8ee525124610",
+      "target_dir": "Wan2.2-Animate-14B/preprocess/sam2",
+      "files": [
+        {
+          "path": "config.json",
+          "size": 5705
+        },
+        {
+          "path": "model.safetensors",
+          "size": 897897416
+        },
+        {
+          "path": "preprocessor_config.json",
+          "size": 683
+        },
+        {
+          "path": "processor_config.json",
+          "size": 95
+        },
+        {
+          "path": "video_preprocessor_config.json",
+          "size": 705
+        }
+      ]
+    }
+  ]
+}

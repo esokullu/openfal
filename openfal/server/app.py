@@ -48,12 +48,21 @@ SUPPORTED_ENDPOINTS = [
     },
     {
         "id": "wan/v2.2/animate",
+        "alias": "fal-ai/wan/v2.2/animate",
+        "backend": "wan22_moe",
+        "partition": "Wan2.2-Animate-14B",
+        "category": "Character Animation",
+        "runtime_supported": True,
+        "description": "Animate a reference character using a driving video's body pose and facial motion.",
+    },
+    {
+        "id": "wan/v2.2/recast",
         "alias": "fal-ai/wan/v2.2/recast",
         "backend": "wan22_moe",
         "partition": "Wan2.2-Animate-14B",
-        "category": "Video Face Swap / Character Animate (Unavailable)",
-        "runtime_supported": False,
-        "description": "Generation unavailable: driving-video, pose/face-motion preprocessing and CLIP conditioning are not implemented. Downloaded weights alone do not enable this endpoint.",
+        "category": "Video Character Replacement",
+        "runtime_supported": True,
+        "description": "Replace the driving video's character with the reference identity, using tracked SAM2 masks to preserve the background.",
     },
     {
         "id": "qwen/image-2.1/text-to-image",
@@ -293,6 +302,7 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
                 # Block residency is computed when loading, so rebuild for this profile.
                 runner._real_qwen_runner = None
                 runner._real_wan_runner = None
+                runner._real_wan_animate_runner = None
                 runner._real_minimax_runner = None
                 return updated
 

@@ -17,6 +17,7 @@ weights/
 *.png
 *.webp
 !tests/client/samples/*.png
+!tests/client/samples/sample_driving_portrait.mp4
 tests/client/*/outputs/
 tests/client/api/node_modules/
 .DS_Store

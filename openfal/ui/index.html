@@ -330,7 +330,7 @@
           <button class="btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="toggleModelHub()">Close</button>
         </div>
         <div id="hwDetectSummary" style="font-size:12px;color:var(--text-1);margin-bottom:10px;">Detecting host hardware...</div>
-        <p style="font-size:12px;color:var(--text-1);">Installed assets indicate local files are present. Endpoint support and generation quality are separate checks. Wan Animate generation is currently unavailable.</p>
+        <p style="font-size:12px;color:var(--text-1);">Installed assets indicate the required local files are complete. Generation quality and hardware capacity require separate checks.</p>
         <div class="form-group">
           <label>Optional Hugging Face Token (`HF_TOKEN` for gated/rate-limited repos)</label>
           <input type="text" id="hfTokenInput" placeholder="hf_..." />
@@ -359,9 +359,13 @@
             ⚡ Wan 2.2 MoE Image-to-Video
             <small>wan/v2.2/image-to-video (27B-A14B)</small>
           </button>
-          <button class="task-tab" data-ep="wan/v2.2/animate" data-part="Wan2.2-Animate-14B" disabled title="Driving-video, pose/face-motion preprocessing and CLIP conditioning are not implemented." style="opacity:0.5;cursor:not-allowed;">
-            🎭 Wan 2.2 Video Face Swap
-            <small>Generation unavailable — preprocessing not implemented</small>
+          <button class="task-tab" data-ep="wan/v2.2/animate" data-part="Wan2.2-Animate-14B" onclick="selectTask(this)">
+            🎭 Wan 2.2 Character Animation
+            <small>Identity image + driving video</small>
+          </button>
+          <button class="task-tab" data-ep="wan/v2.2/recast" data-part="Wan2.2-Animate-14B" onclick="selectTask(this)">
+            🎬 Wan 2.2 Character Replacement
+            <small>Identity image + masked driving scene</small>
           </button>
           <button class="task-tab" data-ep="qwen/image-2.1/text-to-image" data-part="Qwen-Image-2.1" onclick="selectTask(this)">
             ✨ Qwen-Image-2.1 Turbo (T2I)
@@ -395,14 +399,18 @@
             <label id="refPrimaryLabel">Reference / Start Image or Face Image (URL or Upload)</label>
             <div class="upload-row">
               <input type="text" id="refImageUrl" placeholder="https://... or upload local image ->" oninput="updateCodeSnippet()" />
-              <input type="file" id="fileUploadInput" accept="image/*,video/*" style="display:none;" onchange="uploadLocalFile()" />
+              <input type="file" id="fileUploadInput" accept="image/*" style="display:none;" onchange="uploadLocalFile()" />
               <button type="button" class="btn-secondary" onclick="document.getElementById('fileUploadInput').click()">Upload</button>
             </div>
           </div>
           <div class="form-group" id="targetVideoGroup" style="display:none;">
-            <label>Driving Video URL (required for Recast)</label>
-            <input type="text" id="targetVideoUrl" placeholder="Required video URL or /files/..." oninput="updateCodeSnippet()" />
-            <p style="font-size:12px;color:var(--text-1);">Generative reference editing: exact motion, scene and identity preservation are not guaranteed.</p>
+            <label>Driving Video (required; URL or Upload)</label>
+            <div class="upload-row">
+              <input type="text" id="targetVideoUrl" placeholder="Required video URL or /files/..." oninput="updateCodeSnippet()" />
+              <input type="file" id="videoUploadInput" accept="video/*" style="display:none;" onchange="uploadLocalFile('videoUploadInput', 'targetVideoUrl')" />
+              <button type="button" class="btn-secondary" onclick="document.getElementById('videoUploadInput').click()">Upload video</button>
+            </div>
+            <p id="drivingVideoHelp" style="font-size:12px;color:var(--text-1);"></p>
           </div>
         </div>
 
@@ -551,6 +559,10 @@
       setInterval(refreshTelemetry, 1200);
     }
 
+    function isWanAnimate() {
+      return currentEndpoint === "wan/v2.2/animate" || currentEndpoint === "wan/v2.2/recast";
+    }
+
     function selectTask(btn) {
       if (btn.disabled) return;
       document.querySelectorAll(".task-tab").forEach(b => b.classList.remove("active"));
@@ -562,16 +574,27 @@
       const refContainer = document.getElementById("refInputsContainer");
       const targetVideoGroup = document.getElementById("targetVideoGroup");
       const refLabel = document.getElementById("refPrimaryLabel");
-      document.getElementById("targetVideoUrl").required = currentEndpoint.includes("recast");
+      const wanAnimate = isWanAnimate();
+      document.getElementById("targetVideoUrl").required = wanAnimate || currentEndpoint.includes("recast");
+      document.getElementById("refImageUrl").required = wanAnimate;
+      document.getElementById("stepsInput").placeholder = wanAnimate ? "20 (model default)" : "Model default";
+      document.getElementById("cfgInput").placeholder = wanAnimate ? "1 (model default)" : "Model default";
 
       if (currentEndpoint.includes("text-to-video") || currentEndpoint.includes("text-to-image")) {
         refContainer.style.display = "none";
       } else {
         refContainer.style.display = "block";
         if (currentEndpoint.includes("recast") || currentEndpoint.includes("animate")) {
-          refLabel.textContent = "Optional Character / Appearance Reference Image (URL or Upload)";
+          refLabel.textContent = wanAnimate ? "Identity Image (required; URL or Upload)" : "Optional Character / Appearance Reference Image (URL or Upload)";
           targetVideoGroup.style.display = "block";
-          document.getElementById("promptInput").value = "Create a new shot inspired by the driving video, with the reference character speaking in warm cinematic lighting.";
+          document.getElementById("drivingVideoHelp").textContent = wanAnimate
+            ? (currentEndpoint.endsWith("/recast")
+              ? "Replace the detected person using pose, face motion and a segmented background. Output is generative and capped to the driving clip's length."
+              : "Animate the identity using the detected person's pose and face motion. Output is generative and capped to the driving clip's length.")
+            : "Generative reference editing: exact motion, scene and identity preservation are not guaranteed.";
+          document.getElementById("promptInput").value = wanAnimate
+            ? "The reference character moves naturally, following the driving performance, with consistent appearance and realistic detail."
+            : "Create a new shot inspired by the driving video, with the reference character speaking in warm cinematic lighting.";
         } else if (currentEndpoint.includes("reference-to-video")) {
           refLabel.textContent = "Omni Reference Image URL (Subject / Style Consistency)";
           targetVideoGroup.style.display = "none";
@@ -628,7 +651,7 @@
           <div style="font-size:11.5px;">
             <div style="font-weight:700;color:var(--text-0);">${c.display_name}</div>
             <div style="color:var(--text-1);font-size:10.5px;">HF: ${c.hf_repo_id} (${c.subdir}) &bull; FP8/INT8: ~${c.approx_fp8_gb}GB</div>
-            ${c.component_id === "wan22_animate" ? '<div style="color:#fda4af;">Generation unavailable: motion preprocessing and CLIP conditioning are not implemented.</div>' : ''}
+            ${c.runtime_supported === false ? '<div style="color:#fda4af;">Generation unavailable for this component.</div>' : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             ${badge}
@@ -699,18 +722,24 @@
       }
     }
 
-    async function uploadLocalFile() {
-      const fileInput = document.getElementById("fileUploadInput");
+    async function uploadLocalFile(inputId = "fileUploadInput", urlId = "refImageUrl") {
+      const fileInput = document.getElementById(inputId);
       if (!fileInput.files.length) return;
       const file = fileInput.files[0];
-      const res = await fetch("/v1/storage/upload", {
-        method: "POST",
-        headers: { "Content-Type": file.type || "image/png" },
-        body: file
-      });
-      const data = await res.json();
-      document.getElementById("refImageUrl").value = data.url;
-      updateCodeSnippet();
+      document.getElementById(urlId).value = "";
+      try {
+        const res = await fetch("/v1/storage/upload", {
+          method: "POST",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.detail || "File upload failed.");
+        document.getElementById(urlId).value = data.url;
+        updateCodeSnippet();
+      } catch (err) {
+        document.getElementById("logBox").textContent += `[ERROR] ${err.message}\n`;
+      }
     }
 
     async function refreshTelemetry() {
@@ -774,7 +803,9 @@
       const refUrl = document.getElementById("refImageUrl").value.trim();
       const targetVid = document.getElementById("targetVideoUrl").value.trim();
       if (refUrl) {
-        if (currentEndpoint.includes("recast")) {
+        if (isWanAnimate()) {
+          payload.face_image_url = refUrl;
+        } else if (currentEndpoint.includes("recast")) {
           payload.face_image_url = refUrl;
           payload.reference_image_urls = [refUrl];
         } else if (currentEndpoint.includes("reference-to-video")) {
@@ -783,7 +814,9 @@
           payload.start_image_url = refUrl;
         }
       }
-      if (targetVid && currentEndpoint.includes("recast")) {
+      if (targetVid && isWanAnimate()) {
+        payload.driving_video_url = targetVid;
+      } else if (targetVid && currentEndpoint.includes("recast")) {
         payload.target_video_url = targetVid;
       }
       return payload;
@@ -809,13 +842,16 @@ console.log(result);`;
       const badge = document.getElementById("outputMetaBadge");
 
       runBtn.disabled = true;
-      runBtn.textContent = "⏳ Running Strata-DiT 50-Block Pipeline...";
+      runBtn.textContent = "⏳ Generating...";
       logBox.textContent = `[openfal] Submitting job to /queue/${currentEndpoint}...\n`;
       badge.textContent = "IN_PROGRESS";
 
       try {
         const payload = buildPayload();
-        if (currentEndpoint.includes("recast") && !payload.target_video_url) {
+        if (isWanAnimate() && (!payload.face_image_url || !payload.driving_video_url)) {
+          throw new Error("Wan Animate/Replacement requires an identity image and a driving video URL.");
+        }
+        if (!isWanAnimate() && currentEndpoint.includes("recast") && !payload.target_video_url) {
           throw new Error("Recast requires a driving video URL.");
         }
         const submitRes = await fetch(`/queue/${currentEndpoint}`, {
@@ -824,12 +860,14 @@ console.log(result);`;
           body: JSON.stringify(payload)
         });
         const job = await submitRes.json();
+        if (!submitRes.ok || !job.request_id) throw new Error(job.detail || job.error || "Generation submission failed.");
         const reqId = job.request_id;
 
         let seenLogs = 0;
         while (true) {
           const stRes = await fetch(`/${currentEndpoint}/requests/${reqId}/status?logs=1`);
           const st = await stRes.json();
+          if (!stRes.ok) throw new Error(st.detail || st.error || "Generation status polling failed.");
           const logs = st.logs || [];
           while (seenLogs < logs.length) {
             logBox.textContent += `${logs[seenLogs].message}\n`;
@@ -846,6 +884,7 @@ console.log(result);`;
 
         const finalRes = await fetch(`/${currentEndpoint}/requests/${reqId}`);
         const out = await finalRes.json();
+        if (!finalRes.ok) throw new Error(out.detail || out.error || "Generation result could not be read.");
         const synthetic = out.strata_engine && out.strata_engine.mode === "synthetic";
         badge.textContent = `${synthetic ? "Synthetic development output" : "Completed"} in ${out.timings.inference}s • Seed ${out.seed}`;
 

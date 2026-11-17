@@ -15,9 +15,10 @@ The runtime loads supported single-file FP8/INT8 checkpoints and moves model blo
 | Text/image-to-video with audio | `minimax/h3/text-to-video`, `minimax/h3/image-to-video` | MiniMax FL2VA |
 | Reference-conditioned video and editing | `minimax/h3/reference-to-video`, `minimax/h3-max/recast`, `minimax/h3-max/relight`, `minimax/h3-max/insert-video` | MiniMax Ref2VA |
 | Text-to-image and image editing | `minimax/h3/text-to-image`, `minimax/h3/image-to-image` | MiniMax H3-Image |
-| **Unavailable: Wan Animate/recast** | `wan/v2.2/animate`, `wan/v2.2/recast` | Weights can be installed, but the conditioning workflow is not implemented |
+| Character animation from a driving performance | `wan/v2.2/animate` | Wan2.2-Animate-14B |
+| Character replacement in a driving scene | `wan/v2.2/recast` | Wan2.2-Animate-14B |
 
-Wan Animate requires driving-video, pose/face-motion preprocessing and CLIP conditioning that this adapter does not implement. Real requests fail explicitly; the Studio selector is disabled.
+Wan Animate uses an identity image and a driving video, with local CLIP conditioning, whole-body pose detection and face-motion crops. Replacement additionally uses SAM2 video segmentation to condition the background. These are generative workflows; identity, motion and scene fidelity still require visual inspection.
 
 The `minimax/h3-max/*` names route to the corresponding local H3 partitions. They do not download a separate H3 Max model or provide a separately implemented hosted-service feature set. Ref2VA editing is generative: it does not guarantee exact preservation of a driving video's motion, scene, identity or timing.
 
@@ -45,7 +46,11 @@ openfal serve --host 0.0.0.0 --port 8008
 
 If `openfal` is not on `PATH`, use `py -3.11 -m openfal.cli` in its place. Open `http://localhost:8008/` on the server machine for Studio, or `/docs` for the API explorer.
 
-On Linux/macOS, use `python3 -m pip install -e ".[inference]"` and the same `openfal` commands. Device selection can fall back to MPS or CPU when CUDA is unavailable. This is not a guarantee that every model, precision, resolution or hardware profile has been validated on that platform.
+On Linux/macOS, use `python3 -m pip install -e ".[inference]"` and the same `openfal` commands. Device selection can fall back to MPS or CPU when CUDA is unavailable. MPS compute uses BF16 only after a capability probe succeeds, otherwise FP32. When Metal cannot store FP8 tensors, the packed weights remain on CPU and decoded compute tensors are transferred to MPS. Host regression tests cover these branches; actual Mac inference has not been validated. Memory requirements and performance need testing on the target Mac.
+
+On Apple Silicon, CPU and MPS use the same physical memory pool: CPU offload does not provide additional RAM. Budget unified memory for the active model's loaded weights, encoders/VAEs, preprocessing models and working tensors. FP32 fallback increases that requirement. The 24/36/64 GB profile names do not guarantee that every model will fit; actual memory requirements have not been benchmarked on a Mac. Wan preprocessing's ONNX Runtime 1.23.2 macOS arm64 wheel requires macOS 13 or newer.
+
+Follow the [Mac validation guide](docs/macos-validation.md) to capture hardware and package versions, run the automated Metal checks, and evaluate the full client suite on a local Mac server.
 
 `autosetup` offers a preview and explicit tiers:
 
@@ -76,13 +81,23 @@ openfal download --component all --runtime-assets-only
 openfal models
 ```
 
-The repair operation installs missing configs/tokenizers and shared Wan encoder/VAE dependencies. Missing main model weights still require a normal component download. Wan 2.2 14B needs the 16-channel `wan_2.1_vae.safetensors`; the 48-channel TI2V-5B VAE is a different architecture.
+The repair operation installs missing configs/tokenizers, shared Wan encoder/VAE dependencies, and Animate's CLIP/pose/SAM2 models. Missing main model weights still require a normal component download. Wan 2.2 14B needs the 16-channel `wan_2.1_vae.safetensors`; the 48-channel TI2V-5B VAE is a different architecture.
+
+An existing Animate installation needs approximately **4.77 GB (4.44 GiB)** of additional supporting assets:
+
+| Assets | Pinned source | Files | Size |
+| --- | --- | ---: | ---: |
+| CLIP vision model and processor | [Wan Animate Diffusers](https://huggingface.co/Wan-AI/Wan2.2-Animate-14B-Diffusers/tree/6f4df10861c758af86ac3c979aacc1bf5c03eff0) | 3 | 1.26 GB |
+| YOLOv10m detector and ViTPose-H whole-body ONNX | [Wan Animate processing checkpoints](https://huggingface.co/Wan-AI/Wan2.2-Animate-14B/tree/cb93a225fbaf1ca100f54e79da8f994995b689b3/process_checkpoint) | 395 | 2.61 GB |
+| SAM2.1 Hiera Large model and processors | [SAM2.1 Transformers checkpoint](https://huggingface.co/facebook/sam2.1-hiera-large/tree/665f8e2ad61cf5f53d65644ff27c8ee525124610) | 5 | 0.90 GB |
+
+The packaged [asset manifest](openfal/assets/wan_animate_manifest.json) includes every pose external tensor and the expected byte size of all 403 files. Setup and runtime readiness check these files locally. Repair downloads only missing or truncated assets; it does not defer them until the first generation request. Run `openfal download --component wan22_animate --runtime-assets-only` to repair only this component.
 
 `GET /v1/models/status` distinguishes these fields:
 
-- `installed`: required local checkpoint names and metadata files are present. This does not measure generation quality or hardware capacity.
+- `installed`: required local checkpoints and metadata are present; Animate's supporting files also match their expected sizes. This does not measure generation quality or hardware capacity.
 - `missing_assets`: missing or unsupported files that prevent the asset set from being complete.
-- `runtime_supported` and `runtime_unavailable_reason`: whether the component has an implemented generation path; Wan Animate reports unsupported even with installed assets.
+- `runtime_supported` and `runtime_unavailable_reason`: whether the component has an implemented generation path. Animate supports both animation and replacement modes.
 - `weights_present`: some checkpoint files are present, including in an incomplete installation.
 
 Structural demonstration shards do not establish inference readiness. Supported checkpoints may coexist with old unsupported files; the runtime ignores GGUF/NVFP4/W4A8 files when resolving model weights.
@@ -102,12 +117,13 @@ Sizes below are approximate download sizes for the supported FP8/INT8 selection,
 | Bundle | Contents | Approximate size |
 | --- | --- | ---: |
 | `qwen_image_21` | Qwen Turbo DiT, Qwen3-VL-8B encoder and image VAE | 16.1 GB |
-| `alibaba-only` | Wan T2V, I2V, Animate assets and Qwen Image, with shared encoders/VAEs | 94.1 GB |
+| `wan22_animate` | Animate DiT and conditioning/preprocessing assets, with shared Wan dependencies | 21.7 GB |
+| `alibaba-only` | Wan T2V, I2V, Animate assets and Qwen Image, with shared encoders/VAEs | 98.6 GB |
 | `minimax-omni-compact` | Ref2VA and shared Qwen3-VL-32B/video/audio VAEs | 48.0 GB |
 | `minimax-only` | FL2VA, Ref2VA, H3-Image and shared components | 88.1 GB |
-| `all` | Both model families | 182.2 GB |
+| `all` | Both model families | 186.7 GB |
 
-Installing Animate assets does not enable its unavailable generation workflow. The compact MiniMax bundle supplies Ref2VA; it does not contain the dedicated FL2VA or H3-Image checkpoints.
+The compact MiniMax bundle supplies Ref2VA; it does not contain the dedicated FL2VA or H3-Image checkpoints.
 
 ```powershell
 openfal download --component alibaba-only --quant fp8_e4m3
@@ -172,17 +188,45 @@ curl -X POST http://127.0.0.1:8008/queue/wan/v2.2/text-to-video \
 
 Submission returns `request_id`, `status_url`, `response_url` and `cancel_url`. Poll `status_url` (optionally with `?logs=1`) until `COMPLETED` or `FAILED`, then fetch `response_url` only on success. `/requests/{id}/status/stream` provides SSE updates. Both direct requests and queued generation use the same serialized model execution path.
 
-Use a starting image for Wan/MiniMax image-to-video. MiniMax Ref2VA accepts reference images, videos and audio; it enforces at most nine images, three videos, three audio clips and twelve references total. Audio references require a visual reference. Reference decoding failures fail the request instead of being silently ignored.
+Wan image-to-video requires a starting image. MiniMax FL2VA accepts first and/or last frame anchors. MiniMax Ref2VA accepts reference images, videos and audio; it enforces at most nine images, three videos, three audio clips and twelve references total. Audio references require a visual reference. Reference decoding failures fail the request instead of being silently ignored.
+
+### Animate or replace a character
+
+Upload one identity image and one driving video. Studio provides separate upload buttons for each. For an API request:
+
+```python
+import openfal
+
+server = "http://127.0.0.1:8008"
+identity = openfal.upload_file("character.png", base_url=server)
+driver = openfal.upload_file("performance.mp4", base_url=server)
+result = openfal.subscribe(
+    "wan/v2.2/animate",
+    arguments={
+        "prompt": "The reference character follows the driving performance naturally",
+        "face_image_url": identity,
+        "driving_video_url": driver,
+        "resolution": "480P",
+        "duration": 3,
+        "fps": 16,
+        "seed": 20261117,
+    },
+    base_url=server,
+)
+print(result["video"]["url"])
+```
+
+`wan/v2.2/animate` defaults to `animate_mode="animate"`; `wan/v2.2/recast` defaults to `animate_mode="replace"`. Either route accepts an explicit `animate_mode` override. The driving video field also accepts the aliases `target_video_url` and `video_url`. Use a clear, visible person in the driver so pose and face motion can be detected. Replacement uses a tracked foreground mask and background conditioning; it does not promise pixel-exact compositing.
 
 ### Defaults and output checks
 
-Leave `num_inference_steps` and `guidance_scale` unset to use model-specific defaults. Studio does this by default. The shipped Qwen Turbo checkpoint uses eight steps; Wan defaults to forty steps; MiniMax video defaults to thirty steps, while MiniMax Image follows its six-step PDD schedule. These models do not share one universal "turbo" step count.
+Leave `num_inference_steps` and `guidance_scale` unset to use model-specific defaults. Studio does this by default. Qwen Turbo uses eight steps; Wan MoE T2V/I2V uses forty; Wan Animate/Replacement uses twenty steps with guidance 1; MiniMax video uses thirty, while MiniMax Image follows its six-step PDD schedule. These models do not share one universal "turbo" step count.
 
-Accepted dimensions, frame counts and durations depend on the backend and checkpoint. For example, the current Wan path supports at most 81 frames. Increasing resolution, duration, references or steps increases resource use and may exceed the machine's capacity. Read the returned media dimensions/duration and inspect the media itself rather than assuming an HTTP success establishes correct output.
+Accepted dimensions, frame counts and durations depend on the backend and checkpoint. Wan MoE T2V/I2V supports at most 81 frames. Wan Animate/Replacement uses native 77-frame internal windows and caps output to the real driving video's available duration. Short clips are padded internally and trimmed; longer clips use multiple windows. Custom window lengths are rejected because short-window quality checks failed. Increasing resolution, duration, references or steps increases resource use and may exceed the machine's capacity. Read the returned media dimensions/duration and inspect the media itself rather than assuming an HTTP success establishes correct output.
 
 MiniMax FL2VA accepts `start_image_url` (or `image_url`) and `end_image_url`, including a last-frame-only request. Use Ref2VA for `reference_image_urls` or face/identity references; FL2VA rejects those fields instead of ignoring them.
 
-Recast, relighting and insertion routes use reference-conditioned generation. They are not deterministic face replacement or motion-preserving compositing tools.
+MiniMax recast, relighting and insertion routes use reference-conditioned generation. They are not deterministic face replacement or motion-preserving compositing tools.
 
 ## Hardware, memory and telemetry
 
@@ -212,7 +256,9 @@ $env:OPENFAL_URL = "http://127.0.0.1:8008"
 node tests/client/api/run_all.mjs
 ```
 
-The API suite runs model cases independently, retains request/response metadata and media in a fresh output directory, continues after failures, and exits nonzero if any case fails. Wan Animate remains a deliberately failing capability case. See [the client test guide](tests/client/README.md) and [sample provenance](tests/client/samples/README.md) for options and evaluation criteria. Real GPU tests and visual/audio inspection are necessary in addition to unit tests.
+The API suite runs model cases independently, retains request/response metadata and media in a fresh output directory, continues after failures, and exits nonzero if any case fails. Wan Animate and replacement tests require both identity and driving inputs plus the complete supporting asset set. See [the client test guide](tests/client/README.md) and [sample provenance](tests/client/samples/README.md) for options and evaluation criteria. Real GPU tests and visual/audio inspection are necessary in addition to unit tests; a passing installer or host test does not establish end-to-end generation quality.
+
+The [2026-11-17 Windows validation record](docs/validation-2026-11-17.md) documents real outputs, regression checks and the remaining Apple Silicon hardware verification.
 
 `OPENFAL_SYNTHETIC_FALLBACK=1` explicitly enables development placeholder rendering. Leave it unset for real inference. Synthetic output is labeled in the API and Studio; missing model assets never silently enable it. `/health` reports API liveness and the synthetic-mode flag, not a complete readiness or output-quality guarantee.
 

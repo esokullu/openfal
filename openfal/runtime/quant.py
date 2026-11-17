@@ -27,6 +27,41 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from openfal.runtime.common import mps_supports_fp8
+
+_FP8_DTYPES = frozenset(
+    getattr(torch, name) for name in ("float8_e4m3fn", "float8_e5m2", "float8_e4m3fnuz", "float8_e5m2fnuz")
+    if hasattr(torch, name)
+)
+
+
+def _storage_device(tensor: torch.Tensor, device: torch.device) -> torch.device:
+    if device.type == "mps" and tensor.dtype in _FP8_DTYPES and not mps_supports_fp8(tensor.dtype):
+        return torch.device("cpu")
+    return device
+
+
+class _QuantizedStorageMixin:
+    """Keep checkpoint bytes/scales intact when a parent moves or casts models."""
+
+    _weight_buffer_name: str
+
+    def _apply(self, fn, recurse=True):
+        weight = self._buffers.pop(self._weight_buffer_name)
+        scale = self._buffers.pop("weight_scale")
+        moved_weight, moved_scale = weight, scale
+        try:
+            result = super()._apply(fn, recurse=recurse)
+            device = self._dtype_anchor.device
+            moved_weight = weight.to(device=_storage_device(weight, device))
+            moved_scale = scale.to(device=device, dtype=torch.float32)
+            return result
+        finally:
+            # Even a failed device transfer must leave a recoverable state_dict.
+            self._buffers[self._weight_buffer_name] = moved_weight
+            self._buffers["weight_scale"] = moved_scale
+
+
 _HADAMARD_CACHE: Dict[Tuple[int, str, str], torch.Tensor] = {}
 
 
@@ -104,13 +139,15 @@ def _norm_scale_tensor(scale: Optional[torch.Tensor], out_features: int) -> torc
     return s.reshape(out_features, -1) if s.shape[0] == out_features else s
 
 
-class StrataConvRotLinear(nn.Module):
+class StrataConvRotLinear(_QuantizedStorageMixin, nn.Module):
     """
     8-bit INT8 weight-resident Linear layer with optional ConvRot activation rotation.
 
     Parameters remain stored as `torch.int8` (1 byte/weight) in CPU RAM or GPU VRAM and are
     scaled to the activation dtype on the fly during forward computation.
     """
+
+    _weight_buffer_name = "weight_i8"
 
     def __init__(
         self,
@@ -164,8 +201,10 @@ class StrataConvRotLinear(nn.Module):
         )
 
 
-class StrataConvRotEmbedding(nn.Module):
+class StrataConvRotEmbedding(_QuantizedStorageMixin, nn.Module):
     """8-bit INT8 Embedding table supporting ConvRot unrotation on looked-up rows."""
+
+    _weight_buffer_name = "weight_i8"
 
     def __init__(
         self,
@@ -181,7 +220,6 @@ class StrataConvRotEmbedding(nn.Module):
         self.convrot = bool(convrot and (self.embedding_dim % group_size == 0))
         self.group_size = int(group_size)
         self.padding_idx = padding_idx
-        self.target_dtype: torch.dtype = compute_dtype
         self._dtype_anchor = nn.Parameter(torch.empty(0, dtype=compute_dtype), requires_grad=False)
 
         self.register_buffer("weight_i8", weight_i8.detach().to(torch.int8).contiguous(), persistent=True)
@@ -193,7 +231,7 @@ class StrataConvRotEmbedding(nn.Module):
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         rows_i8 = F.embedding(input_ids, self.weight_i8, padding_idx=self.padding_idx)
-        compute_dtype = self.target_dtype
+        compute_dtype = self._dtype_anchor.dtype
         if self.weight_scale.shape[0] == self.num_embeddings:
             scales = F.embedding(input_ids, self.weight_scale)
         else:
@@ -204,13 +242,15 @@ class StrataConvRotEmbedding(nn.Module):
         return rows
 
 
-class StrataFP8ScaledLinear(nn.Module):
+class StrataFP8ScaledLinear(_QuantizedStorageMixin, nn.Module):
     """
     1-byte-per-weight FP8 E4M3 Linear layer with `weight_scale` / `scale_weight` support.
 
     Compatible with `Comfy-Org/Wan_2.2_ComfyUI_Repackaged` (`scale_weight`) and
     `Comfy-Org/MiniMax-H3` (`weight_scale`).
     """
+
+    _weight_buffer_name = "weight_fp8"
 
     def __init__(
         self,
@@ -244,37 +284,16 @@ class StrataFP8ScaledLinear(nn.Module):
         to FP8, which is not the computation dtype. Do not cache this dense view:
         the persistent weight must remain one byte per element.
         """
-        return self.weight_fp8.to(dtype=self._dtype_anchor.dtype) * self.weight_scale.to(
-            device=self.weight_fp8.device, dtype=self._dtype_anchor.dtype
-        )
+        return self._dequantized_weight(self._dtype_anchor.device, self._dtype_anchor.dtype)
 
-    def to(self, *args, **kwargs):
-        # MPS currently lacks native float8_e4m3fn storage buffers on some PyTorch builds;
-        # keep `weight_fp8` safely on CPU when targeting MPS and cast on demand in `forward`.
-        target_device = kwargs.get("device")
-        if target_device is None and args:
-            for a in args:
-                if isinstance(a, (torch.device, str)):
-                    target_device = torch.device(a)
-                    break
-        if (
-            target_device is not None
-            and torch.device(target_device).type == "mps"
-            and self.weight_fp8.dtype == torch.float8_e4m3fn
-        ):
-            self.weight_scale = self.weight_scale.to(device=target_device)
-            if self.bias is not None:
-                self.bias = nn.Parameter(self.bias.detach().to(device=target_device), requires_grad=False)
-            return self
-        return super().to(*args, **kwargs)
+    def _dequantized_weight(self, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        # Decode BEFORE crossing devices: Tensor.to(device=..., dtype=...) can
+        # otherwise try allocating unsupported FP8 storage on Metal first.
+        weight = self.weight_fp8.to(dtype=dtype).to(device=device)
+        return weight * self.weight_scale.to(device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        w_src = self.weight_fp8
-        if w_src.device != x.device:
-            w_deq = w_src.to(dtype=x.dtype).to(device=x.device)
-        else:
-            w_deq = w_src.to(dtype=x.dtype)
-        w_deq = w_deq * self.weight_scale.to(device=x.device, dtype=x.dtype)
+        w_deq = self._dequantized_weight(x.device, x.dtype)
         b = self.bias.to(device=x.device, dtype=x.dtype) if self.bias is not None else None
         return F.linear(x, w_deq, b)
 
@@ -337,10 +356,7 @@ def quantized_module_swap_from_state_dict(
         qmeta_key = f"{mod_name}.comfy_quant"
         qmeta = parse_comfy_quant_meta(state_dict.get(qmeta_key))
         is_i8 = w_tensor.dtype == torch.int8
-        is_fp8 = w_tensor.dtype in (
-            getattr(torch, "float8_e4m3fn", torch.int8),
-            getattr(torch, "float8_e5m2", torch.int8),
-        ) and w_tensor.dtype != torch.int8
+        is_fp8 = w_tensor.dtype in _FP8_DTYPES
 
         b_key = f"{mod_name}.bias"
         b_tensor = state_dict.get(b_key)
@@ -547,20 +563,14 @@ class StrataBlockOffloadManager:
                 for name, t in p_back.items():
                     p_gpu[name] = t.to(self.device, non_blocking=True)
                 for name, t in b_back.items():
-                    if self.device.type == "mps" and t.dtype == torch.float8_e4m3fn:
-                        b_gpu[name] = t
-                    else:
-                        b_gpu[name] = t.to(self.device, non_blocking=True)
+                    b_gpu[name] = t.to(_storage_device(t, self.device), non_blocking=True)
                 evt.record(self._prefetch_stream)
             self._staged_gpu_tensors[idx] = (p_gpu, b_gpu, evt)
         else:
             for name, t in p_back.items():
                 p_gpu[name] = t.to(self.device)
             for name, t in b_back.items():
-                if self.device.type == "mps" and t.dtype == torch.float8_e4m3fn:
-                    b_gpu[name] = t
-                else:
-                    b_gpu[name] = t.to(self.device)
+                b_gpu[name] = t.to(_storage_device(t, self.device))
             self._staged_gpu_tensors[idx] = (p_gpu, b_gpu, None)
 
     def _activate_block(self, idx: int) -> float:
@@ -643,7 +653,12 @@ class StrataBlockOffloadManager:
         for idx in range(self.resident_vram_blocks):
             self.blocks[idx].to("cpu")
         for idx in range(self.resident_vram_blocks, self.total_blocks):
-            self._evict_block(idx)
+            if idx in self._pinned_cpu_backing:
+                self._evict_block(idx)
+            else:
+                # Loading can fail before prepare(), or midway through it. A
+                # shared runner may also evict this manager more than once.
+                self.blocks[idx].to("cpu")
         if self._use_cuda_stream:
             while self._retired_compute_events:
                 self._retired_compute_events.popleft().synchronize()

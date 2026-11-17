@@ -4,7 +4,9 @@ Downloading belongs to the installer. Inference only reads these assets, so both
 paths must agree on filenames (including the upstream processor naming).
 """
 
+import json
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -14,6 +16,7 @@ class ConfigAssets:
     subdir: str
     required_files: tuple[str, ...]
     allow_patterns: tuple[str, ...]
+    revision: str | None = None
 
     def missing(self, weights_dir: Path) -> list[str]:
         root = weights_dir / self.subdir
@@ -64,7 +67,10 @@ for _key, _variant in (
 ):
     HF_CONFIGS[_key] = ConfigAssets(
         f"Wan-AI/{_variant}-Diffusers", f"{_variant}/hf_configs",
-        _WAN_FILES + (() if _key == "wan22_animate" else ("transformer_2/config.json",)), _WAN_PATTERNS,
+        _WAN_FILES + (("image_encoder/config.json", "image_processor/preprocessor_config.json")
+                      if _key == "wan22_animate" else ("transformer_2/config.json",)),
+        _WAN_PATTERNS + (("image_encoder/*.json", "image_processor/*.json") if _key == "wan22_animate" else ()),
+        revision="6f4df10861c758af86ac3c979aacc1bf5c03eff0" if _key == "wan22_animate" else None,
     )
 
 
@@ -112,3 +118,61 @@ def find_weight(root: Path, patterns: tuple[str, ...]) -> Path | None:
                     and path.is_file() and path.stat().st_size):
                 return path
     return None
+
+
+@dataclass(frozen=True)
+class SnapshotFile:
+    path: str
+    size: int
+
+
+@dataclass(frozen=True)
+class SnapshotAssets:
+    id: str
+    repo_id: str
+    revision: str
+    target_dir: str
+    files: tuple[SnapshotFile, ...]
+
+    def missing(self, weights_dir: Path) -> tuple[SnapshotFile, ...]:
+        root = weights_dir / self.target_dir
+        return tuple(asset for asset in self.files
+                     if not (root / asset.path).is_file() or (root / asset.path).stat().st_size != asset.size)
+
+
+@lru_cache(maxsize=1)
+def animate_asset_groups() -> tuple[SnapshotAssets, ...]:
+    """Pinned CLIP, full-body pose/detector and SAM2 assets, including ONNX external tensors."""
+    manifest = Path(__file__).with_name("assets") / "wan_animate_manifest.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    return tuple(SnapshotAssets(
+        id=group["id"], repo_id=group["repo_id"], revision=group["revision"],
+        target_dir=group["target_dir"], files=tuple(SnapshotFile(**asset) for asset in group["files"]),
+    ) for group in data["asset_groups"])
+
+
+def missing_animate_assets(weights_dir: Path) -> list[str]:
+    return [f"{group.target_dir}/{asset.path}" for group in animate_asset_groups()
+            for asset in group.missing(weights_dir)]
+
+
+def require_animate_assets(weights_dir: Path) -> dict[str, Path]:
+    """Resolve complete local Animate dependencies without contacting a model hub."""
+    missing = missing_animate_assets(weights_dir)
+    if missing:
+        preview = ", ".join(missing[:5])
+        if len(missing) > 5:
+            preview += f", and {len(missing) - 5} more"
+        raise FileNotFoundError(
+            f"Wan Animate assets are missing or incomplete: {preview}. "
+            f'Run `openfal download --component wan22_animate --runtime-assets-only --weights-dir "{weights_dir}"` '
+            "before starting inference."
+        )
+    root = weights_dir / "Wan2.2-Animate-14B"
+    return {
+        "image_encoder": root / "hf_configs/image_encoder",
+        "image_processor": root / "hf_configs/image_processor",
+        "detector": root / "process_checkpoint/det/yolov10m.onnx",
+        "pose": root / "process_checkpoint/pose2d/vitpose_h_wholebody.onnx/end2end.onnx",
+        "sam2": root / "preprocess/sam2",
+    }

@@ -53,6 +53,9 @@ inference = [
     "av>=12.0.0",
     "imageio>=2.34.0",
     "imageio-ffmpeg>=0.5.1",
+    "onnxruntime>=1.23.2",
+    "opencv-python-headless>=4.10.0",
+    "ftfy>=6.3.0",
 ]
 dev = [
     "pytest>=8.0.0",
@@ -67,7 +70,7 @@ where = ["."]
 include = ["openfal*"]
 
 [tool.setuptools.package-data]
-openfal = ["ui/*.html"]
+openfal = ["ui/*.html", "assets/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

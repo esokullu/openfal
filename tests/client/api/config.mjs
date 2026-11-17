@@ -16,6 +16,7 @@ export const SAMPLES_DIR = path.resolve(__dirname, "../samples");
 export const OUTPUTS_DIR = process.env.OPENFAL_OUTPUTS_DIR
   ? path.resolve(process.env.OPENFAL_OUTPUTS_DIR) : path.resolve(__dirname, "outputs");
 export const PORTRAIT_SAMPLE = process.env.OPENFAL_PORTRAIT || "sample_portrait_photo.png";
+export const REPLACEMENT_SAMPLE = process.env.OPENFAL_REPLACEMENT_PORTRAIT || process.env.OPENFAL_PORTRAIT || "sample_replacement_photo.png";
 export const STYLE_SAMPLE = process.env.OPENFAL_STYLE || "sample_style_photo.png";
 export const STREET_SAMPLE = process.env.OPENFAL_STREET || "sample_street_photo.png";
 const TEST_SEED = Number(process.env.OPENFAL_TEST_SEED || 20261117);

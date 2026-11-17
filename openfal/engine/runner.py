@@ -56,17 +56,45 @@ class OpenFalRunner:
         )
         self._real_qwen_runner = None
         self._real_wan_runner = None
+        self._real_wan_animate_runner = None
         self._real_minimax_runner = None
         self._active_real_family: Optional[str] = None
+        self._active_real_partition: Optional[str] = None
         # Schedulers, module residency and the memory hierarchy are shared per runner.
         self.execution_lock = threading.RLock()
 
     def evict(self) -> None:
         """Release real GPU allocations as well as the telemetry state."""
-        for runtime in (self._real_qwen_runner, self._real_wan_runner, self._real_minimax_runner):
+        for runtime in (self._real_qwen_runner, self._real_wan_animate_runner, self._real_wan_runner, self._real_minimax_runner):
             if runtime is not None:
                 runtime.evict()
         self._active_real_family = None
+        self._active_real_partition = None
+
+        from openfal.runtime.common import clear_device_cache, resolve_compute_device_and_dtype
+
+        device, _ = resolve_compute_device_and_dtype()
+        if device.type == "mps":
+            import gc
+
+            self._real_qwen_runner = None
+            self._real_wan_animate_runner = None
+            self._real_wan_runner = None
+            self._real_minimax_runner = None
+            # The loop variable also owns a reference to the last runtime.
+            runtime = None
+            gc.collect()
+            clear_device_cache(device)
+
+    def _prepare_real_partition(self, partition: str) -> None:
+        from openfal.runtime.common import resolve_compute_device_and_dtype
+
+        device, _ = resolve_compute_device_and_dtype()
+        if device.type == "mps" and self._active_real_partition != partition:
+            # CPU and Metal share the same RAM. Keeping previous model families
+            # on CPU would accumulate their full checkpoints in unified memory.
+            self.evict()
+        self._active_real_partition = partition
 
     def _evict_other_backends(self, next_family: str) -> None:
         if self._active_real_family and self._active_real_family != next_family:
@@ -74,6 +102,8 @@ class OpenFalRunner:
                 self._real_qwen_runner.evict()
             elif self._active_real_family == "wan22_moe" and self._real_wan_runner is not None:
                 self._real_wan_runner.evict()
+            elif self._active_real_family == "wan_animate" and self._real_wan_animate_runner is not None:
+                self._real_wan_animate_runner.evict()
             elif self._active_real_family == "minimax_h3" and self._real_minimax_runner is not None:
                 self._real_minimax_runner.evict()
         self._active_real_family = next_family
@@ -113,6 +143,8 @@ class OpenFalRunner:
 
         if use_synthetic_fallback():
             return None
+
+        self._prepare_real_partition(partition)
 
         short_id = uuid.uuid4().hex[:10]
         base_url_clean = base_url.rstrip("/")
@@ -186,7 +218,7 @@ class OpenFalRunner:
             if not self._real_wan_runner.has_weights_for(partition):
                 return None
 
-            self._evict_other_backends("wan22_moe")
+            self._evict_other_backends("wan_animate" if partition == "Wan2.2-Animate-14B" else "wan22_moe")
             start_url = (
                 payload.get("start_image_url")
                 or payload.get("image_url")
@@ -200,25 +232,57 @@ class OpenFalRunner:
             fname = f"openfal_vid_{short_id}.mp4"
             out_path = self.config.output_dir / fname
             width, height = max(256, width // 16 * 16), max(256, height // 16 * 16)
-            num_frames = max(17, min(81, ((max(17, int(duration * fps)) - 1) // 4) * 4 + 1))
-            self._real_wan_runner.generate_video(
-                variant=partition,
-                prompt=prompt,
-                width=width,
-                height=height,
-                num_frames=num_frames,
-                fps=fps,
-                num_steps=num_steps,
-                seed=seed,
-                guidance_scale=guidance_scale,
-                guidance_scale_2=payload.get("guidance_scale_2") if payload.get("guidance_scale_2") is not None else (
-                    3.0 if partition == "Wan2.2-T2V-A14B" and payload.get("guidance_scale") is None else None
-                ),
-                negative_prompt=payload.get("negative_prompt") or "",
-                start_image=start_img,
-                output_path=out_path,
-                on_log=on_log,
-            )
+            if partition == "Wan2.2-Animate-14B":
+                from openfal.runtime.common import resolve_compute_device_and_dtype
+                from openfal.runtime.wan_animate_preprocess import preprocess_wan_animate
+                from openfal.runtime.wan_animate_runner import RealWanAnimateRunner
+
+                if self._real_wan_animate_runner is None:
+                    self._real_wan_animate_runner = RealWanAnimateRunner(
+                        self.config, self.memory, shared_runner=self._real_wan_runner,
+                    )
+                mode = payload.get("animate_mode") or ("replace" if endpoint_id.endswith("/recast") else "animate")
+                driving = (payload.get("driving_video_url") or payload.get("target_video_url")
+                           or payload.get("video_url") or payload["reference_video_urls"][0])
+                device, _ = resolve_compute_device_and_dtype()
+                conditioning = preprocess_wan_animate(
+                    driving, weights_dir=self.config.weights_dir, width=width, height=height,
+                    fps=fps, num_frames=max(2, int(duration * fps)), mode=mode,
+                    device=device, on_log=on_log,
+                )
+                num_frames = len(conditioning.pose_video)
+                self._real_wan_animate_runner.generate_video(
+                    image=start_img, pose_video=conditioning.pose_video,
+                    face_video=conditioning.face_video, background_video=conditioning.background_video,
+                    mask_video=conditioning.mask_video, mode=mode,
+                    prompt=prompt, width=width, height=height, fps=fps, num_steps=num_steps,
+                    seed=seed, guidance_scale=guidance_scale,
+                    negative_prompt=payload.get("negative_prompt") or "",
+                    segment_frame_length=payload.get("segment_frame_length", 77),
+                    prev_segment_conditioning_frames=payload.get("prev_segment_conditioning_frames", 1),
+                    motion_encode_batch_size=payload.get("motion_encode_batch_size", 1),
+                    output_path=out_path, on_log=on_log,
+                )
+            else:
+                num_frames = max(17, min(81, ((max(17, int(duration * fps)) - 1) // 4) * 4 + 1))
+                self._real_wan_runner.generate_video(
+                    variant=partition,
+                    prompt=prompt,
+                    width=width,
+                    height=height,
+                    num_frames=num_frames,
+                    fps=fps,
+                    num_steps=num_steps,
+                    seed=seed,
+                    guidance_scale=guidance_scale,
+                    guidance_scale_2=payload.get("guidance_scale_2") if payload.get("guidance_scale_2") is not None else (
+                        3.0 if partition == "Wan2.2-T2V-A14B" and payload.get("guidance_scale") is None else None
+                    ),
+                    negative_prompt=payload.get("negative_prompt") or "",
+                    start_image=start_img,
+                    output_path=out_path,
+                    on_log=on_log,
+                )
             file_bytes = out_path.read_bytes()
             url_val = (
                 "data:video/mp4;base64," + base64.b64encode(file_bytes).decode("ascii")
@@ -414,7 +478,7 @@ class OpenFalRunner:
             return 8, 1.0
         if backend_family == "wan22_moe":
             if "animate" in partition.lower():
-                return 20, 4.0
+                return 20, 1.0
             return 40, 3.5 if partition == "Wan2.2-I2V-A14B" else 4.0
         # MiniMax-H3 checkpoints are guidance-distilled; base FL2VA/Ref2VA use ~30 steps
         if partition == "H3-Image":
@@ -438,8 +502,10 @@ class OpenFalRunner:
                     # Preserve the inference error, but discard partially loaded runners.
                     self._real_qwen_runner = None
                     self._real_wan_runner = None
+                    self._real_wan_animate_runner = None
                     self._real_minimax_runner = None
                     self._active_real_family = None
+                    self._active_real_partition = None
                 self.memory.finish_generation()
                 raise
 
@@ -481,7 +547,7 @@ class OpenFalRunner:
                 ref_images.append(val)
 
         ref_videos: List[str] = list(payload.get("reference_video_urls") or [])
-        for vkey in ("video_url", "target_video_url"):
+        for vkey in ("video_url", "target_video_url", "driving_video_url"):
             if payload.get(vkey) and payload[vkey] not in ref_videos:
                 ref_videos.append(payload[vkey])
 
@@ -491,7 +557,20 @@ class OpenFalRunner:
         from openfal.runtime.common import use_synthetic_fallback
 
         if not use_synthetic_fallback():
-            if backend_family == "wan22_moe" and int(duration * fps) > 81:
+            if payload.get("driving_video_url") and partition != "Wan2.2-Animate-14B":
+                raise ValueError("driving_video_url requires Wan Animate; use video_url for MiniMax reference video")
+            if partition == "Wan2.2-Animate-14B":
+                if payload.get("segment_frame_length", 77) != 77:
+                    raise ValueError("Wan Animate segment length must be 77; use duration to request a shorter video")
+                if len(set(ref_images)) != 1 or payload.get("end_image_url"):
+                    raise ValueError("Wan Animate requires exactly one identity image (image_url or face_image_url)")
+                if len(set(ref_videos)) != 1:
+                    raise ValueError("Wan Animate requires exactly one driving_video_url (or target_video_url/video_url)")
+                if ref_audios:
+                    raise ValueError("Wan Animate does not accept audio references")
+                if payload.get("animate_mode") not in (None, "animate", "replace"):
+                    raise ValueError("animate_mode must be animate or replace")
+            if backend_family == "wan22_moe" and partition != "Wan2.2-Animate-14B" and int(duration * fps) > 81:
                 raise ValueError("Wan currently supports at most 81 frames per request; lower duration or fps")
             if backend_family == "minimax_h3" and partition == "FL2VA":
                 if any(payload.get(key) for key in ("reference_image_urls", "face_image_url", "source_face_url")):

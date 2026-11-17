@@ -2,7 +2,7 @@
 Shared utilities for real PyTorch inference runners:
 - Dependency verification (fail-fast with actionable pip instructions if weights exist)
 - Verifying local HF config/tokenizer files without network access
-- Device & dtype resolution (CUDA BF16 / MPS BF16-FP16 / CPU)
+- Device & dtype resolution (CUDA BF16-FP16 / MPS BF16-FP32 / CPU)
 - Checkpoint loading (`safetensors.torch.load_file`) + file discovery helpers
 """
 
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -57,22 +58,65 @@ def check_inference_dependencies(packages: Iterable[str] = ("diffusers", "transf
         pass
 
 
+@lru_cache(maxsize=1)
+def mps_supports_bfloat16() -> bool:
+    """Probe the installed Metal runtime, rather than guessing from an OS version."""
+    if not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+        return False
+    try:
+        with torch.inference_mode():
+            x = torch.ones((2, 2), device="mps", dtype=torch.bfloat16)
+            y = torch.nn.functional.layer_norm(x @ x, (2,))
+            y = torch.nn.functional.scaled_dot_product_attention(y[None, None], x[None, None], x[None, None])
+            # Video patch embedding and causal VAEs also require Conv3D. A
+            # working BF16 matrix kernel alone does not establish support.
+            volume = torch.ones((1, 1, 2, 2, 2), device="mps", dtype=torch.bfloat16)
+            kernel = torch.ones((1, 1, 1, 1, 1), device="mps", dtype=torch.bfloat16)
+            convolved = torch.nn.functional.conv3d(volume, kernel)
+            return all(
+                result.dtype == torch.bfloat16 and bool(torch.isfinite(result).all().item())
+                for result in (y, convolved)
+            )
+    except (RuntimeError, TypeError, NotImplementedError):
+        return False
+
+
+@lru_cache(maxsize=8)
+def mps_supports_fp8(dtype: torch.dtype) -> bool:
+    """Newer PyTorch/Mac combinations can store FP8; older ones cannot even copy it."""
+    if not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+        return False
+    try:
+        with torch.inference_mode():
+            source = torch.tensor([1.0, -0.5], dtype=torch.float32).to(dtype)
+            decoded = source.to("mps").to(torch.float32).cpu()
+            return bool(torch.equal(decoded, source.float()))
+    except (RuntimeError, TypeError, NotImplementedError):
+        return False
+
+
 def resolve_compute_device_and_dtype() -> Tuple[torch.device, torch.dtype]:
     """Select the active compute device (`cuda`, `mps`, or `cpu`) and optimal native dtype."""
     if torch.cuda.is_available():
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         return torch.device("cuda", 0), dtype
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return torch.device("mps"), torch.bfloat16
+        # FP16 can overflow BF16-trained text/DiT activations. FP32 is the safe
+        # fallback when this OS/PyTorch combination cannot execute BF16 kernels.
+        dtype = torch.bfloat16 if mps_supports_bfloat16() else torch.float32
+        return torch.device("mps"), dtype
     return torch.device("cpu"), torch.float32
 
 
 def clear_device_cache(device: Optional[torch.device] = None) -> None:
     """Release cached allocator blocks back to VRAM/Unified Memory."""
-    if torch.cuda.is_available():
+    if device is None:
+        device, _ = resolve_compute_device_and_dtype()
+    device = torch.device(device)
+    if device.type == "cuda" and torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
-    elif hasattr(torch, "mps") and hasattr(torch.mps, "empty_cache"):
+    elif device.type == "mps" and hasattr(torch, "mps") and hasattr(torch.mps, "empty_cache"):
         try:
             torch.mps.empty_cache()
         except Exception:

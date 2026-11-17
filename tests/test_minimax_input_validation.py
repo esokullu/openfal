@@ -2,6 +2,7 @@ from pathlib import Path
 
 from PIL import Image
 import pytest
+import torch
 
 from openfal.config import EngineConfig
 from openfal.engine.runner import OpenFalRunner
@@ -9,7 +10,10 @@ from openfal.engine.runner import OpenFalRunner
 
 @pytest.fixture
 def runner(tmp_path, monkeypatch):
+    import openfal.runtime.common as common
+
     monkeypatch.delenv("OPENFAL_SYNTHETIC_FALLBACK", raising=False)
+    monkeypatch.setattr(common, "resolve_compute_device_and_dtype", lambda: (torch.device("cpu"), torch.float32))
     instance = OpenFalRunner(EngineConfig(
         profile_id="single_5090_32gb",
         weights_dir=tmp_path / "weights",
@@ -82,4 +86,15 @@ def test_fl2va_unreadable_anchor_fails_before_generation(runner, monkeypatch):
     monkeypatch.setattr(runner.face_conditioner, "load_image_from_url_or_path", lambda url: None)
     with pytest.raises(ValueError, match="Could not load reference image"):
         runner.execute("minimax/h3/image-to-video", {"end_image_url": "broken.png"})
+    assert not runner._real_minimax_runner.calls
+
+
+@pytest.mark.parametrize("endpoint", ["minimax/h3/reference-to-video", "minimax/h3-max/recast"])
+def test_minimax_rejects_wan_driving_alias_before_generation(runner, monkeypatch, endpoint):
+    def unexpected_dispatch(*args, **kwargs):
+        pytest.fail("Unsupported driving alias must be rejected before real inference dispatch")
+
+    monkeypatch.setattr(runner, "_try_execute_real", unexpected_dispatch)
+    with pytest.raises(ValueError, match="driving_video_url requires Wan Animate"):
+        runner.execute(endpoint, {"face_image_url":"identity.png", "driving_video_url":"motion.mp4"})
     assert not runner._real_minimax_runner.calls

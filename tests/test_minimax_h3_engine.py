@@ -123,7 +123,7 @@ def test_per_backend_inference_defaults(tmp_path: Path, monkeypatch) -> None:
     assert OpenFalRunner.resolve_backend_defaults("qwen_image_21", "Qwen-Image-2.1") == (8, 1.0)
     assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-T2V-A14B") == (40, 4.0)
     assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-I2V-A14B") == (40, 3.5)
-    assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-Animate-14B") == (20, 4.0)
+    assert OpenFalRunner.resolve_backend_defaults("wan22_moe", "Wan2.2-Animate-14B") == (20, 1.0)
     assert OpenFalRunner.resolve_backend_defaults("minimax_h3", "FL2VA") == (30, 1.0)
     assert OpenFalRunner.resolve_backend_defaults("minimax_h3", "H3-Image") == (6, 1.0)
 

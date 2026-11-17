@@ -458,7 +458,7 @@ def main() -> None:
     )
     p_dl.add_argument(
         "--runtime-assets-only", action="store_true",
-        help="Repair config/tokenizer files and shared Wan encoder/VAE assets without re-downloading DiT weights",
+        help="Repair metadata and supporting models (shared Wan encoder/VAE and Animate CLIP/pose/SAM2) without re-downloading DiT weights",
     )
     p_dl.add_argument("--hf-token", default=None, help="Hugging Face token (or set HF_TOKEN env var)")
     p_dl.add_argument("--repo-id", default=None, help="Optional custom Hugging Face repo ID override")

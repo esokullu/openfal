@@ -36,6 +36,7 @@ from safetensors.numpy import save_file as save_safetensors_numpy
 from openfal.model_assets import (
     COMPONENT_DEPENDENCIES, HF_CONFIGS, WAN_SHARED_FILES, WEIGHT_GROUPS,
     config_keys_for_component, find_weight, unsupported_checkpoint_format,
+    animate_asset_groups, missing_animate_assets,
 )
 
 
@@ -120,25 +121,25 @@ MODEL_COMPONENTS: Dict[str, ModelComponentSpec] = {
     ),
     "wan22_animate": ModelComponentSpec(
         component_id="wan22_animate",
-        display_name="Wan2.2-Animate-14B (Primary Fast Video Face Swap / Character Recast)",
+        display_name="Wan2.2-Animate-14B (Video Character Animation / Replacement)",
         hf_repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
         subdir="Wan2.2-Animate-14B",
         allow_patterns=["split_files/diffusion_models/wan2.2_animate_14B_int8_convrot.safetensors"],
-        approx_bf16_gb=32.2,
-        approx_fp8_gb=17.2,
-        approx_int4_gb=17.2,
-        description="14B character replacement & video face/expression swap model (pre-quantized INT8 direct from Hugging Face).",
+        approx_bf16_gb=36.7,
+        approx_fp8_gb=21.7,
+        approx_int4_gb=21.7,
+        description="14B character animation/replacement with local CLIP, full-body pose, face crops and SAM2 video segmentation assets.",
         is_dit_partition=True,
         quant_sources={
             "fp8_e4m3": QuantSourceSpec(
                 repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
                 allow_patterns=["split_files/diffusion_models/wan2.2_animate_14B_int8_convrot.safetensors"],
-                approx_gb=17.2,
+                approx_gb=21.7,
             ),
             "bf16": QuantSourceSpec(
                 repo_id="Wan-AI/Wan2.2-Animate-14B",
                 allow_patterns=["*.safetensors", "*.json"],
-                approx_gb=32.2,
+                approx_gb=36.7,
             ),
         },
     ),
@@ -752,6 +753,10 @@ class StrataModelManager:
                 manifest = None
 
         disk_bytes = sum(f.stat().st_size for f in weight_files) if weight_files else 0
+        if component_id == "wan22_animate":
+            disk_bytes += sum(path.stat().st_size for group in animate_asset_groups() for asset in group.files
+                              if (path := self.weights_dir / group.target_dir / asset.path).is_file()
+                              and path.suffix not in (".safetensors", ".gguf"))
         missing_assets = self._missing_component_assets(component_id)
         installed = not missing_assets
 
@@ -759,11 +764,8 @@ class StrataModelManager:
             **asdict(spec),
             "local_dir": str(comp_dir),
             "installed": installed,
-            "runtime_supported": component_id != "wan22_animate",
-            "runtime_unavailable_reason": (
-                "Driving-video, pose/face-motion preprocessing and CLIP conditioning are not implemented"
-                if component_id == "wan22_animate" else None
-            ),
+            "runtime_supported": True,
+            "runtime_unavailable_reason": None,
             "weights_present": any("strata_blocks" not in f.parts for f in weight_files),
             "missing_assets": missing_assets,
             "safetensors_count": len(safetensor_files),
@@ -796,7 +798,9 @@ class StrataModelManager:
             for name in WAN_SHARED_FILES:
                 if find_weight(self.weights_dir, (Path(name).name,)) is None:
                     missing.append(name)
-        return missing
+        if component_id == "wan22_animate":
+            missing.extend(missing_animate_assets(self.weights_dir))
+        return list(dict.fromkeys(missing))
 
     @staticmethod
     def resolve_download_source(
@@ -1120,6 +1124,7 @@ class StrataModelManager:
             emit(f"[HF-Config] Installing config/tokenizer metadata from '{assets.repo_id}' -> {cfg_dir}...")
             snapshot_download(
                 repo_id=assets.repo_id,
+                revision=assets.revision,
                 local_dir=str(cfg_dir),
                 allow_patterns=list(assets.allow_patterns),
                 ignore_patterns=["*.safetensors", "*.bin", "*.pt", "*.ckpt", "assets/*"],
@@ -1139,6 +1144,33 @@ class StrataModelManager:
                 )
                 if not Path(path).is_file() or Path(path).stat().st_size == 0:
                     raise RuntimeError(f"Shared Wan checkpoint download is incomplete: {filename}")
+        if spec.component_id == "wan22_animate":
+            self._ensure_animate_assets(hf_token=hf_token, emit=emit)
+
+    def _ensure_animate_assets(self, hf_token: Optional[str], emit: Callable[[str], None]) -> None:
+        from huggingface_hub import snapshot_download
+
+        for group in animate_asset_groups():
+            missing = group.missing(self.weights_dir)
+            if not missing:
+                continue
+            target = self.weights_dir / group.target_dir
+            size_gb = sum(asset.size for asset in missing) / (1024 ** 3)
+            emit(f"[Wan-Animate] Installing {group.id}: {len(missing)} file(s), {size_gb:.2f} GiB "
+                 f"from '{group.repo_id}' at {group.revision}...")
+            snapshot_download(
+                repo_id=group.repo_id, revision=group.revision, local_dir=str(target),
+                allow_patterns=[asset.path for asset in missing], token=hf_token, max_workers=4,
+                # A stale HF local-dir record must not bless a truncated asset.
+                force_download=any((target / asset.path).exists() for asset in missing),
+            )
+            incomplete = group.missing(self.weights_dir)
+            if incomplete:
+                raise RuntimeError(
+                    f"Wan Animate {group.id} download is incomplete: "
+                    + ", ".join(asset.path for asset in incomplete[:5])
+                )
+            emit(f"[Wan-Animate] Verified all {len(group.files)} {group.id} assets.")
 
     @staticmethod
     def _extract_block_index(tensor_name: str, num_blocks: int) -> int:

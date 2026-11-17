@@ -217,11 +217,11 @@ def test_wan_requires_complete_experts_and_local_vae(tmp_path):
     assert runner._ensure_16ch_vae_file() == vae_path
 
 
-def test_wan_rejects_unsupported_conditioning_before_loading(tmp_path):
+def test_wan_moe_redirects_animate_to_its_dedicated_runtime_before_loading(tmp_path):
     cfg = EngineConfig(weights_dir=tmp_path)
     runner = RealWan22Runner(cfg, StrataMemoryHierarchy(cfg))
     args = dict(prompt="portrait", width=256, height=256, num_frames=17, fps=16, num_steps=4, seed=1)
-    with pytest.raises(NotImplementedError, match="driving video"):
+    with pytest.raises(ValueError, match="RealWanAnimateRunner"):
         runner.generate_video(variant="Wan2.2-Animate-14B", **args)
     with pytest.raises(ValueError, match="start image"):
         runner.generate_video(variant="Wan2.2-I2V-A14B", **args)

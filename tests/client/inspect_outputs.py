@@ -23,6 +23,8 @@ names = {
     "fal-ai/minimax/h3/image-to-image": "minimax_h3_i2i.png",
     "fal-ai/wan/v2.2-a14b/text-to-video": "wan22_t2v.mp4",
     "fal-ai/wan/v2.2-a14b/image-to-video": "wan22_i2v.mp4",
+    "fal-ai/wan/v2.2/animate": "wan22_animate.mp4",
+    "fal-ai/wan/v2.2/recast": "wan22_recast.mp4",
     "fal-ai/minimax/h3/text-to-video": "minimax_h3_t2v.mp4",
     "fal-ai/minimax/h3/image-to-video": "minimax_h3_i2v.mp4",
     "fal-ai/minimax/h3/reference-to-video": "minimax_h3_ref2va.mp4",
