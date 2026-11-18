@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,7 @@ class BenchmarkScenario:
     vllm_default_offload: bool
     comfy_template: str
     vram_resident_estimate_gb: float
+    input_image_path: Optional[str] = None
 
 
 SCENARIOS: Dict[str, BenchmarkScenario] = {
@@ -52,6 +53,71 @@ SCENARIOS: Dict[str, BenchmarkScenario] = {
         vllm_default_offload=False,
         comfy_template="qwen21_t2i",
         vram_resident_estimate_gb=18.0,
+    ),
+    "minimax_h3_t2i": BenchmarkScenario(
+        scenario_id="minimax_h3_t2i",
+        modality="image",
+        display_name="MiniMax-H3-Image T2I (1344x768, 6 PDD steps)",
+        prompt="Studio photograph of a tabby cat chasing an apricot miniature poodle past an Istanbul cafe, dramatic late sunlight, crisp cobblestone texture",
+        negative_prompt="",
+        width=1344,
+        height=768,
+        openfal_resolution="768P",
+        openfal_aspect_ratio="16:9",
+        steps=6,
+        guidance_scale=1.0,
+        num_frames=1,
+        fps=1,
+        duration_sec=0.0,
+        openfal_endpoint="minimax/h3/text-to-image",
+        vllm_model_id="MiniMaxAI/MiniMax-H3-Image",
+        vllm_default_offload=True,
+        comfy_template="minimax_h3_t2i",
+        vram_resident_estimate_gb=42.0,
+    ),
+    "wan22_i2v_14b": BenchmarkScenario(
+        scenario_id="wan22_i2v_14b",
+        modality="video",
+        display_name="Wan 2.2 A14B I2V (848x480, 33 frames @ 16fps, 20 steps)",
+        prompt="Camera glides forward down the sunlit cobblestone street as a tabby cat chases a playful apricot poodle toward the golden sunset",
+        negative_prompt="low quality, blurry, watermark, text, distorted",
+        width=848,
+        height=480,
+        openfal_resolution="480P",
+        openfal_aspect_ratio="16:9",
+        steps=20,
+        guidance_scale=3.5,
+        num_frames=33,
+        fps=16,
+        duration_sec=2.1,
+        openfal_endpoint="wan/v2.2/image-to-video",
+        vllm_model_id="Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+        vllm_default_offload=True,
+        comfy_template="wan22_i2v_14b",
+        vram_resident_estimate_gb=36.0,
+        input_image_path="tests/client/samples/sample_street_photo.png",
+    ),
+    "minimax_h3_i2v": BenchmarkScenario(
+        scenario_id="minimax_h3_i2v",
+        modality="video",
+        display_name="MiniMax-H3 FL2VA Joint Video+Audio I2V (832x480, 73f @ 24fps, 20 steps)",
+        prompt="A tabby cat sprints after a playful apricot poodle along the cobblestone street at sunset, lively street ambiance and paw steps",
+        negative_prompt="",
+        width=832,
+        height=480,
+        openfal_resolution="480P",
+        openfal_aspect_ratio="16:9",
+        steps=20,
+        guidance_scale=1.0,
+        num_frames=73,
+        fps=24,
+        duration_sec=3.0,
+        openfal_endpoint="minimax/h3/image-to-video",
+        vllm_model_id="MiniMaxAI/MiniMax-H3",
+        vllm_default_offload=True,
+        comfy_template="minimax_h3_i2v",
+        vram_resident_estimate_gb=48.0,
+        input_image_path="tests/client/samples/sample_street_photo.png",
     ),
     "wan22_t2v_14b": BenchmarkScenario(
         scenario_id="wan22_t2v_14b",
@@ -94,26 +160,5 @@ SCENARIOS: Dict[str, BenchmarkScenario] = {
         vllm_default_offload=True,
         comfy_template="minimax_h3_t2v",
         vram_resident_estimate_gb=48.0,
-    ),
-    "minimax_h3_t2i": BenchmarkScenario(
-        scenario_id="minimax_h3_t2i",
-        modality="image",
-        display_name="MiniMax-H3-Image T2I (1344x768, 6 PDD steps)",
-        prompt="Studio photograph of a tabby cat chasing an apricot miniature poodle past an Istanbul cafe, dramatic late sunlight, crisp cobblestone texture",
-        negative_prompt="",
-        width=1344,
-        height=768,
-        openfal_resolution="768P",
-        openfal_aspect_ratio="16:9",
-        steps=6,
-        guidance_scale=1.0,
-        num_frames=1,
-        fps=1,
-        duration_sec=0.0,
-        openfal_endpoint="minimax/h3/text-to-image",
-        vllm_model_id="MiniMaxAI/MiniMax-H3-Image",
-        vllm_default_offload=True,
-        comfy_template="minimax_h3_t2i",
-        vram_resident_estimate_gb=42.0,
     ),
 }

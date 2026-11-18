@@ -1,0 +1,169 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "entries": [
+    {
+      "engine": "openfal",
+      "scenario_id": "qwen21_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 2.16,
+      "cold_sec": 52.487,
+      "warm_mean_sec": 7.005,
+      "warm_p50_sec": 7.005,
+      "warm_min_sec": 7.001,
+      "warm_max_sec": 7.009,
+      "batch_wall_sec": 14.01,
+      "throughput_req_per_min": 8.57,
+      "peak_vram_mib": 12249.0,
+      "mean_gpu_util_pct": 24.5,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 52.487,
+          "reported_infer_sec": 52.076,
+          "output_bytes": 1640660,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 7.001,
+          "reported_infer_sec": 6.749,
+          "output_bytes": 1648269,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 7.009,
+          "reported_infer_sec": 6.632,
+          "output_bytes": 1535744,
+          "engine_mode": "real_pytorch"
+        }
+      ]
+    },
+    {
+      "engine": "openfal",
+      "scenario_id": "minimax_h3_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 2.16,
+      "cold_sec": 42.028,
+      "warm_mean_sec": 12.303,
+      "warm_p50_sec": 12.303,
+      "warm_min_sec": 11.791,
+      "warm_max_sec": 12.815,
+      "batch_wall_sec": 24.606,
+      "throughput_req_per_min": 4.88,
+      "peak_vram_mib": 15183.0,
+      "mean_gpu_util_pct": 32.8,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 42.028,
+          "reported_infer_sec": 41.767,
+          "output_bytes": 1885335,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 12.815,
+          "reported_infer_sec": 12.391,
+          "output_bytes": 1724092,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 11.791,
+          "reported_infer_sec": 11.455,
+          "output_bytes": 1776677,
+          "engine_mode": "real_pytorch"
+        }
+      ]
+    },
+    {
+      "engine": "openfal",
+      "scenario_id": "wan22_i2v_14b",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 2.16,
+      "cold_sec": 206.748,
+      "warm_mean_sec": 182.744,
+      "warm_p50_sec": 182.744,
+      "warm_min_sec": 182.361,
+      "warm_max_sec": 183.127,
+      "batch_wall_sec": 365.488,
+      "throughput_req_per_min": 0.33,
+      "peak_vram_mib": 14683.0,
+      "mean_gpu_util_pct": 92.0,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 206.748,
+          "reported_infer_sec": 206.439,
+          "output_bytes": 504005,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 183.127,
+          "reported_infer_sec": 182.75,
+          "output_bytes": 476582,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 182.361,
+          "reported_infer_sec": 181.924,
+          "output_bytes": 860104,
+          "engine_mode": "real_pytorch"
+        }
+      ]
+    },
+    {
+      "engine": "openfal",
+      "scenario_id": "minimax_h3_i2v",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "error",
+      "error": "[WinError 10054] An existing connection was forcibly closed by the remote host",
+      "startup_sec": 2.16,
+      "cold_sec": null,
+      "warm_mean_sec": null,
+      "warm_p50_sec": null,
+      "warm_min_sec": null,
+      "warm_max_sec": null,
+      "batch_wall_sec": null,
+      "throughput_req_per_min": null,
+      "peak_vram_mib": null,
+      "mean_gpu_util_pct": null,
+      "engine_mode": null,
+      "samples": []
+    }
+  ]
+}

@@ -6,11 +6,12 @@ Apples-to-apples latency, throughput, cold-start, and peak VRAM benchmark suite 
 
 Comparing diffusion servers fails if engines use different checkpoints, step counts, resolutions, frame counts, or compete for GPU memory:
 
-- **Matched parameters (`scenarios.py`)**: Every engine runs identical pixel dimensions, frame counts, denoising steps, CFG scales, seeds, and prompts:
+- **Matched parameters (`scenarios.py`)**: Every engine runs identical pixel dimensions, step counts, CFG scales, seeds, and prompts across 2D image and I2V/T2V video workloads:
   - `qwen21_t2i`: **1344×768**, 8 steps (`Qwen-Image-2.1-Turbo`)
-  - `wan22_t2v_14b`: **848×480**, 33 frames @ 16 fps, 20 steps (`Wan 2.2 A14B MoE`)
-  - `minimax_h3_t2v`: **832×480**, 73 frames @ 24 fps, 20 steps (`MiniMax-H3 FL2VA` + stereo audio)
   - `minimax_h3_t2i`: **1344×768**, 6 PDD steps (`MiniMax-H3-Image`)
+  - `wan22_i2v_14b` / `wan22_t2v_14b`: **848×480**, 33 frames @ 16 fps, 20 steps (`Wan 2.2 A14B MoE`)
+  - `minimax_h3_i2v` / `minimax_h3_t2v`: **832×480**, 73 frames @ 24 fps, 20 steps (`MiniMax-H3 FL2VA` + stereo audio; `vllm_omni` sends `num_frames=97` due to its 4s minimum duration limit)
+- **Measured RTX 5090 results**: See [docs/benchmark-rtx-5090-2026-11-18.md](../docs/benchmark-rtx-5090-2026-11-18.md) and [results/bench_NVIDIA_GeForce_RTX_5090_full_comparison.md](results/bench_NVIDIA_GeForce_RTX_5090_full_comparison.md).
 - **Sequential isolation (`--sequential-local`)**: Boots one engine server at a time (`openfal serve` -> `ComfyUI` -> `vllm serve ... --omni`), waits for readiness, captures **cold 1st-run**, **warm mean / p50 / min / max**, **peak VRAM (`nvidia-smi`)**, and **mean GPU utilization**, then kills the server and waits for CUDA memory reclamation before starting the next engine.
 - **Zero duplicate weights between `openfal` and `ComfyUI`**: `setup_pod.sh` downloads `Comfy-Org` `.safetensors` checkpoints once via `openfal download` and symlinks them into `ComfyUI/models/{diffusion_models,text_encoders,vae}`.
 - **Fairness guard**: By default `bench_runner.py` fails loudly if `openfal` returns `strata_engine.mode != "real_pytorch"` so synthetic fallbacks never sneak into benchmark numbers.

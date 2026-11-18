@@ -1175,6 +1175,8 @@ class RealMiniMaxH3Runner:
     def _evict_active_pipe_only(self) -> None:
         if self._pipe is None:
             return
+        import gc
+
         if self._dit_offloader is not None:
             self._dit_offloader.release_all_to_cpu()
             self._dit_offloader = None
@@ -1184,6 +1186,7 @@ class RealMiniMaxH3Runner:
                 comp.to("cpu")
         self._pipe = None
         self._loaded_partition = None
+        gc.collect()
         clear_device_cache()
 
     def evict(self) -> None:

@@ -574,6 +574,7 @@
         <a href="#api">API &amp; SDK</a>
         <a href="#workflows">Workflows</a>
         <a href="#compare">Comparison</a>
+        <a href="#benchmarks">Benchmarks</a>
       </nav>
       <div class="nav-actions">
         <button class="btn btn-sm" id="theme-toggle" type="button" aria-label="Toggle color theme">
@@ -992,6 +993,168 @@ curl -N http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;
         </div>
       </div>
     </section>
+
+    <section id="benchmarks">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">Benchmarks · RTX 5090 (32 GiB)</div>
+          <h2>Measured local performance: openfal vs ComfyUI vs vLLM-Omni.</h2>
+          <p class="section-desc">
+            Sequential VRAM-isolated runs on a single NVIDIA GeForce RTX 5090 (<code>--warmup 1 --repeats 2 --concurrency 1 --sequential-local</code>, 2026-11-18).
+            <code>openfal</code> and <code>ComfyUI</code> ran natively on Windows; <code>vLLM-Omni</code> ran against the same GPU under WSL2.
+          </p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Engine</th>
+                <th>Startup</th>
+                <th>Cold</th>
+                <th>Warm Mean / p50</th>
+                <th>Req/min</th>
+                <th>Peak VRAM</th>
+                <th>GPU Util</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong><code>qwen21_t2i</code></strong><br /><span class="muted">1344×768 · 8 steps</span></td>
+                <td>openfal</td>
+                <td class="muted">2.16 s</td>
+                <td class="muted">52.49 s</td>
+                <td>7.00 s</td>
+                <td class="muted">8.57</td>
+                <td>12.0 GB (12249 MiB)</td>
+                <td class="muted">24.5%</td>
+              </tr>
+              <tr>
+                <td><span class="muted">Qwen-Image-2.1-Turbo</span></td>
+                <td>ComfyUI</td>
+                <td class="muted">18.55 s</td>
+                <td class="muted">12.88 s</td>
+                <td>5.32 s</td>
+                <td class="muted">11.27</td>
+                <td>16.6 GB (17009 MiB)</td>
+                <td class="muted">65.6%</td>
+              </tr>
+              <tr>
+                <td><span class="muted">Fastest warm latency</span></td>
+                <td><strong>vLLM-Omni</strong></td>
+                <td class="muted">53.40 s</td>
+                <td class="muted">5.05 s</td>
+                <td><strong>2.45 s</strong></td>
+                <td><strong>24.49</strong></td>
+                <td>24.7 GB (25257 MiB)</td>
+                <td class="muted">74.7%</td>
+              </tr>
+              <tr>
+                <td><strong><code>minimax_h3_t2i</code></strong><br /><span class="muted">1344×768 · 6 PDD steps</span></td>
+                <td>openfal</td>
+                <td class="muted">2.16 s</td>
+                <td class="muted">42.03 s</td>
+                <td>12.30 s</td>
+                <td class="muted">4.88</td>
+                <td>14.8 GB (15183 MiB)</td>
+                <td class="muted">32.8%</td>
+              </tr>
+              <tr>
+                <td><span class="muted">MiniMax-H3-Image · Fastest warm</span></td>
+                <td><strong>ComfyUI</strong></td>
+                <td class="muted">18.55 s</td>
+                <td class="muted">10.18 s</td>
+                <td><strong>3.83 s</strong></td>
+                <td><strong>15.68</strong></td>
+                <td>30.8 GB (31513 MiB)</td>
+                <td class="muted">65.3%</td>
+              </tr>
+              <tr>
+                <td><span class="muted">BF16 + DLO streaming</span></td>
+                <td>vLLM-Omni</td>
+                <td class="muted">128.59 s</td>
+                <td class="muted">65.25 s</td>
+                <td>65.00 s</td>
+                <td class="muted">0.92</td>
+                <td>16.3 GB (16697 MiB)</td>
+                <td class="muted">23.2%</td>
+              </tr>
+              <tr>
+                <td><strong><code>wan22_i2v_14b</code></strong><br /><span class="muted">848×480 · 33f @ 16 fps · 20 steps</span></td>
+                <td>openfal</td>
+                <td class="muted">2.16 s</td>
+                <td class="muted">206.75 s</td>
+                <td>182.74 s</td>
+                <td class="muted">0.33</td>
+                <td>14.3 GB (14683 MiB)</td>
+                <td class="muted">92.0%</td>
+              </tr>
+              <tr>
+                <td><span class="muted">Wan 2.2 A14B I2V</span></td>
+                <td>ComfyUI</td>
+                <td class="muted">18.55 s</td>
+                <td class="muted">121.74 s</td>
+                <td>85.87 s</td>
+                <td class="muted">0.70</td>
+                <td>31.3 GB (32021 MiB)</td>
+                <td class="muted">85.7%</td>
+              </tr>
+              <tr>
+                <td><span class="muted">Fastest warm latency</span></td>
+                <td><strong>vLLM-Omni</strong></td>
+                <td class="muted">107.76 s</td>
+                <td class="muted">90.18 s</td>
+                <td><strong>75.58 s</strong></td>
+                <td><strong>0.79</strong></td>
+                <td>21.2 GB (21729 MiB)</td>
+                <td class="muted">93.6%</td>
+              </tr>
+              <tr>
+                <td><strong><code>minimax_h3_i2v</code></strong><br /><span class="muted">832×480 · 20 steps · 24 fps + audio</span></td>
+                <td>openfal</td>
+                <td class="muted">2.96 s</td>
+                <td class="muted">113.94 s</td>
+                <td>90.30 s</td>
+                <td class="muted">0.66</td>
+                <td>17.1 GB (17465 MiB)</td>
+                <td class="muted">81.7%</td>
+              </tr>
+              <tr>
+                <td><span class="muted">MiniMax FL2VA · Fastest warm</span></td>
+                <td><strong>ComfyUI</strong></td>
+                <td class="muted">18.55 s</td>
+                <td class="muted">54.70 s</td>
+                <td><strong>48.34 s</strong></td>
+                <td><strong>1.24</strong></td>
+                <td>30.9 GB (31635 MiB)</td>
+                <td class="muted">90.6%</td>
+              </tr>
+              <tr>
+                <td><span class="muted">97f req → 107f output (4.46 s)</span></td>
+                <td>vLLM-Omni</td>
+                <td class="muted">94.26 s</td>
+                <td class="muted">133.22 s</td>
+                <td>116.41 s</td>
+                <td class="muted">0.52</td>
+                <td>14.2 GB (14503 MiB)</td>
+                <td class="muted">69.2%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <h3>Precision &amp; configuration notes across engines</h3>
+          <ul>
+            <li><strong>Alibaba models:</strong> <code>vLLM-Omni</code> runs dequantized <code>BF16</code> checkpoints with online <code>--quantization fp8</code> (and <code>--enable-cpu-offload</code> on Wan 2.2), winning <code>qwen21_t2i</code> (<code>2.45 s</code>) and <code>wan22_i2v_14b</code> (<code>75.58 s</code>). <code>openfal</code> uses native <code>INT8 ConvRot</code> / <code>FP8 scaled</code> at lower peak VRAM (<code>12.0–14.3 GB</code>).</li>
+            <li><strong>MiniMax-H3 models:</strong> <code>ComfyUI</code> (<code>3.83 s</code> / <code>48.34 s</code>) and <code>openfal</code> (<code>12.30 s</code> / <code>90.30 s</code>) run quantized <code>INT8 ConvRot</code> / <code>FP8 scaled</code> weights. <code>vLLM-Omni</code> streams dequantized <code>BF16</code> weights via <code>DistributedLayerwiseOffloadBackend</code> (<code>checkpoint_mmap</code>, <code>--dlo-resident-layers 12</code>, <code>14.2–16.3 GB</code> VRAM), where PCIe H2D transfer dominates latency.</li>
+            <li><strong>FL2VA duration floor:</strong> <code>openfal</code> and <code>ComfyUI</code> generate <code>73</code> frames (<code>3.04 s</code> at <code>24 fps</code>); <code>vLLM-Omni</code> requires at least <code>4 s</code>, receives <code>num_frames=97</code>, and outputs <code>107</code> frames (<code>4.46 s</code>) with <code>32 kHz</code> stereo AAC audio.</li>
+            <li><strong>Full report &amp; raw JSON telemetry:</strong> View <a href="benchmark-rtx-5090-2026-11-18.md">RTX 5090 Benchmark Record (Markdown)</a> or <a href="https://github.com/esokullu/openfal/blob/main/benchmark/results/bench_NVIDIA_GeForce_RTX_5090_full_comparison.json" target="_blank" rel="noopener noreferrer">consolidated JSON results on GitHub</a>.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer>
@@ -1000,6 +1163,7 @@ curl -N http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;
       <div class="footer-links">
         <a href="https://github.com/esokullu/openfal" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://github.com/esokullu/openfal/blob/main/README.md" target="_blank" rel="noopener noreferrer">README</a>
+        <a href="benchmark-rtx-5090-2026-11-18.md">RTX 5090 Benchmarks</a>
         <a href="validation-2026-11-17.md">Windows Validation Record</a>
         <a href="macos-validation.md">macOS Validation Guide</a>
       </div>

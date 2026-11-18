@@ -1,0 +1,53 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "entries": [
+    {
+      "engine": "vllm_omni",
+      "scenario_id": "minimax_h3_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 128.595,
+      "cold_sec": 65.251,
+      "warm_mean_sec": 65.005,
+      "warm_p50_sec": 65.005,
+      "warm_min_sec": 64.938,
+      "warm_max_sec": 65.073,
+      "batch_wall_sec": 130.011,
+      "throughput_req_per_min": 0.92,
+      "peak_vram_mib": 16697.0,
+      "mean_gpu_util_pct": 23.2,
+      "engine_mode": "vllm_omni",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 65.251,
+          "reported_infer_sec": null,
+          "output_bytes": 3097647,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 65.073,
+          "reported_infer_sec": null,
+          "output_bytes": 3097647,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 64.938,
+          "reported_infer_sec": null,
+          "output_bytes": 3097647,
+          "engine_mode": "vllm_omni"
+        }
+      ]
+    }
+  ]
+}

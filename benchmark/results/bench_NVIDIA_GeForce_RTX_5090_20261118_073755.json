@@ -1,0 +1,197 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "entries": [
+    {
+      "engine": "comfyui",
+      "scenario_id": "qwen21_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 18.553,
+      "cold_sec": 12.877,
+      "warm_mean_sec": 5.324,
+      "warm_p50_sec": 5.324,
+      "warm_min_sec": 5.324,
+      "warm_max_sec": 5.324,
+      "batch_wall_sec": 10.648,
+      "throughput_req_per_min": 11.27,
+      "peak_vram_mib": 17009.0,
+      "mean_gpu_util_pct": 65.6,
+      "engine_mode": "comfyui",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 12.877,
+          "reported_infer_sec": null,
+          "output_bytes": 1619222,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 5.324,
+          "reported_infer_sec": null,
+          "output_bytes": 1724896,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 5.324,
+          "reported_infer_sec": null,
+          "output_bytes": 1604034,
+          "engine_mode": "comfyui"
+        }
+      ]
+    },
+    {
+      "engine": "comfyui",
+      "scenario_id": "minimax_h3_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 18.553,
+      "cold_sec": 10.179,
+      "warm_mean_sec": 3.825,
+      "warm_p50_sec": 3.825,
+      "warm_min_sec": 3.82,
+      "warm_max_sec": 3.831,
+      "batch_wall_sec": 7.651,
+      "throughput_req_per_min": 15.68,
+      "peak_vram_mib": 31513.0,
+      "mean_gpu_util_pct": 65.3,
+      "engine_mode": "comfyui",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 10.179,
+          "reported_infer_sec": null,
+          "output_bytes": 1866246,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 3.831,
+          "reported_infer_sec": null,
+          "output_bytes": 1761639,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 3.82,
+          "reported_infer_sec": null,
+          "output_bytes": 1841236,
+          "engine_mode": "comfyui"
+        }
+      ]
+    },
+    {
+      "engine": "comfyui",
+      "scenario_id": "wan22_i2v_14b",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 18.553,
+      "cold_sec": 121.741,
+      "warm_mean_sec": 85.874,
+      "warm_p50_sec": 85.874,
+      "warm_min_sec": 85.804,
+      "warm_max_sec": 85.943,
+      "batch_wall_sec": 171.747,
+      "throughput_req_per_min": 0.7,
+      "peak_vram_mib": 32021.0,
+      "mean_gpu_util_pct": 85.7,
+      "engine_mode": "comfyui",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 121.741,
+          "reported_infer_sec": null,
+          "output_bytes": 1139295,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 85.804,
+          "reported_infer_sec": null,
+          "output_bytes": 1620115,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 85.943,
+          "reported_infer_sec": null,
+          "output_bytes": 1193535,
+          "engine_mode": "comfyui"
+        }
+      ]
+    },
+    {
+      "engine": "comfyui",
+      "scenario_id": "minimax_h3_i2v",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 18.553,
+      "cold_sec": 54.696,
+      "warm_mean_sec": 48.335,
+      "warm_p50_sec": 48.335,
+      "warm_min_sec": 48.313,
+      "warm_max_sec": 48.356,
+      "batch_wall_sec": 96.669,
+      "throughput_req_per_min": 1.24,
+      "peak_vram_mib": 31635.0,
+      "mean_gpu_util_pct": 90.6,
+      "engine_mode": "comfyui",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 54.696,
+          "reported_infer_sec": null,
+          "output_bytes": 2063646,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 48.356,
+          "reported_infer_sec": null,
+          "output_bytes": 2240975,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 48.313,
+          "reported_infer_sec": null,
+          "output_bytes": 2396524,
+          "engine_mode": "comfyui"
+        }
+      ]
+    }
+  ]
+}

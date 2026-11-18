@@ -11,6 +11,7 @@ Supports:
 from __future__ import annotations
 
 import argparse
+import base64
 import concurrent.futures
 import json
 import os
@@ -86,6 +87,16 @@ def parse_nvidia_smi_csv(output: str) -> List[Tuple[float, float]]:
     return readings
 
 
+def _target_gpu_index() -> Optional[str]:
+    idx = os.environ.get("BENCH_GPU_INDEX")
+    if idx is not None and idx.strip():
+        return idx.strip()
+    cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "0").strip()
+    if cvd and "," not in cvd:
+        return cvd
+    return "0"
+
+
 class GpuMonitor:
     """Background `nvidia-smi` poller capturing peak VRAM (MiB) and mean utilization (%)."""
 
@@ -107,14 +118,15 @@ class GpuMonitor:
             self._thread.join(timeout=2.0)
 
     def _poll_loop(self) -> None:
+        gpu_idx = _target_gpu_index()
+        cmd = ["nvidia-smi"]
+        if gpu_idx is not None:
+            cmd.extend(["-i", gpu_idx])
+        cmd.extend(["--query-gpu=memory.used,utilization.gpu", "--format=csv,noheader,nounits"])
         while not self._stop.is_set():
             try:
                 proc = subprocess.run(
-                    [
-                        "nvidia-smi",
-                        "--query-gpu=memory.used,utilization.gpu",
-                        "--format=csv,noheader,nounits",
-                    ],
+                    cmd,
                     capture_output=True,
                     text=True,
                     timeout=2.0,
@@ -140,8 +152,13 @@ class GpuMonitor:
 def query_gpu_label() -> str:
     """Query primary GPU model name for result metadata (best-effort)."""
     try:
+        gpu_idx = _target_gpu_index()
+        cmd = ["nvidia-smi"]
+        if gpu_idx is not None:
+            cmd.extend(["-i", gpu_idx])
+        cmd.extend(["--query-gpu=name", "--format=csv,noheader"])
         proc = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            cmd,
             capture_output=True,
             text=True,
             timeout=3.0,
@@ -154,15 +171,44 @@ def query_gpu_label() -> str:
     return "unknown_gpu"
 
 
+def wait_for_vram_release(threshold_mib: float = 1500.0, timeout_sec: float = 20.0) -> None:
+    """Wait until target GPU VRAM drops below `threshold_mib` after server shutdown."""
+    gpu_idx = _target_gpu_index()
+    cmd = ["nvidia-smi"]
+    if gpu_idx is not None:
+        cmd.extend(["-i", gpu_idx])
+    cmd.extend(["--query-gpu=memory.used", "--format=csv,noheader,nounits"])
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=2.0)
+            if proc.returncode == 0 and proc.stdout.strip():
+                used = float(proc.stdout.strip().splitlines()[0].strip())
+                if used <= threshold_mib:
+                    return
+        except Exception:
+            return
+        time.sleep(1.0)
+
+
 class ManagedEngineProcess:
     """Spawn and cleanly tear down a local inference server for VRAM-isolated benchmarking."""
 
-    def __init__(self, name: str, cmd: List[str], health_url: str, cwd: Optional[Path] = None, timeout_sec: float = 300.0):
+    def __init__(
+        self,
+        name: str,
+        cmd: List[str],
+        health_url: str,
+        cwd: Optional[Path] = None,
+        timeout_sec: float = 300.0,
+        env: Optional[Dict[str, str]] = None,
+    ):
         self.name = name
         self.cmd = cmd
         self.health_url = health_url
         self.cwd = cwd
         self.timeout_sec = timeout_sec
+        self.env = env
         self.proc: Optional[subprocess.Popen[str]] = None
         self.startup_sec: Optional[float] = None
         self._log_file = None
@@ -173,13 +219,19 @@ class ManagedEngineProcess:
         self._log_file = open(log_path, "w", encoding="utf-8")
         print(f"  [server:{self.name}] Starting: {' '.join(shlex.quote(c) for c in self.cmd)}")
         t0 = time.perf_counter()
+        proc_env = os.environ.copy()
+        proc_env.setdefault("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
+        proc_env.setdefault("CUDA_VISIBLE_DEVICES", "0")
+        if self.env:
+            proc_env.update(self.env)
         self.proc = subprocess.Popen(
             self.cmd,
             cwd=str(self.cwd) if self.cwd else None,
             stdout=self._log_file,
             stderr=subprocess.STDOUT,
             text=True,
-            start_new_session=True,
+            start_new_session=(os.name != "nt"),
+            env=proc_env,
         )
         deadline = time.monotonic() + self.timeout_sec
         with httpx.Client(timeout=5.0) as client:
@@ -203,19 +255,59 @@ class ManagedEngineProcess:
     def stop(self) -> None:
         if self.proc is not None and self.proc.poll() is None:
             print(f"  [server:{self.name}] Stopping PID {self.proc.pid}...")
-            try:
-                os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
-                self.proc.wait(timeout=15.0)
-            except Exception:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(self.proc.pid)],
+                    capture_output=True,
+                    timeout=15.0,
+                )
+                if self.cmd and "wsl" in Path(self.cmd[0]).name.lower():
+                    wsl_distro = os.environ.get("VLLM_WSL_DISTRO", "Ubuntu-24.04")
+                    subprocess.run(
+                        ["wsl", "-d", wsl_distro, "--", "pkill", "-9", "-f", "vllm"],
+                        capture_output=True,
+                        timeout=10.0,
+                    )
                 try:
-                    os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
-                    self.proc.wait(timeout=5.0)
+                    self.proc.wait(timeout=10.0)
                 except Exception:
                     pass
-            time.sleep(2.0)  # allow CUDA driver context reclamation
+            else:
+                try:
+                    os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
+                    self.proc.wait(timeout=15.0)
+                except Exception:
+                    try:
+                        os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+                        self.proc.wait(timeout=5.0)
+                    except Exception:
+                        pass
+            wait_for_vram_release()
         if self._log_file is not None:
             self._log_file.close()
             self._log_file = None
+
+
+_OPENFAL_UPLOAD_CACHE: Dict[Tuple[str, str], str] = {}
+
+
+def _ensure_openfal_uploaded_image(client: httpx.Client, base_url: str, image_path_str: str) -> str:
+    key = (base_url.rstrip("/"), image_path_str)
+    if key in _OPENFAL_UPLOAD_CACHE:
+        return _OPENFAL_UPLOAD_CACHE[key]
+    img_path = Path(image_path_str)
+    if not img_path.is_file():
+        img_path = Path(__file__).resolve().parent.parent / image_path_str
+    raw = img_path.read_bytes()
+    resp = client.post(
+        f"{base_url.rstrip('/')}/v1/storage/upload",
+        content=raw,
+        headers={"Content-Type": "image/png"},
+    )
+    resp.raise_for_status()
+    url = resp.json()["url"]
+    _OPENFAL_UPLOAD_CACHE[key] = url
+    return url
 
 
 def _run_openfal_once(
@@ -240,6 +332,10 @@ def _run_openfal_once(
         payload["fps"] = scenario.fps
 
     with httpx.Client(timeout=timeout_sec) as client:
+        if scenario.input_image_path:
+            payload["start_image_url"] = _ensure_openfal_uploaded_image(
+                client, base_url, scenario.input_image_path
+            )
         sub = client.post(f"{base_url.rstrip('/')}/queue/{scenario.openfal_endpoint}", json=payload)
         sub.raise_for_status()
         qinfo = sub.json()
@@ -254,7 +350,7 @@ def _run_openfal_once(
                 break
             if state == "FAILED":
                 logs = st.get("logs") or []
-                tail = logs[-1].get("message") if logs else "FAILED"
+                tail = logs[-1].get("message") if logs else (st.get("error") or "FAILED")
                 raise RuntimeError(f"openfal job failed: {tail}")
             time.sleep(0.25)
         else:
@@ -312,8 +408,10 @@ def _run_comfyui_once(
 
         total_bytes = 0
         for node_out in (item.get("outputs") or {}).values():
-            for key in ("images", "gifs", "videos"):
+            for key in ("images", "gifs", "videos", "audio"):
                 for file_info in node_out.get(key) or []:
+                    if not isinstance(file_info, dict):
+                        continue
                     fn = file_info.get("filename")
                     if fn:
                         subf = file_info.get("subfolder", "")
@@ -324,6 +422,15 @@ def _run_comfyui_once(
                         ).content
                         total_bytes += len(blob)
         return None, total_bytes, "comfyui"
+
+
+def _maybe_save_sample(scenario_id: str, seed: int, ext: str, data: bytes) -> None:
+    sample_dir = os.environ.get("BENCH_SAMPLE_DIR")
+    if not sample_dir or not data:
+        return
+    out_dir = Path(sample_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / f"{scenario_id}_seed{seed}.{ext}").write_bytes(data)
 
 
 def _run_vllm_omni_once(
@@ -337,38 +444,82 @@ def _run_vllm_omni_once(
     base = base_url.rstrip("/")
     with httpx.Client(timeout=timeout_sec) as client:
         if scenario.modality == "image":
+            img_payload: Dict[str, Any] = {
+                "model": scenario.vllm_model_id,
+                "prompt": scenario.prompt,
+                "size": f"{scenario.width}x{scenario.height}",
+                "seed": seed,
+                "n": 1,
+                "response_format": "b64_json",
+                "output_format": "png",
+            }
+            if scenario.scenario_id == "qwen21_t2i":
+                img_payload["true_cfg_scale"] = 1.0
+                img_payload["sigmas"] = [
+                    1.0,
+                    0.978453,
+                    0.95418,
+                    0.926626,
+                    0.89508,
+                    0.845148,
+                    0.704534,
+                    0.414568,
+                ]
+            elif scenario.scenario_id == "minimax_h3_t2i":
+                img_payload["num_inference_steps"] = scenario.steps
+                img_payload["extra_params"] = {"min_generation_area": 1024}
+            else:
+                img_payload["num_inference_steps"] = scenario.steps
+                img_payload["guidance_scale"] = scenario.guidance_scale
+
             resp = client.post(
                 f"{base}/v1/images/generations",
-                json={
-                    "model": scenario.vllm_model_id,
-                    "prompt": scenario.prompt,
-                    "size": f"{scenario.width}x{scenario.height}",
-                    "num_inference_steps": scenario.steps,
-                    "guidance_scale": scenario.guidance_scale,
-                    "seed": seed,
-                    "response_format": "b64_json",
-                },
+                json=img_payload,
             )
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                raise RuntimeError(f"vLLM-Omni /v1/images/generations HTTP {resp.status_code}: {resp.text}")
             data = resp.json()
             b64_str = (data.get("data") or [{}])[0].get("b64_json", "")
-            return None, int(len(b64_str) * 0.75), "vllm_omni"
+            raw_bytes = base64.b64decode(b64_str) if b64_str else b""
+            _maybe_save_sample(scenario.scenario_id, seed, "png", raw_bytes)
+            return None, (len(raw_bytes) or int(len(b64_str) * 0.75)), "vllm_omni"
 
-        form_fields = {
+        form_fields: Dict[str, str] = {
+            "model": scenario.vllm_model_id,
             "prompt": scenario.prompt,
             "width": str(scenario.width),
             "height": str(scenario.height),
             "num_frames": str(scenario.num_frames),
             "fps": str(scenario.fps),
             "num_inference_steps": str(scenario.steps),
-            "guidance_scale": str(scenario.guidance_scale),
             "seed": str(seed),
         }
-        if scenario.negative_prompt:
-            form_fields["negative_prompt"] = scenario.negative_prompt
+        if scenario.scenario_id == "wan22_i2v_14b":
+            form_fields["guidance_scale"] = str(scenario.guidance_scale)
+            form_fields["guidance_scale_2"] = str(scenario.guidance_scale)
+            form_fields["boundary_ratio"] = "0.9"
+            if scenario.negative_prompt:
+                form_fields["negative_prompt"] = scenario.negative_prompt
+        elif scenario.scenario_id == "minimax_h3_i2v":
+            # vLLM-Omni enforces video duration in [4, 15]s -> minimum valid at 24fps is 97f (4.04s).
+            form_fields["num_frames"] = str(max(97, scenario.num_frames))
+            form_fields["flow_shift"] = "12"
+            form_fields["extra_params"] = json.dumps({"task": "fl2va", "audio_flow_shift": 3.0})
+        else:
+            form_fields["guidance_scale"] = str(scenario.guidance_scale)
+            if scenario.negative_prompt:
+                form_fields["negative_prompt"] = scenario.negative_prompt
 
-        sub = client.post(f"{base}/v1/videos", data=form_fields)
-        sub.raise_for_status()
+        files = None
+        if scenario.input_image_path:
+            img_path = Path(scenario.input_image_path)
+            if not img_path.is_file():
+                img_path = Path(__file__).resolve().parent.parent / scenario.input_image_path
+            files = {"input_reference": (img_path.name, img_path.read_bytes(), "image/png")}
+
+        sub = client.post(f"{base}/v1/videos", data=form_fields, files=files)
+        if sub.status_code >= 400:
+            raise RuntimeError(f"vLLM-Omni /v1/videos HTTP {sub.status_code}: {sub.text}")
         job = sub.json()
         vid_id = job["id"]
 
@@ -385,7 +536,9 @@ def _run_vllm_omni_once(
             raise TimeoutError(f"vLLM-Omni video job {vid_id} timed out after {timeout_sec}s")
 
         raw_bytes = client.get(f"{base}/v1/videos/{vid_id}/content").content
-        return None, len(raw_bytes), "vllm_omni"
+        _maybe_save_sample(scenario.scenario_id, seed, "mp4", raw_bytes)
+        reported = st.get("inference_time_s")
+        return (float(reported) if reported is not None else None), len(raw_bytes), "vllm_omni"
 
 
 ENGINE_CALLERS: Dict[
@@ -542,6 +695,139 @@ def _port_from_url(url: str, fallback: int) -> int:
     return parsed.port or fallback
 
 
+def _resolve_comfy_command(port: int) -> Tuple[List[str], Optional[Path]]:
+    comfy_dir_env = os.environ.get("COMFYUI_DIR")
+    comfy_python = os.environ.get("COMFYUI_PYTHON")
+    comfy_base_dir = os.environ.get("COMFYUI_BASE_DIR")
+    extra_paths_yaml = os.environ.get(
+        "COMFYUI_EXTRA_MODEL_PATHS",
+        str(Path(__file__).resolve().parent / "comfy_extra_model_paths.yaml"),
+    )
+    extra = shlex.split(os.environ.get("COMFYUI_EXTRA_ARGS", ""))
+
+    # Auto-detect ComfyUI Desktop on Windows when COMFYUI_DIR is not explicitly set
+    win_desktop_code = Path(
+        os.environ.get("COMFYUI_DESKTOP_DIR")
+        or (Path.home() / "AppData/Local/Comfy-Desktop/ComfyUI-Installs/ComfyUI/ComfyUI")
+    )
+    win_desktop_base = Path(comfy_base_dir or (Path.home() / "Documents/ComfyUI2"))
+    win_desktop_py = win_desktop_base / ".venv" / "Scripts" / "python.exe"
+
+    if not comfy_dir_env and win_desktop_code.is_dir() and win_desktop_py.is_file():
+        py_bin = comfy_python or str(win_desktop_py)
+        base_dir = comfy_base_dir or str(win_desktop_base)
+        cmd = [
+            py_bin,
+            "main.py",
+            "--listen",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--base-directory",
+            base_dir,
+        ]
+        if Path(extra_paths_yaml).is_file():
+            cmd.extend(["--extra-model-paths-config", extra_paths_yaml])
+        cmd.extend(extra)
+        return cmd, win_desktop_code
+
+    comfy_dir = Path(comfy_dir_env or "/workspace/openfal_bench/ComfyUI")
+    py_bin = comfy_python or sys.executable
+    cmd = [py_bin, "main.py", "--listen", "127.0.0.1", "--port", str(port)]
+    if comfy_base_dir:
+        cmd.extend(["--base-directory", comfy_base_dir])
+    if Path(extra_paths_yaml).is_file():
+        cmd.extend(["--extra-model-paths-config", extra_paths_yaml])
+    cmd.extend(extra)
+    return cmd, comfy_dir
+
+
+_VLLM_LOCAL_SUBDIRS: Dict[str, str] = {
+    "qwen21_t2i": "Qwen-Image-2.1-Turbo",
+    "wan22_i2v_14b": "Wan2.2-I2V-A14B",
+    "minimax_h3_i2v": "MiniMax-H3/FL2VA",
+    "minimax_h3_t2i": "MiniMax-H3-Image",
+}
+
+
+def _resolve_vllm_omni_command(sc: BenchmarkScenario, port: int, vllm_offload: bool) -> List[str]:
+    use_wsl = os.name == "nt" and not os.environ.get("VLLM_OMNI_NATIVE_WINDOWS")
+    wsl_models_dir = os.environ.get("VLLM_WSL_MODELS_DIR")
+    if use_wsl and wsl_models_dir and sc.scenario_id in _VLLM_LOCAL_SUBDIRS:
+        default_model = f"{wsl_models_dir.rstrip('/')}/{_VLLM_LOCAL_SUBDIRS[sc.scenario_id]}"
+    else:
+        default_model = sc.vllm_model_id
+    model_override = os.environ.get(f"VLLM_MODEL_{sc.scenario_id.upper()}", default_model)
+    extra_env = os.environ.get(f"VLLM_OMNI_ARGS_{sc.scenario_id.upper()}", os.environ.get("VLLM_OMNI_EXTRA_ARGS", ""))
+    extra = shlex.split(extra_env)
+    base_args = [
+        "serve",
+        model_override,
+        "--omni",
+        "--served-model-name",
+        sc.vllm_model_id,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+    ]
+    if vllm_offload and not extra:
+        if sc.scenario_id == "qwen21_t2i":
+            base_args.extend(["--quantization", "fp8"])
+        elif sc.scenario_id == "wan22_i2v_14b":
+            base_args.extend(["--quantization", "fp8", "--enable-cpu-offload"])
+        elif sc.scenario_id in ("minimax_h3_i2v", "minimax_h3_t2i"):
+            # DistributedLayerwiseOffloadBackend (checkpoint_mmap + bounded host staging)
+            # avoids LayerWiseOffloadBackend pinning ~92 GB in host RAM.
+            if sc.scenario_id == "minimax_h3_i2v":
+                base_args.extend(["--task-type", "fl2va"])
+            base_args.extend(
+                [
+                    "--trust-remote-code",
+                    "--num-gpus",
+                    "1",
+                    "--tensor-parallel-size",
+                    "1",
+                    "--text-encoder-tp-size",
+                    "1",
+                    "--usp",
+                    "1",
+                    "--ring",
+                    "1",
+                ]
+            )
+            if sc.scenario_id == "minimax_h3_i2v":
+                base_args.extend(["--vae-patch-parallel-size", "1", "--vae-parallel-mode", "tile", "--vae-use-tiling"])
+            base_args.extend(
+                [
+                    "--enable-distributed-layerwise-offload",
+                    "--dlo-no-use-allgather",
+                    "--dlo-resident-layers",
+                    "12",
+                    "--enforce-eager",
+                    "--diffusion-attention-backend",
+                    "CUDNN_ATTN",
+                ]
+            )
+        elif sc.vllm_default_offload:
+            base_args.append("--enable-layerwise-offload")
+    base_args.extend(extra)
+
+    if use_wsl:
+        wsl_distro = os.environ.get("VLLM_WSL_DISTRO", "Ubuntu-24.04")
+        wsl_venv_vllm = os.environ.get("VLLM_WSL_BIN", "$HOME/vllm/vllm-omni-env/bin/vllm")
+        quoted = " ".join(shlex.quote(a) for a in base_args)
+        bash_cmd = (
+            "export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 "
+            "CUDA_HOME=/usr/local/cuda-13.0 "
+            "LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:/usr/local/cuda-12.8/lib64:/usr/lib/wsl/lib "
+            "VLLM_WORKER_MULTIPROC_METHOD=spawn VLLM_OMNI_VIDEO_SYNC_TIMEOUT=14400 && "
+            f"{wsl_venv_vllm} {quoted}"
+        )
+        return ["wsl", "-d", wsl_distro, "--", "bash", "-lc", bash_cmd]
+    return ["vllm", *base_args]
+
+
 def _run_sequential_local(
     targets: List[str],
     scenarios: List[BenchmarkScenario],
@@ -551,14 +837,13 @@ def _run_sequential_local(
 ) -> List[BenchmarkEntry]:
     entries: List[BenchmarkEntry] = []
     weights_dir = Path(os.environ.get("OPENFAL_WEIGHTS_DIR", "./weights/MiniMax-H3"))
-    comfy_dir = Path(os.environ.get("COMFYUI_DIR", "/workspace/openfal_bench/ComfyUI"))
     profile = os.environ.get("OPENFAL_PROFILE", "auto")
     vllm_offload = env_bool("VLLM_OMNI_OFFLOAD", True)
     log_dir = Path(args.output_dir) / "logs"
 
     for engine in targets:
         if engine == "openfal":
-            port = _port_from_url(urls["openfal"], 8000)
+            port = _port_from_url(urls["openfal"], 8008)
             cmd = [
                 sys.executable,
                 "-m",
@@ -573,29 +858,39 @@ def _run_sequential_local(
                 "--weights-dir",
                 str(weights_dir),
             ]
-            srv = ManagedEngineProcess("openfal", cmd, f"{urls['openfal'].rstrip('/')}/health")
-            try:
-                startup = srv.start(log_dir)
-                for sc in scenarios:
+            for sc in scenarios:
+                srv = ManagedEngineProcess(f"openfal_{sc.scenario_id}", cmd, f"{urls['openfal'].rstrip('/')}/health")
+                try:
+                    startup = srv.start(log_dir)
                     for c in concurrencies:
+                        print(f"  [openfal] Running scenario={sc.scenario_id} concurrency={c}...")
                         entries.append(
                             benchmark_cell(
                                 engine, urls["openfal"], sc, args.warmup, args.repeats, c,
                                 args.seed, args.allow_synthetic, args.request_timeout, startup_sec=startup,
                             )
                         )
-            finally:
-                srv.stop()
+                finally:
+                    srv.stop()
 
         elif engine == "comfyui":
             port = _port_from_url(urls["comfyui"], 8188)
-            extra = shlex.split(os.environ.get("COMFYUI_EXTRA_ARGS", ""))
-            cmd = [sys.executable, "main.py", "--listen", "127.0.0.1", "--port", str(port), *extra]
-            srv = ManagedEngineProcess("comfyui", cmd, f"{urls['comfyui'].rstrip('/')}/system_stats", cwd=comfy_dir)
+            cmd, comfy_cwd = _resolve_comfy_command(port)
+            srv = ManagedEngineProcess("comfyui", cmd, f"{urls['comfyui'].rstrip('/')}/system_stats", cwd=comfy_cwd)
             try:
                 startup = srv.start(log_dir)
                 for sc in scenarios:
+                    try:
+                        _http_json(
+                            "POST",
+                            f"{urls['comfyui'].rstrip('/')}/free",
+                            payload={"unload_models": True, "free_memory": True},
+                            timeout=15.0,
+                        )
+                    except Exception:
+                        pass
                     for c in concurrencies:
+                        print(f"  [comfyui] Running scenario={sc.scenario_id} concurrency={c}...")
                         entries.append(
                             benchmark_cell(
                                 engine, urls["comfyui"], sc, args.warmup, args.repeats, c,
@@ -607,18 +902,15 @@ def _run_sequential_local(
 
         elif engine == "vllm_omni":
             port = _port_from_url(urls["vllm_omni"], 8091)
-            extra = shlex.split(os.environ.get("VLLM_OMNI_EXTRA_ARGS", ""))
             for sc in scenarios:
-                cmd = ["vllm", "serve", sc.vllm_model_id, "--omni", "--host", "127.0.0.1", "--port", str(port)]
-                if vllm_offload and sc.vllm_default_offload:
-                    cmd.append("--enable-layerwise-offload")
-                cmd.extend(extra)
+                cmd = _resolve_vllm_omni_command(sc, port, vllm_offload)
                 srv = ManagedEngineProcess(
                     f"vllm_omni_{sc.scenario_id}", cmd, f"{urls['vllm_omni'].rstrip('/')}/health", timeout_sec=600.0
                 )
                 try:
                     startup = srv.start(log_dir)
                     for c in concurrencies:
+                        print(f"  [vllm_omni] Running scenario={sc.scenario_id} concurrency={c}...")
                         entries.append(
                             benchmark_cell(
                                 engine, urls["vllm_omni"], sc, args.warmup, args.repeats, c,
@@ -649,7 +941,7 @@ def main() -> None:
     parser.add_argument("--targets", default=os.environ.get("BENCH_TARGETS", "openfal,comfyui,vllm_omni"))
     parser.add_argument(
         "--scenarios",
-        default=os.environ.get("BENCH_SCENARIOS", "qwen21_t2i,wan22_t2v_14b,minimax_h3_t2v,minimax_h3_t2i"),
+        default=os.environ.get("BENCH_SCENARIOS", "qwen21_t2i,minimax_h3_t2i,wan22_i2v_14b,minimax_h3_i2v"),
     )
     parser.add_argument("--warmup", type=int, default=int(os.environ.get("BENCH_WARMUP", "1")))
     parser.add_argument("--repeats", type=int, default=int(os.environ.get("BENCH_REPEATS", "3")))
@@ -669,7 +961,7 @@ def main() -> None:
     scenarios = [SCENARIOS[s.strip()] for s in args.scenarios.split(",") if s.strip() in SCENARIOS]
     concurrencies = [int(c.strip()) for c in args.concurrency.split(",") if c.strip()]
     urls = {
-        "openfal": os.environ.get("OPENFAL_URL", "http://127.0.0.1:8000"),
+        "openfal": os.environ.get("OPENFAL_URL", "http://127.0.0.1:8008"),
         "comfyui": os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188"),
         "vllm_omni": os.environ.get("VLLM_OMNI_URL", "http://127.0.0.1:8091"),
     }

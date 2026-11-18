@@ -51,7 +51,7 @@ def test_scenarios_match_openfal_dimensions_and_comfy_graphs():
     # Every scenario's pixel dimensions must match openfal's resolution rounding cleanly
     for sc_id, sc in SCENARIOS.items():
         raw_w, raw_h = MiniMaxH3DiT.resolve_dimensions(sc.openfal_resolution, sc.openfal_aspect_ratio)
-        if sc_id == "wan22_t2v_14b":
+        if sc_id.startswith("wan22_"):
             aligned_w, aligned_h = (raw_w // 16) * 16, (raw_h // 16) * 16
         else:
             # Image-2.1 (`// 32 * 32`) & MiniMax-H3 (`round(x / 32) * 32`) both yield 1344x768 and 832x480

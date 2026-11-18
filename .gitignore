@@ -22,5 +22,8 @@ tests/client/*/outputs/
 tests/client/api/node_modules/
 benchmark/.env
 benchmark/.runpod_pod.json
-benchmark/results/
+benchmark/comfy_extra_model_paths.yaml
+benchmark/results/*
+!benchmark/results/*.json
+!benchmark/results/*.md
 .DS_Store

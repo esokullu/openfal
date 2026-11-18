@@ -1,0 +1,607 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "config": {
+    "warmup": 1,
+    "repeats": 2,
+    "concurrency": 1,
+    "execution": "sequential_local_vram_isolated"
+  },
+  "sources": [
+    "bench_NVIDIA_GeForce_RTX_5090_20261118_070636.json",
+    "bench_NVIDIA_GeForce_RTX_5090_20261118_072017.json",
+    "bench_NVIDIA_GeForce_RTX_5090_20261118_073755.json",
+    "bench_NVIDIA_GeForce_RTX_5090_20261118_124042.json",
+    "bench_NVIDIA_GeForce_RTX_5090_20261118_134107.json",
+    "bench_NVIDIA_GeForce_RTX_5090_20261118_140548.json"
+  ],
+  "entries": [
+    {
+      "engine": "openfal",
+      "scenario_id": "qwen21_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 2.16,
+      "cold_sec": 52.487,
+      "warm_mean_sec": 7.005,
+      "warm_p50_sec": 7.005,
+      "warm_min_sec": 7.001,
+      "warm_max_sec": 7.009,
+      "batch_wall_sec": 14.01,
+      "throughput_req_per_min": 8.57,
+      "peak_vram_mib": 12249.0,
+      "mean_gpu_util_pct": 24.5,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 52.487,
+          "reported_infer_sec": 52.076,
+          "output_bytes": 1640660,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 7.001,
+          "reported_infer_sec": 6.749,
+          "output_bytes": 1648269,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 7.009,
+          "reported_infer_sec": 6.632,
+          "output_bytes": 1535744,
+          "engine_mode": "real_pytorch"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_070636.json"
+    },
+    {
+      "engine": "comfyui",
+      "scenario_id": "qwen21_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 18.553,
+      "cold_sec": 12.877,
+      "warm_mean_sec": 5.324,
+      "warm_p50_sec": 5.324,
+      "warm_min_sec": 5.324,
+      "warm_max_sec": 5.324,
+      "batch_wall_sec": 10.648,
+      "throughput_req_per_min": 11.27,
+      "peak_vram_mib": 17009.0,
+      "mean_gpu_util_pct": 65.6,
+      "engine_mode": "comfyui",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 12.877,
+          "reported_infer_sec": null,
+          "output_bytes": 1619222,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 5.324,
+          "reported_infer_sec": null,
+          "output_bytes": 1724896,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 5.324,
+          "reported_infer_sec": null,
+          "output_bytes": 1604034,
+          "engine_mode": "comfyui"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_073755.json"
+    },
+    {
+      "engine": "vllm_omni",
+      "scenario_id": "qwen21_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 53.398,
+      "cold_sec": 5.051,
+      "warm_mean_sec": 2.45,
+      "warm_p50_sec": 2.45,
+      "warm_min_sec": 2.434,
+      "warm_max_sec": 2.465,
+      "batch_wall_sec": 4.899,
+      "throughput_req_per_min": 24.49,
+      "peak_vram_mib": 25257.0,
+      "mean_gpu_util_pct": 74.7,
+      "engine_mode": "vllm_omni",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 5.051,
+          "reported_infer_sec": null,
+          "output_bytes": 4129919,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 2.465,
+          "reported_infer_sec": null,
+          "output_bytes": 4129919,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 2.434,
+          "reported_infer_sec": null,
+          "output_bytes": 4129919,
+          "engine_mode": "vllm_omni"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_124042.json"
+    },
+    {
+      "engine": "openfal",
+      "scenario_id": "minimax_h3_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 2.16,
+      "cold_sec": 42.028,
+      "warm_mean_sec": 12.303,
+      "warm_p50_sec": 12.303,
+      "warm_min_sec": 11.791,
+      "warm_max_sec": 12.815,
+      "batch_wall_sec": 24.606,
+      "throughput_req_per_min": 4.88,
+      "peak_vram_mib": 15183.0,
+      "mean_gpu_util_pct": 32.8,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 42.028,
+          "reported_infer_sec": 41.767,
+          "output_bytes": 1885335,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 12.815,
+          "reported_infer_sec": 12.391,
+          "output_bytes": 1724092,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 11.791,
+          "reported_infer_sec": 11.455,
+          "output_bytes": 1776677,
+          "engine_mode": "real_pytorch"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_070636.json"
+    },
+    {
+      "engine": "comfyui",
+      "scenario_id": "minimax_h3_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 18.553,
+      "cold_sec": 10.179,
+      "warm_mean_sec": 3.825,
+      "warm_p50_sec": 3.825,
+      "warm_min_sec": 3.82,
+      "warm_max_sec": 3.831,
+      "batch_wall_sec": 7.651,
+      "throughput_req_per_min": 15.68,
+      "peak_vram_mib": 31513.0,
+      "mean_gpu_util_pct": 65.3,
+      "engine_mode": "comfyui",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 10.179,
+          "reported_infer_sec": null,
+          "output_bytes": 1866246,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 3.831,
+          "reported_infer_sec": null,
+          "output_bytes": 1761639,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 3.82,
+          "reported_infer_sec": null,
+          "output_bytes": 1841236,
+          "engine_mode": "comfyui"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_073755.json"
+    },
+    {
+      "engine": "vllm_omni",
+      "scenario_id": "minimax_h3_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 128.595,
+      "cold_sec": 65.251,
+      "warm_mean_sec": 65.005,
+      "warm_p50_sec": 65.005,
+      "warm_min_sec": 64.938,
+      "warm_max_sec": 65.073,
+      "batch_wall_sec": 130.011,
+      "throughput_req_per_min": 0.92,
+      "peak_vram_mib": 16697.0,
+      "mean_gpu_util_pct": 23.2,
+      "engine_mode": "vllm_omni",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 65.251,
+          "reported_infer_sec": null,
+          "output_bytes": 3097647,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 65.073,
+          "reported_infer_sec": null,
+          "output_bytes": 3097647,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 64.938,
+          "reported_infer_sec": null,
+          "output_bytes": 3097647,
+          "engine_mode": "vllm_omni"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_140548.json"
+    },
+    {
+      "engine": "openfal",
+      "scenario_id": "wan22_i2v_14b",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 2.16,
+      "cold_sec": 206.748,
+      "warm_mean_sec": 182.744,
+      "warm_p50_sec": 182.744,
+      "warm_min_sec": 182.361,
+      "warm_max_sec": 183.127,
+      "batch_wall_sec": 365.488,
+      "throughput_req_per_min": 0.33,
+      "peak_vram_mib": 14683.0,
+      "mean_gpu_util_pct": 92.0,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 206.748,
+          "reported_infer_sec": 206.439,
+          "output_bytes": 504005,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 183.127,
+          "reported_infer_sec": 182.75,
+          "output_bytes": 476582,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 182.361,
+          "reported_infer_sec": 181.924,
+          "output_bytes": 860104,
+          "engine_mode": "real_pytorch"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_070636.json"
+    },
+    {
+      "engine": "comfyui",
+      "scenario_id": "wan22_i2v_14b",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 18.553,
+      "cold_sec": 121.741,
+      "warm_mean_sec": 85.874,
+      "warm_p50_sec": 85.874,
+      "warm_min_sec": 85.804,
+      "warm_max_sec": 85.943,
+      "batch_wall_sec": 171.747,
+      "throughput_req_per_min": 0.7,
+      "peak_vram_mib": 32021.0,
+      "mean_gpu_util_pct": 85.7,
+      "engine_mode": "comfyui",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 121.741,
+          "reported_infer_sec": null,
+          "output_bytes": 1139295,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 85.804,
+          "reported_infer_sec": null,
+          "output_bytes": 1620115,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 85.943,
+          "reported_infer_sec": null,
+          "output_bytes": 1193535,
+          "engine_mode": "comfyui"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_073755.json"
+    },
+    {
+      "engine": "vllm_omni",
+      "scenario_id": "wan22_i2v_14b",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 107.756,
+      "cold_sec": 90.184,
+      "warm_mean_sec": 75.581,
+      "warm_p50_sec": 75.581,
+      "warm_min_sec": 75.571,
+      "warm_max_sec": 75.591,
+      "batch_wall_sec": 151.161,
+      "throughput_req_per_min": 0.79,
+      "peak_vram_mib": 21729.0,
+      "mean_gpu_util_pct": 93.6,
+      "engine_mode": "vllm_omni",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 90.184,
+          "reported_infer_sec": 89.52482638999999,
+          "output_bytes": 2339991,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 75.591,
+          "reported_infer_sec": 74.96374444499997,
+          "output_bytes": 2241403,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 75.571,
+          "reported_infer_sec": 75.18553525699997,
+          "output_bytes": 3129698,
+          "engine_mode": "vllm_omni"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_124042.json"
+    },
+    {
+      "engine": "openfal",
+      "scenario_id": "minimax_h3_i2v",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 2.955,
+      "cold_sec": 113.945,
+      "warm_mean_sec": 90.297,
+      "warm_p50_sec": 90.297,
+      "warm_min_sec": 89.029,
+      "warm_max_sec": 91.566,
+      "batch_wall_sec": 180.594,
+      "throughput_req_per_min": 0.66,
+      "peak_vram_mib": 17465.0,
+      "mean_gpu_util_pct": 81.7,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 113.945,
+          "reported_infer_sec": 113.62,
+          "output_bytes": 1190008,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 91.566,
+          "reported_infer_sec": 91.244,
+          "output_bytes": 1117188,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 89.029,
+          "reported_infer_sec": 88.746,
+          "output_bytes": 562933,
+          "engine_mode": "real_pytorch"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_072017.json"
+    },
+    {
+      "engine": "comfyui",
+      "scenario_id": "minimax_h3_i2v",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 18.553,
+      "cold_sec": 54.696,
+      "warm_mean_sec": 48.335,
+      "warm_p50_sec": 48.335,
+      "warm_min_sec": 48.313,
+      "warm_max_sec": 48.356,
+      "batch_wall_sec": 96.669,
+      "throughput_req_per_min": 1.24,
+      "peak_vram_mib": 31635.0,
+      "mean_gpu_util_pct": 90.6,
+      "engine_mode": "comfyui",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 54.696,
+          "reported_infer_sec": null,
+          "output_bytes": 2063646,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 48.356,
+          "reported_infer_sec": null,
+          "output_bytes": 2240975,
+          "engine_mode": "comfyui"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 48.313,
+          "reported_infer_sec": null,
+          "output_bytes": 2396524,
+          "engine_mode": "comfyui"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_073755.json"
+    },
+    {
+      "engine": "vllm_omni",
+      "scenario_id": "minimax_h3_i2v",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 94.263,
+      "cold_sec": 133.216,
+      "warm_mean_sec": 116.409,
+      "warm_p50_sec": 116.409,
+      "warm_min_sec": 116.118,
+      "warm_max_sec": 116.7,
+      "batch_wall_sec": 232.818,
+      "throughput_req_per_min": 0.52,
+      "peak_vram_mib": 14503.0,
+      "mean_gpu_util_pct": 69.2,
+      "engine_mode": "vllm_omni",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 133.216,
+          "reported_infer_sec": 132.800972386,
+          "output_bytes": 6230813,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 116.118,
+          "reported_infer_sec": 115.36913947700009,
+          "output_bytes": 5288746,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 116.7,
+          "reported_infer_sec": 115.907030222,
+          "output_bytes": 5045998,
+          "engine_mode": "vllm_omni"
+        }
+      ],
+      "source_file": "bench_NVIDIA_GeForce_RTX_5090_20261118_134107.json"
+    }
+  ]
+}

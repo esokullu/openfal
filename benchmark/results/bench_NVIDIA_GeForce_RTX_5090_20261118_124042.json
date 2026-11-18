@@ -1,0 +1,101 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "entries": [
+    {
+      "engine": "vllm_omni",
+      "scenario_id": "qwen21_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 53.398,
+      "cold_sec": 5.051,
+      "warm_mean_sec": 2.45,
+      "warm_p50_sec": 2.45,
+      "warm_min_sec": 2.434,
+      "warm_max_sec": 2.465,
+      "batch_wall_sec": 4.899,
+      "throughput_req_per_min": 24.49,
+      "peak_vram_mib": 25257.0,
+      "mean_gpu_util_pct": 74.7,
+      "engine_mode": "vllm_omni",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 5.051,
+          "reported_infer_sec": null,
+          "output_bytes": 4129919,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 2.465,
+          "reported_infer_sec": null,
+          "output_bytes": 4129919,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 2.434,
+          "reported_infer_sec": null,
+          "output_bytes": 4129919,
+          "engine_mode": "vllm_omni"
+        }
+      ]
+    },
+    {
+      "engine": "vllm_omni",
+      "scenario_id": "wan22_i2v_14b",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 107.756,
+      "cold_sec": 90.184,
+      "warm_mean_sec": 75.581,
+      "warm_p50_sec": 75.581,
+      "warm_min_sec": 75.571,
+      "warm_max_sec": 75.591,
+      "batch_wall_sec": 151.161,
+      "throughput_req_per_min": 0.79,
+      "peak_vram_mib": 21729.0,
+      "mean_gpu_util_pct": 93.6,
+      "engine_mode": "vllm_omni",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 90.184,
+          "reported_infer_sec": 89.52482638999999,
+          "output_bytes": 2339991,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 75.591,
+          "reported_infer_sec": 74.96374444499997,
+          "output_bytes": 2241403,
+          "engine_mode": "vllm_omni"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 75.571,
+          "reported_infer_sec": 75.18553525699997,
+          "output_bytes": 3129698,
+          "engine_mode": "vllm_omni"
+        }
+      ]
+    }
+  ]
+}

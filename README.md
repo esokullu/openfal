@@ -264,7 +264,7 @@ node tests/client/api/run_all.mjs
 
 The API suite runs model cases independently, retains request/response metadata and media in a fresh output directory, continues after failures, and exits nonzero if any case fails. Wan Animate and replacement tests require both identity and driving inputs plus the complete supporting asset set. See [the client test guide](tests/client/README.md) and [sample provenance](tests/client/samples/README.md) for options and evaluation criteria. Real GPU tests and visual/audio inspection are necessary in addition to unit tests; a passing installer or host test does not establish end-to-end generation quality.
 
-The [2026-11-17 Windows validation record](docs/validation-2026-11-17.md) documents real outputs, regression checks and the remaining Apple Silicon hardware verification.
+The [2026-11-17 Windows validation record](docs/validation-2026-11-17.md) documents real outputs, regression checks and the remaining Apple Silicon hardware verification. The [2026-11-18 RTX 5090 engine benchmark](docs/benchmark-rtx-5090-2026-11-18.md) compares `openfal`, `ComfyUI`, and `vLLM-Omni` across text-to-image and image-to-video workloads for Qwen-Image-2.1, Wan 2.2, and MiniMax-H3.
 
 `OPENFAL_SYNTHETIC_FALLBACK=1` explicitly enables development placeholder rendering. Leave it unset for real inference. Synthetic output is labeled in the API and Studio; missing model assets never silently enable it. `/health` reports API liveness and the synthetic-mode flag, not a complete readiness or output-quality guarantee.
 
