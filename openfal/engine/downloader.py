@@ -40,6 +40,95 @@ from openfal.model_assets import (
 )
 
 
+_XET_DOWNLOAD_ERROR_MARKERS = (
+    "file reconstruction error",
+    "cas client error",
+    "error decoding response body",
+    "xet",
+)
+
+_RETRYABLE_DOWNLOAD_ERROR_MARKERS = (
+    "connection reset",
+    "connection aborted",
+    "connection closed",
+    "connection error",
+    "incomplete read",
+    "incompletebody",
+    "network error",
+    "remote end closed",
+    "temporarily unavailable",
+    "timed out",
+    "timeout",
+    "unexpected end of file",
+    "http status server error",
+    "502 bad gateway",
+    "503 service unavailable",
+    "504 gateway",
+    "too many requests",
+)
+
+
+def _download_error_contains(exc: BaseException, markers: tuple[str, ...]) -> bool:
+    message = f"{type(exc).__name__}: {exc}".lower()
+    return any(marker in message for marker in markers)
+
+
+def _is_xet_download_error(exc: BaseException) -> bool:
+    return _download_error_contains(exc, _XET_DOWNLOAD_ERROR_MARKERS)
+
+
+def _is_retryable_download_error(exc: BaseException) -> bool:
+    return _is_xet_download_error(exc) or _download_error_contains(exc, _RETRYABLE_DOWNLOAD_ERROR_MARKERS)
+
+
+def _disable_xet_downloads() -> None:
+    os.environ["HF_HUB_DISABLE_XET"] = "1"
+    try:
+        import huggingface_hub.constants as hf_constants
+
+        hf_constants.HF_HUB_DISABLE_XET = True
+    except Exception:
+        pass
+
+
+def _run_download_with_retries(
+    action: Callable[[], Any],
+    *,
+    description: str,
+    emit: Callable[[str], None],
+    attempts: int = 5,
+    backoff_seconds: tuple[float, ...] = (10.0, 30.0, 60.0, 120.0),
+) -> Any:
+    last_exc: Optional[BaseException] = None
+    xet_disabled = False
+    attempt = 0
+    while attempt < attempts:
+        attempt += 1
+        try:
+            return action()
+        except Exception as exc:
+            last_exc = exc
+            if not _is_retryable_download_error(exc):
+                raise
+            if _is_xet_download_error(exc) and not xet_disabled:
+                _disable_xet_downloads()
+                xet_disabled = True
+                emit(f"[Download] Xet transfer failed for {description}: {exc}")
+                emit("[Download] Switching to plain HTTPS for the rest of this run and resuming...")
+                continue
+            if attempt >= attempts:
+                break
+            delay = backoff_seconds[min(attempt - 1, len(backoff_seconds) - 1)]
+            emit(
+                f"[Download] Transient error downloading {description} "
+                f"(attempt {attempt}/{attempts}): {exc}"
+            )
+            emit(f"[Download] Retrying in {delay:.0f}s; already-downloaded data is kept.")
+            time.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
+
+
 @dataclass
 class QuantSourceSpec:
     repo_id: str
@@ -1088,7 +1177,11 @@ class StrataModelManager:
         }
         if tqdm_class is not None:
             dl_kwargs["tqdm_class"] = tqdm_class
-        local_path = snapshot_download(**dl_kwargs)
+        local_path = _run_download_with_retries(
+            lambda: snapshot_download(**dl_kwargs),
+            description=f"'{spec.component_id}' from '{repo_id}'",
+            emit=emit,
+        )
         dt = max(0.001, time.perf_counter() - t0)
         emit(f"[HF-Hub] Downloaded '{spec.component_id}' to {local_path} in {dt:.1f}s.")
 
@@ -1122,13 +1215,17 @@ class StrataModelManager:
                 continue
             cfg_dir = self.weights_dir / assets.subdir
             emit(f"[HF-Config] Installing config/tokenizer metadata from '{assets.repo_id}' -> {cfg_dir}...")
-            snapshot_download(
-                repo_id=assets.repo_id,
-                revision=assets.revision,
-                local_dir=str(cfg_dir),
-                allow_patterns=list(assets.allow_patterns),
-                ignore_patterns=["*.safetensors", "*.bin", "*.pt", "*.ckpt", "assets/*"],
-                token=hf_token,
+            _run_download_with_retries(
+                lambda: snapshot_download(
+                    repo_id=assets.repo_id,
+                    revision=assets.revision,
+                    local_dir=str(cfg_dir),
+                    allow_patterns=list(assets.allow_patterns),
+                    ignore_patterns=["*.safetensors", "*.bin", "*.pt", "*.ckpt", "assets/*"],
+                    token=hf_token,
+                ),
+                description=f"metadata from '{assets.repo_id}'",
+                emit=emit,
             )
             missing = assets.missing(self.weights_dir)
             if missing:
@@ -1138,9 +1235,13 @@ class StrataModelManager:
                 if find_weight(self.weights_dir, (Path(filename).name,)) is not None:
                     continue
                 emit(f"[HF-Hub] Installing shared Wan runtime checkpoint '{filename}'...")
-                path = hf_hub_download(
-                    repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", filename=filename,
-                    local_dir=str(self.weights_dir / "Wan2.2-T2V-A14B"), token=hf_token,
+                path = _run_download_with_retries(
+                    lambda: hf_hub_download(
+                        repo_id="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", filename=filename,
+                        local_dir=str(self.weights_dir / "Wan2.2-T2V-A14B"), token=hf_token,
+                    ),
+                    description=f"shared Wan checkpoint '{filename}'",
+                    emit=emit,
                 )
                 if not Path(path).is_file() or Path(path).stat().st_size == 0:
                     raise RuntimeError(f"Shared Wan checkpoint download is incomplete: {filename}")
@@ -1158,11 +1259,15 @@ class StrataModelManager:
             size_gb = sum(asset.size for asset in missing) / (1024 ** 3)
             emit(f"[Wan-Animate] Installing {group.id}: {len(missing)} file(s), {size_gb:.2f} GiB "
                  f"from '{group.repo_id}' at {group.revision}...")
-            snapshot_download(
-                repo_id=group.repo_id, revision=group.revision, local_dir=str(target),
-                allow_patterns=[asset.path for asset in missing], token=hf_token, max_workers=4,
-                # A stale HF local-dir record must not bless a truncated asset.
-                force_download=any((target / asset.path).exists() for asset in missing),
+            _run_download_with_retries(
+                lambda: snapshot_download(
+                    repo_id=group.repo_id, revision=group.revision, local_dir=str(target),
+                    allow_patterns=[asset.path for asset in missing], token=hf_token, max_workers=4,
+                    # A stale HF local-dir record must not bless a truncated asset.
+                    force_download=any((target / asset.path).exists() for asset in missing),
+                ),
+                description=f"animate assets '{group.id}'",
+                emit=emit,
             )
             incomplete = group.missing(self.weights_dir)
             if incomplete:
