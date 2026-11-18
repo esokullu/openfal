@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>openfal — Local fal-Compatible Inference Server for Image &amp; Video Diffusion</title>
+  <meta
+    name="description"
+    content="Run Qwen-Image-2.1, Wan 2.2, and MiniMax H3 locally with a fal-compatible HTTP/queue API, Python SDK, built-in Studio UI, hardware detection, and one-CLI model downloads."
+  />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("openfal-docs-theme");
+        var prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+        var theme = saved === "light" || saved === "dark" ? saved : (prefersLight ? "light" : "dark");
+        document.documentElement.setAttribute("data-theme", theme);
+      } catch (_) {}
+    })();
+  </script>
+  <style>
+    :root {
+      --bg-0: #090b10;
+      --bg-1: #111520;
+      --bg-2: #171c2b;
+      --bg-3: #1f263a;
+      --border: #283149;
+      --border-soft: rgba(40, 49, 73, 0.7);
+      --text-0: #f1f5f9;
+      --text-1: #94a3b8;
+      --text-2: #64748b;
+      --accent: #38bdf8;
+      --accent-2: #818cf8;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --header-bg: rgba(9, 11, 16, 0.85);
+      --glow-1: rgba(56, 189, 248, 0.12);
+      --glow-2: rgba(129, 140, 248, 0.11);
+      --code-inline-bg: rgba(31, 38, 58, 0.85);
+      --code-inline-text: #e2e8f0;
+      --code-block-bg: #07090e;
+      --code-block-text: #e2e8f0;
+      --terminal-bg: #111520;
+      --terminal-text: #cbd5e1;
+      --terminal-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+      --hero-grad: linear-gradient(135deg, #f8fafc 20%, var(--accent) 68%, var(--accent-2) 100%);
+      --btn-primary-text: #090b10;
+      --callout-bg: rgba(23, 28, 43, 0.72);
+      --callout-title: #fde68a;
+      --eyebrow-bg: rgba(56, 189, 248, 0.1);
+      --eyebrow-border: rgba(56, 189, 248, 0.28);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      --max-w: 1120px;
+    }
+
+    :root[data-theme="light"] {
+      --bg-0: #f8fafc;
+      --bg-1: #ffffff;
+      --bg-2: #f1f5f9;
+      --bg-3: #e2e8f0;
+      --border: #cbd5e1;
+      --border-soft: rgba(148, 163, 184, 0.45);
+      --text-0: #0f172a;
+      --text-1: #475569;
+      --text-2: #64748b;
+      --accent: #0284c7;
+      --accent-2: #4f46e5;
+      --emerald: #059669;
+      --amber: #d97706;
+      --header-bg: rgba(248, 250, 252, 0.88);
+      --glow-1: rgba(2, 132, 199, 0.08);
+      --glow-2: rgba(79, 70, 229, 0.07);
+      --code-inline-bg: #e2e8f0;
+      --code-inline-text: #0f172a;
+      --code-block-bg: #f1f5f9;
+      --code-block-text: #0f172a;
+      --terminal-bg: #0f172a;
+      --terminal-text: #e2e8f0;
+      --terminal-shadow: 0 20px 50px rgba(15, 23, 42, 0.14);
+      --hero-grad: linear-gradient(135deg, #0f172a 18%, var(--accent) 68%, var(--accent-2) 100%);
+      --btn-primary-text: #ffffff;
+      --callout-bg: #fffbeb;
+      --callout-title: #92400e;
+      --eyebrow-bg: rgba(2, 132, 199, 0.08);
+      --eyebrow-border: rgba(2, 132, 199, 0.28);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--sans);
+      background:
+        radial-gradient(900px 480px at 15% -5%, var(--glow-1), transparent 60%),
+        radial-gradient(800px 460px at 88% 4%, var(--glow-2), transparent 58%),
+        var(--bg-0);
+      color: var(--text-0);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--code-inline-bg);
+      border: 1px solid var(--border-soft);
+      padding: 2px 6px;
+      border-radius: 5px;
+      color: var(--code-inline-text);
+    }
+
+    .container {
+      width: 100%;
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: var(--header-bg);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 64px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      color: var(--text-0);
+      font-weight: 700;
+      font-size: 17px;
+      letter-spacing: -0.02em;
+    }
+    .brand:hover { text-decoration: none; }
+    .logo-badge {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid;
+      place-items: center;
+      color: #090b10;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: -0.03em;
+      flex-shrink: 0;
+    }
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      flex-wrap: wrap;
+    }
+    nav a {
+      color: var(--text-1);
+      font-size: 14px;
+      font-weight: 500;
+    }
+    nav a:hover { color: var(--text-0); text-decoration: none; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 9px;
+      font-size: 14px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--bg-2);
+      color: var(--text-0);
+      cursor: pointer;
+      transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+    .btn:hover {
+      text-decoration: none;
+      border-color: var(--accent);
+      background: var(--bg-3);
+      transform: translateY(-1px);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: var(--btn-primary-text);
+      border-color: transparent;
+    }
+    .btn-primary:hover {
+      filter: brightness(1.08);
+      border-color: transparent;
+      color: var(--btn-primary-text);
+    }
+    .btn-sm { padding: 7px 13px; font-size: 13px; }
+
+    /* Hero */
+    .hero {
+      padding: 68px 0 54px;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 36px;
+      align-items: center;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--eyebrow-bg);
+      border: 1px solid var(--eyebrow-border);
+      padding: 5px 11px;
+      border-radius: 999px;
+      margin-bottom: 18px;
+    }
+    .eyebrow-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+    }
+    h1 {
+      font-size: clamp(32px, 4.4vw, 48px);
+      line-height: 1.12;
+      letter-spacing: -0.03em;
+      margin-bottom: 18px;
+    }
+    .gradient-text {
+      background: var(--hero-grad);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero-sub {
+      color: var(--text-1);
+      font-size: 17px;
+      max-width: 56ch;
+      margin-bottom: 26px;
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 13px;
+      color: var(--text-2);
+    }
+    .hero-meta span strong { color: var(--text-1); font-weight: 600; }
+
+    /* Terminal Card */
+    .terminal {
+      background: var(--terminal-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: var(--terminal-shadow);
+    }
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #171c2b;
+      border-bottom: 1px solid #283149;
+      font-size: 12px;
+      color: #94a3b8;
+      font-family: var(--mono);
+    }
+    .dots { display: flex; gap: 6px; }
+    .dots i {
+      display: block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #1f263a;
+      border: 1px solid #334155;
+    }
+    .terminal pre {
+      padding: 18px;
+      font-family: var(--mono);
+      font-size: 12.8px;
+      line-height: 1.65;
+      overflow-x: auto;
+      color: var(--terminal-text);
+    }
+    .t-cmd { color: #38bdf8; }
+    .t-dim { color: #64748b; }
+    .t-ok { color: #10b981; }
+
+    /* Sections */
+    section { padding: 54px 0; }
+    .section-head {
+      margin-bottom: 28px;
+      max-width: 68ch;
+    }
+    .section-kicker {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: clamp(24px, 3vw, 32px);
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+      margin-bottom: 10px;
+    }
+    .section-desc { color: var(--text-1); font-size: 15.5px; }
+
+    /* Cards Grid */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+    }
+    .card-num {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .card h3 {
+      font-size: 18px;
+      letter-spacing: -0.015em;
+      margin-bottom: 10px;
+    }
+    .card p {
+      color: var(--text-1);
+      font-size: 14.5px;
+      margin-bottom: 12px;
+    }
+    .card-note {
+      font-size: 13px;
+      color: var(--text-2);
+      border-top: 1px solid var(--border-soft);
+      padding-top: 10px;
+      margin-top: 12px;
+    }
+
+    /* Quickstart */
+    .step-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .code-box {
+      position: relative;
+      background: var(--code-block-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 13px 14px;
+      font-family: var(--mono);
+      font-size: 12.6px;
+      color: var(--code-block-text);
+      overflow-x: auto;
+      line-height: 1.6;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--bg-2);
+      color: var(--text-1);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-family: var(--sans);
+      cursor: pointer;
+    }
+    .copy-btn:hover { color: var(--text-0); border-color: var(--accent); }
+
+    .bundle-grid {
+      margin-top: 20px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .bundle {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .bundle-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .bundle-size {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--emerald);
+      font-weight: 600;
+    }
+    .bundle p {
+      font-size: 13px;
+      color: var(--text-1);
+    }
+
+    /* Tabs */
+    .tabs-wrap {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 12px 14px;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-1);
+      padding: 7px 13px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-btn:hover { color: var(--text-0); }
+    .tab-btn.active {
+      background: var(--bg-3);
+      border-color: var(--border);
+      color: var(--accent);
+    }
+    .tab-panel { display: none; padding: 18px; }
+    .tab-panel.active { display: block; }
+    .tab-panel pre {
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.65;
+      overflow-x: auto;
+      color: var(--code-block-text);
+    }
+
+    /* Tables */
+    .table-wrap {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      text-align: left;
+    }
+    th, td {
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border-soft);
+      vertical-align: top;
+    }
+    th {
+      background: var(--bg-2);
+      font-size: 12.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-1);
+      font-weight: 700;
+    }
+    tr:last-child td { border-bottom: none; }
+    td strong { color: var(--text-0); }
+    td.muted { color: var(--text-1); }
+
+    /* Callout / Limits */
+    .callout {
+      background: var(--callout-bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--amber);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-top: 20px;
+    }
+    .callout h3 {
+      font-size: 15px;
+      margin-bottom: 8px;
+      color: var(--callout-title);
+    }
+    .callout ul {
+      padding-left: 18px;
+      color: var(--text-1);
+      font-size: 14px;
+      display: grid;
+      gap: 6px;
+    }
+
+    footer {
+      border-top: 1px solid var(--border-soft);
+      padding: 32px 0 44px;
+      margin-top: 28px;
+      color: var(--text-2);
+      font-size: 13.5px;
+    }
+    .footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+    }
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+    }
+
+    @media (max-width: 920px) {
+      .hero-grid, .grid-3, .grid-2, .bundle-grid {
+        grid-template-columns: 1fr;
+      }
+      nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container nav-inner">
+      <a class="brand" href="#top">
+        <span class="logo-badge">OF</span>
+        <span>openfal</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="#why">Why openfal</a>
+        <a href="#quickstart">Quickstart</a>
+        <a href="#api">API &amp; SDK</a>
+        <a href="#workflows">Workflows</a>
+        <a href="#compare">Comparison</a>
+      </nav>
+      <div class="nav-actions">
+        <button class="btn btn-sm" id="theme-toggle" type="button" aria-label="Toggle color theme">
+          <span id="theme-icon" aria-hidden="true">☀</span>
+          <span id="theme-label">Light</span>
+        </button>
+        <a class="btn btn-sm" href="https://github.com/esokullu/openfal" target="_blank" rel="noopener noreferrer">
+          GitHub Repo
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <div class="eyebrow">
+            <span class="eyebrow-dot"></span>
+            MIT Licensed · Local PyTorch Inference · fal-Style API
+          </div>
+          <h1>
+            <span class="gradient-text">Local image &amp; video generation</span> with a fal-compatible API and one-CLI setup.
+          </h1>
+          <p class="hero-sub">
+            Run <strong>Qwen-Image-2.1</strong>, <strong>Wan 2.2</strong>, and <strong>MiniMax H3</strong> on your own
+            Windows, Linux, or macOS host—without wiring ComfyUI node graphs or stitching together separate downloaders and servers.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#quickstart">Start in 3 commands</a>
+            <a class="btn" href="#api">See fal-style SDK</a>
+          </div>
+          <div class="hero-meta">
+            <span><strong>Models:</strong> FP8 / INT8 single-file checkpoints</span>
+            <span><strong>UI:</strong> Built-in Studio + <code>/docs</code></span>
+            <span><strong>Queue:</strong> Polling + SSE streams</span>
+          </div>
+        </div>
+
+        <div class="terminal" aria-label="Quickstart CLI session">
+          <div class="terminal-bar">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <span>openfal cli — v0.1.0</span>
+          </div>
+          <pre><span class="t-dim"># 1. Inspect GPUs, RAM, and free disk</span>
+<span class="t-cmd">$ openfal detect</span>
+<span class="t-ok">✓</span> Detected compute GPU, host RAM &amp; recommended profile
+
+<span class="t-dim"># 2. Install smallest supported image setup (~16.1 GB)</span>
+<span class="t-cmd">$ openfal autosetup --tier minimal -y</span>
+<span class="t-ok">✓</span> Checkpoints, encoders, VAE &amp; tokenizers verified
+
+<span class="t-dim"># 3. Serve fal-compatible API, queue &amp; Studio</span>
+<span class="t-cmd">$ openfal serve --host 0.0.0.0 --port 8008</span>
+<span class="t-ok">✓</span> Studio: http://localhost:8008/
+<span class="t-ok">✓</span> OpenAPI: http://localhost:8008/docs</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="why">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">Why openfal</div>
+          <h2>Built for developers who want local endpoints, not workflow plumbing.</h2>
+          <p class="section-desc">
+            openfal sits between hosted APIs and node-graph workstations: familiar client ergonomics, pre-wired local checkpoints, and a single CLI lifecycle.
+          </p>
+        </div>
+
+        <div class="grid-3">
+          <article class="card">
+            <div class="card-num">01 / API COMPATIBILITY</div>
+            <h3>Drop-in fal-style API &amp; SDK</h3>
+            <p>
+              Exposes fal-compatible route names, <code>/queue/*</code> submission, SSE status streaming, and a
+              <code>fal_client</code>-style Python SDK (<code>openfal.subscribe</code>, <code>run</code>,
+              <code>submit</code>, <code>upload_file</code>).
+            </p>
+            <div class="card-note">
+              Scope: Covers supported local models only—does not claim full hosted fal.ai catalog or moderation parity.
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-num">02 / ZERO NODE GRAPHS</div>
+            <h3>No ComfyUI GUI or graph UX</h3>
+            <p>
+              Consumes supported Comfy-Org single-file FP8/INT8 checkpoints under the hood and verifies supporting
+              assets (encoders, VAEs, and Wan Animate's 403 CLIP/pose/SAM2 files) behind fixed HTTP routes and Studio.
+            </p>
+            <div class="card-note">
+              Trade-off: Fixed, verified endpoints instead of arbitrary custom node-graph composability.
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-num">03 / UNIFIED CLI</div>
+            <h3>One CLI beyond just serving</h3>
+            <p>
+              <code>detect</code>, <code>autosetup</code>, <code>download</code> (including <code>--runtime-assets-only</code>
+              repair), <code>models</code>, <code>cleanup</code>, and <code>serve</code> live in one tool—no manual weight hunting.
+            </p>
+            <div class="card-note">
+              Unlike LLM engines such as vLLM (continuous batching, multi-GPU TP), openfal is a serialized PyTorch block-offloading runner.
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="quickstart">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">Quickstart</div>
+          <h2>From clone to local Studio in three steps.</h2>
+          <p class="section-desc">
+            Requires Python 3.10+ and a PyTorch build matching your compute device. Model files stay on the server host; any machine on your network can call the API.
+          </p>
+        </div>
+
+        <div class="grid-3">
+          <div class="card step-card">
+            <div class="card-num">STEP 1 · INSTALL &amp; DETECT</div>
+            <h3>Install &amp; check hardware</h3>
+            <div class="code-box">
+              <button class="copy-btn" type="button" data-copy="git clone https://github.com/esokullu/openfal.git&#10;cd openfal&#10;python3 -m pip install -e &quot;.[inference]&quot;&#10;openfal detect">Copy</button>
+              git clone https://github.com/esokullu/openfal.git<br />
+              cd openfal<br />
+              python3 -m pip install -e ".[inference]"<br />
+              openfal detect
+            </div>
+          </div>
+
+          <div class="card step-card">
+            <div class="card-num">STEP 2 · DOWNLOAD WEIGHTS</div>
+            <h3>Pick a tier or component</h3>
+            <div class="code-box">
+              <button class="copy-btn" type="button" data-copy="openfal autosetup --dry-run&#10;openfal autosetup --tier minimal -y">Copy</button>
+              openfal autosetup --dry-run<br />
+              openfal autosetup --tier minimal -y
+            </div>
+            <p style="font-size:13px; color:var(--text-1); margin:0;">
+              Or target a model directly with <code>openfal download --component qwen_image_21 --quant fp8_e4m3</code>.
+            </p>
+          </div>
+
+          <div class="card step-card">
+            <div class="card-num">STEP 3 · SERVE</div>
+            <h3>Start API, queue &amp; Studio</h3>
+            <div class="code-box">
+              <button class="copy-btn" type="button" data-copy="openfal serve --host 0.0.0.0 --port 8008">Copy</button>
+              openfal serve --host 0.0.0.0 --port 8008
+            </div>
+            <p style="font-size:13px; color:var(--text-1); margin:0;">
+              Open <code>http://localhost:8008/</code> for Studio or <code>/docs</code> for the interactive API schema.
+            </p>
+          </div>
+        </div>
+
+        <div class="bundle-grid" aria-label="Download bundle sizes">
+          <div class="bundle">
+            <div class="bundle-top"><code>qwen_image_21</code><span class="bundle-size">~16.1 GB</span></div>
+            <p>Qwen Turbo DiT, Qwen3-VL-8B encoder &amp; image VAE.</p>
+          </div>
+          <div class="bundle">
+            <div class="bundle-top"><code>wan22_animate</code><span class="bundle-size">~21.7 GB</span></div>
+            <p>Animate DiT, CLIP, pose/SAM2 assets &amp; shared Wan deps.</p>
+          </div>
+          <div class="bundle">
+            <div class="bundle-top"><code>minimax-omni-compact</code><span class="bundle-size">~48.0 GB</span></div>
+            <p>Ref2VA and shared Qwen3-VL-32B / video / audio VAEs.</p>
+          </div>
+          <div class="bundle">
+            <div class="bundle-top"><code>minimax-only</code><span class="bundle-size">~88.1 GB</span></div>
+            <p>FL2VA, Ref2VA, H3-Image &amp; shared MiniMax components.</p>
+          </div>
+          <div class="bundle">
+            <div class="bundle-top"><code>alibaba-only</code><span class="bundle-size">~98.6 GB</span></div>
+            <p>Wan T2V, I2V, Animate assets &amp; Qwen-Image-2.1.</p>
+          </div>
+          <div class="bundle">
+            <div class="bundle-top"><code>all</code><span class="bundle-size">~186.7 GB</span></div>
+            <p>Both model families (approx. FP8/INT8 download size).</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="api">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">API &amp; SDK</div>
+          <h2>Call local endpoints like fal.ai.</h2>
+          <p class="section-desc">
+            Use the Python SDK, direct synchronous POSTs, or queued requests with status polling and Server-Sent Events.
+          </p>
+        </div>
+
+        <div class="tabs-wrap">
+          <div class="tab-bar" role="tablist">
+            <button class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab="sdk">Python SDK (Image Edit)</button>
+            <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab="animate">Python SDK (Animate)</button>
+            <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab="http">Direct HTTP</button>
+            <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab="queue">Queued Video + SSE</button>
+          </div>
+
+          <div class="tab-panel active" data-panel="sdk">
+            <pre>import openfal
+
+server = "http://127.0.0.1:8008"
+reference = openfal.upload_file("portrait.png", base_url=server)
+result = openfal.subscribe(
+    "qwen/image-2.1/edit",
+    arguments={
+        "prompt": "Keep the person recognizable and change the lighting to warm evening light",
+        "reference_image_urls": [reference],
+        "resolution": "768P",
+        "aspect_ratio": "1:1",
+        "seed": 20261117,
+    },
+    base_url=server,
+)
+print(result["images"][0]["url"])</pre>
+          </div>
+
+          <div class="tab-panel" data-panel="animate">
+            <pre>import openfal
+
+server = "http://127.0.0.1:8008"
+identity = openfal.upload_file("character.png", base_url=server)
+driver = openfal.upload_file("performance.mp4", base_url=server)
+result = openfal.subscribe(
+    "wan/v2.2/animate",
+    arguments={
+        "prompt": "The reference character follows the driving performance naturally",
+        "face_image_url": identity,
+        "driving_video_url": driver,
+        "resolution": "480P",
+        "duration": 3,
+        "fps": 16,
+        "seed": 20261117,
+    },
+    base_url=server,
+)
+print(result["video"]["url"])</pre>
+          </div>
+
+          <div class="tab-panel" data-panel="http">
+            <pre>curl -X POST http://127.0.0.1:8008/qwen/image-2.1/text-to-image \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A golden poodle running on an Istanbul cobblestone street",
+    "resolution": "768P",
+    "aspect_ratio": "16:9",
+    "seed": 20261117
+  }'</pre>
+          </div>
+
+          <div class="tab-panel" data-panel="queue">
+            <pre># Submit to queue (returns request_id, status_url, response_url, cancel_url)
+curl -X POST http://127.0.0.1:8008/queue/wan/v2.2/text-to-video \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"A dog walking down a quiet street","resolution":"480P","duration":2,"seed":20261117}'
+
+# Optional: stream live status updates via SSE
+curl -N http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;/status/stream</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="workflows">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">Supported Workflows</div>
+          <h2>Implemented routes and local checkpoints.</h2>
+          <p class="section-desc">
+            Inspect live installed routes anytime via <code>GET /v1/endpoints</code> and readiness via <code>GET /v1/models/status</code>.
+          </p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Workflow</th>
+                <th>Endpoint</th>
+                <th>Local Model</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Text-to-image</strong></td>
+                <td><code>qwen/image-2.1/text-to-image</code></td>
+                <td class="muted">Qwen-Image-2.1-Turbo</td>
+              </tr>
+              <tr>
+                <td><strong>Reference-guided image editing</strong></td>
+                <td><code>qwen/image-2.1/edit</code></td>
+                <td class="muted">Qwen-Image-2.1-Turbo</td>
+              </tr>
+              <tr>
+                <td><strong>Text-to-video</strong></td>
+                <td><code>wan/v2.2/text-to-video</code></td>
+                <td class="muted">Wan2.2-T2V-A14B</td>
+              </tr>
+              <tr>
+                <td><strong>Image-to-video</strong></td>
+                <td><code>wan/v2.2/image-to-video</code></td>
+                <td class="muted">Wan2.2-I2V-A14B</td>
+              </tr>
+              <tr>
+                <td><strong>Character animation</strong></td>
+                <td><code>wan/v2.2/animate</code></td>
+                <td class="muted">Wan2.2-Animate-14B</td>
+              </tr>
+              <tr>
+                <td><strong>Character replacement</strong></td>
+                <td><code>wan/v2.2/recast</code></td>
+                <td class="muted">Wan2.2-Animate-14B</td>
+              </tr>
+              <tr>
+                <td><strong>Text/image-to-video with audio</strong></td>
+                <td><code>minimax/h3/text-to-video</code>, <code>minimax/h3/image-to-video</code></td>
+                <td class="muted">MiniMax FL2VA</td>
+              </tr>
+              <tr>
+                <td><strong>Reference-conditioned video &amp; editing</strong></td>
+                <td>
+                  <code>minimax/h3/reference-to-video</code>, <code>minimax/h3-max/recast</code>,
+                  <code>minimax/h3-max/relight</code>, <code>minimax/h3-max/insert-video</code>
+                </td>
+                <td class="muted">MiniMax Ref2VA (H3-Max routes map to local H3 partitions)</td>
+              </tr>
+              <tr>
+                <td><strong>Text-to-image &amp; editing</strong></td>
+                <td><code>minimax/h3/text-to-image</code>, <code>minimax/h3/image-to-image</code></td>
+                <td class="muted">MiniMax H3-Image</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="compare">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">Positioning</div>
+          <h2>How openfal compares.</h2>
+          <p class="section-desc">
+            Different tools optimize for different constraints. Here is where openfal fits—and where another tool is the better choice.
+          </p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Dimension</th>
+                <th>openfal</th>
+                <th>fal.ai (Hosted)</th>
+                <th>ComfyUI</th>
+                <th>vLLM</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Primary focus</strong></td>
+                <td>Local image &amp; video diffusion API + Studio</td>
+                <td class="muted">Managed cloud catalog across many models</td>
+                <td class="muted">Visual node-graph experimentation</td>
+                <td class="muted">High-throughput LLM / multimodal serving</td>
+              </tr>
+              <tr>
+                <td><strong>Setup UX</strong></td>
+                <td>One CLI (<code>detect</code>, <code>autosetup</code>, <code>serve</code>)</td>
+                <td class="muted">API key only (zero local install)</td>
+                <td class="muted">Node graphs, custom nodes, JSON workflows</td>
+                <td class="muted">Serving flags &amp; separate HF weights</td>
+              </tr>
+              <tr>
+                <td><strong>API ergonomics</strong></td>
+                <td>fal-style routes, queue, SSE &amp; Python SDK</td>
+                <td class="muted">Native fal.ai SDK &amp; cloud queue</td>
+                <td class="muted">Graph prompt API</td>
+                <td class="muted">OpenAI-compatible REST API</td>
+              </tr>
+              <tr>
+                <td><strong>Execution model</strong></td>
+                <td>Serialized single-device PyTorch + host block offload</td>
+                <td class="muted">Autoscaled cloud fleet</td>
+                <td class="muted">Local graph execution</td>
+                <td class="muted">Continuous batching, PagedAttention, multi-GPU TP</td>
+              </tr>
+              <tr>
+                <td><strong>Best fit</strong></td>
+                <td>Self-hosted app integration &amp; simple local runs</td>
+                <td class="muted">Zero-ops scale &amp; broad model variety</td>
+                <td class="muted">Custom pipelines &amp; node-level control</td>
+                <td class="muted">Production LLM serving</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <h3>Verified engineering limits to know before deploying</h3>
+          <ul>
+            <li><strong>Single compute device:</strong> Runners execute on logical <code>cuda:0</code> (or MPS/CPU fallback). Profiles named <code>dual_*</code> are memory-planning configs and do not perform multi-GPU tensor parallelism.</li>
+            <li><strong>Profile telemetry is estimated:</strong> Studio's block map and <code>/v1/engine/status</code> report profile estimates (<code>telemetry_kind: "profile_estimate"</code>), not live hardware measurements.</li>
+            <li><strong>macOS status:</strong> MPS and CPU fallback branches have host regression coverage, but actual Apple Silicon inference and unified-memory headroom have not been benchmarked yet.</li>
+            <li><strong>Local trust boundary:</strong> No built-in authentication and an in-memory queue (lost on restart). Place behind access controls before exposing beyond trusted networks.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div><strong>openfal</strong> · MIT Licensed source code (model weights retain upstream licenses).</div>
+      <div class="footer-links">
+        <a href="https://github.com/esokullu/openfal" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/esokullu/openfal/blob/main/README.md" target="_blank" rel="noopener noreferrer">README</a>
+        <a href="validation-2026-11-17.md">Windows Validation Record</a>
+        <a href="macos-validation.md">macOS Validation Guide</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const themeToggle = document.getElementById("theme-toggle");
+      const themeIcon = document.getElementById("theme-icon");
+      const themeLabel = document.getElementById("theme-label");
+
+      function syncThemeButton(theme) {
+        const isLight = theme === "light";
+        themeIcon.textContent = isLight ? "☾" : "☀";
+        themeLabel.textContent = isLight ? "Dark" : "Light";
+        themeToggle.setAttribute("aria-label", isLight ? "Switch to dark theme" : "Switch to light theme");
+      }
+
+      const initialTheme = root.getAttribute("data-theme") === "light" ? "light" : "dark";
+      syncThemeButton(initialTheme);
+
+      themeToggle.addEventListener("click", () => {
+        const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+        root.setAttribute("data-theme", next);
+        syncThemeButton(next);
+        try {
+          localStorage.setItem("openfal-docs-theme", next);
+        } catch (_) {}
+      });
+
+      const tabBtns = document.querySelectorAll(".tab-btn");
+      const tabPanels = document.querySelectorAll(".tab-panel");
+      tabBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const target = btn.getAttribute("data-tab");
+          tabBtns.forEach((b) => {
+            const active = b === btn;
+            b.classList.toggle("active", active);
+            b.setAttribute("aria-selected", active ? "true" : "false");
+          });
+          tabPanels.forEach((p) => {
+            p.classList.toggle("active", p.getAttribute("data-panel") === target);
+          });
+        });
+      });
+
+      document.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const text = btn.getAttribute("data-copy") || "";
+          try {
+            await navigator.clipboard.writeText(text);
+            const prev = btn.textContent;
+            btn.textContent = "Copied";
+            setTimeout(() => { btn.textContent = prev; }, 1400);
+          } catch (_) {
+            btn.textContent = "Select text";
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

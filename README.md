@@ -4,6 +4,12 @@ Local PyTorch inference for Qwen-Image-2.1, Wan 2.2 and MiniMax H3, with an HTTP
 
 The runtime loads supported single-file FP8/INT8 checkpoints and moves model blocks between host memory and the selected compute device. Hardware profiles guide offloading. They do not establish measured memory use, multi-GPU execution, or a performance advantage over other engines.
 
+## Why openfal
+
+- **fal-style local API and SDK:** Exposes fal-compatible route names, `/queue/*` submission, SSE status streaming, and a `fal_client`-style Python SDK (`openfal.subscribe`, `run`, `submit`, `upload_file`) for the supported local workflows, without claiming hosted-service catalog or feature parity.
+- **Turnkey workflows without node-graph wiring:** Loads supported single-file FP8/INT8 checkpoints and installs/verifies supporting conditioning assets (encoders, VAEs, and Wan Animate's CLIP/pose/SAM2 files) behind fixed HTTP routes and Studio. You trade ComfyUI's custom node-graph composability for zero-graph setup.
+- **Single CLI for detection, downloads, and serving:** Combines `openfal detect`, `autosetup`/`download`, `models`, `cleanup`, and `serve` in one tool so you do not have to assemble model weights and dependencies separately before starting the server. Unlike LLM serving engines such as vLLM (designed around continuous batching and multi-GPU tensor parallelism), openfal is a serialized local PyTorch block-offloading runner for image and video diffusion workloads.
+
 ## Implemented workflows and limits
 
 | Workflow | Endpoint | Local model |
