@@ -157,9 +157,12 @@ def _run_download_with_progress(
 
         class _CompactHFTqdm(_BaseTqdm):
             def __init__(self, *args, **kwargs):
-                kwargs["disable"] = True
-                super().__init__(*args, **kwargs)
                 self._t_start = time.perf_counter()
+                kwargs["disable"] = False
+                super().__init__(*args, **kwargs)
+
+            def display(self, *args, **kwargs):
+                return
 
             def update(self, n=1):
                 super().update(n)
