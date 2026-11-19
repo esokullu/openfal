@@ -11,6 +11,7 @@ plus Qwen3-VL-32B Layer-50 streamed text/vision conditioning (`StrataBlockOffloa
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import re
@@ -515,6 +516,7 @@ class RealMiniMaxH3Runner:
         self._te_offloader: Optional[StrataBlockOffloadManager] = None
         self._cfg_dir: Optional[Path] = None
         self._img_cfg_dir: Optional[Path] = None
+        self._active_paths: Dict[str, Optional[Path]] = {}
         self._prompt_embed_cache: Dict[str, Tuple[torch.Tensor, Optional[torch.Tensor]]] = {}
 
     def _find_weights(self, partition: str) -> Dict[str, Optional[Path]]:
@@ -558,12 +560,27 @@ class RealMiniMaxH3Runner:
         self._img_cfg_dir = target
         return target
 
+    def _ensure_shared_tokenizer_and_processor(self, cfg_dir: Path) -> None:
+        if self._tokenizer is not None and self._processor is not None:
+            return
+        from transformers import Qwen2TokenizerFast, Qwen3VLProcessor
+
+        if self._tokenizer is None:
+            self._tokenizer = Qwen2TokenizerFast.from_pretrained(str(cfg_dir / "tokenizer"))
+        if self._processor is None:
+            self._processor = Qwen3VLProcessor.from_pretrained(str(cfg_dir / "processor"))
+            # Adopt the reference qwen-vl-utils per-frame budget, supported by current
+            # Transformers and becoming its default. This does not resize VAE refs.
+            if hasattr(self._processor.video_processor, "cap_pixels_per_frame"):
+                self._processor.video_processor.cap_pixels_per_frame = True
+
     def _ensure_shared_qwen3vl(
         self,
         cfg_dir: Path,
         te_path: Path,
         on_log: Optional[Callable[[str], None]] = None,
     ) -> None:
+        self._ensure_shared_tokenizer_and_processor(cfg_dir)
         if self._text_encoder is not None:
             return
         if "nvfp4" in te_path.name.lower():
@@ -574,10 +591,8 @@ class RealMiniMaxH3Runner:
 
         from accelerate import init_empty_weights
         from transformers import (
-            Qwen2TokenizerFast,
             Qwen3VLConfig,
             Qwen3VLForConditionalGeneration,
-            Qwen3VLProcessor,
         )
         from transformers.models.qwen3_vl.modeling_qwen3_vl import (
             Qwen3VLTextRotaryEmbedding,
@@ -636,17 +651,167 @@ class RealMiniMaxH3Runner:
             else None
         )
         self._text_encoder = text_encoder
-        self._tokenizer = Qwen2TokenizerFast.from_pretrained(str(cfg_dir / "tokenizer"))
-        self._processor = Qwen3VLProcessor.from_pretrained(str(cfg_dir / "processor"))
-        # Adopt the reference qwen-vl-utils per-frame budget, supported by current
-        # Transformers and becoming its default. This does not resize VAE refs.
-        if hasattr(self._processor.video_processor, "cap_pixels_per_frame"):
-            self._processor.video_processor.cap_pixels_per_frame = True
         if on_log:
             on_log(
                 f"[MiniMax-H3 Qwen3-VL-32B] Loaded '{te_path.name}' "
                 f"({te_resident}/{len(te_layers)} layers Counter, all active weights verified)"
             )
+
+    def _release_shared_qwen3vl(self, pipe: Any, device: torch.device) -> None:
+        """Drop Qwen3-VL-32B (~25.3 GB) from unified memory once conditioning is complete."""
+        if self._te_offloader is not None:
+            self._te_offloader.release_all_to_cpu()
+            self._te_offloader = None
+        if pipe is not None and getattr(pipe, "text_encoder", None) is not None:
+            pipe.text_encoder.to("cpu")
+            pipe.update_components(text_encoder=None)
+        if self._text_encoder is not None:
+            self._text_encoder.to("cpu")
+            self._text_encoder = None
+        gc.collect()
+        clear_device_cache(device)
+
+    def _load_partition_dit(
+        self,
+        partition: str,
+        dit_path: Path,
+        device: torch.device,
+        compute_dtype: torch.dtype,
+        on_log: Optional[Callable[[str], None]] = None,
+    ) -> nn.Module:
+        from accelerate import init_empty_weights
+        from diffusers import MiniMaxH3ImageTransformer2DModel, MiniMaxH3Transformer3DModel
+
+        if partition == "H3-Image":
+            img_cfg_dir = self._ensure_image_configs(on_log=on_log)
+            tr_cfg = json.loads((img_cfg_dir / "transformer_diffusers" / "config.json").read_text(encoding="utf-8"))
+            num_pdd = int(tr_cfg.get("num_pdd_heads", 6))
+
+            dit_raw = load_safetensors_state_dict(dit_path, device="cpu")
+            dit_mapped, adaln_t_table = convert_minimax_h3_dit_state_dict(
+                dit_raw,
+                num_attention_heads=tr_cfg.get("num_attention_heads", 56),
+                attention_head_dim=tr_cfg.get("attention_head_dim", 128),
+                num_pdd_heads=num_pdd,
+            )
+            del dit_raw
+            if adaln_t_table is not None:
+                tr_cfg["time_embed_dim"] = int(adaln_t_table.shape[1])
+
+            with init_empty_weights():
+                transformer = MiniMaxH3ImageTransformer2DModel.from_config(tr_cfg)
+            dit_missing, dit_unexp = quantized_module_swap_from_state_dict(
+                transformer, dit_mapped, compute_dtype=compute_dtype
+            )
+            del dit_mapped
+            _validate_checkpoint_keys(
+                "MiniMax-H3 Image DiT", dit_missing, dit_unexp,
+                _PRUNED_TIME_EMBEDDER_KEYS if adaln_t_table is not None else (),
+            )
+
+            from diffusers.models.transformers.transformer_minimax_h3_image import MiniMaxH3ImageRotaryPosEmbed
+
+            transformer.rope = MiniMaxH3ImageRotaryPosEmbed(
+                rope_freq_dim=tr_cfg.get("rope_freq_dim", 16),
+                rope_theta=tr_cfg.get("rope_theta", 10000.0),
+            )
+            label = "MiniMax-H3-Image DiT"
+        else:
+            cfg_dir = self._ensure_configs(on_log=on_log)
+            tr_cfg_file = cfg_dir / ("transformer_ref" if partition == "Ref2VA" else "transformer") / "config.json"
+            if not tr_cfg_file.exists():
+                tr_cfg_file = cfg_dir / "transformer" / "config.json"
+            tr_cfg = json.loads(tr_cfg_file.read_text(encoding="utf-8"))
+
+            dit_raw = load_safetensors_state_dict(dit_path, device="cpu")
+            dit_mapped, adaln_t_table = convert_minimax_h3_dit_state_dict(
+                dit_raw,
+                num_attention_heads=tr_cfg.get("num_attention_heads", 56),
+                attention_head_dim=tr_cfg.get("attention_head_dim", 128),
+            )
+            del dit_raw
+            if adaln_t_table is not None:
+                tr_cfg["time_embed_dim"] = int(adaln_t_table.shape[1])
+
+            with init_empty_weights():
+                transformer = MiniMaxH3Transformer3DModel.from_config(tr_cfg)
+            dit_missing, dit_unexp = quantized_module_swap_from_state_dict(
+                transformer, dit_mapped, compute_dtype=compute_dtype
+            )
+            del dit_mapped
+            _validate_checkpoint_keys(
+                "MiniMax-H3 Video DiT", dit_missing, dit_unexp,
+                _PRUNED_TIME_EMBEDDER_KEYS if adaln_t_table is not None else (),
+            )
+
+            from diffusers.models.transformers.transformer_minimax_h3 import MiniMaxH3RotaryPosEmbed
+
+            transformer.rope = MiniMaxH3RotaryPosEmbed(
+                rope_freq_dim=tr_cfg.get("rope_freq_dim", 16),
+                rope_theta=tr_cfg.get("rope_theta", 10000.0),
+            )
+            label = f"MiniMax-H3 33B DiT ({partition})"
+
+        if adaln_t_table is not None:
+            transformer.time_proj = nn.Identity()
+            transformer.time_embedder = _PrunedAdalnTableEmbedder(adaln_t_table)
+            transformer.norm_out = _PrunedAdaLayerNormOut(
+                transformer.norm_out.norm, transformer.norm_out.linear
+            )
+            for blk in transformer.transformer_blocks:
+                blk.adaln_proj = _PrunedAdaLayerNormModulation(
+                    hidden_size=tr_cfg.get("hidden_size", 5376),
+                    orig_linear=blk.adaln_proj.linear,
+                )
+        _materialize_remaining_meta(transformer, compute_dtype)
+        transformer.eval()
+
+        num_blocks = len(transformer.transformer_blocks)
+        dit_resident = compute_resident_blocks(self.config, num_blocks, estimated_model_vram_gb=20.0)
+        self._dit_offloader = (
+            StrataBlockOffloadManager(
+                transformer.transformer_blocks, device=device, resident_vram_blocks=dit_resident
+            )
+            if dit_resident < num_blocks
+            else None
+        )
+        self._dit_stager = (
+            PinnedModuleStager(transformer, device)
+            if (self._dit_offloader is None and device.type == "cuda")
+            else None
+        )
+        if on_log:
+            on_log(
+                f"[{label}] Loaded '{dit_path.name}' "
+                f"({dit_resident}/{num_blocks} Counter blocks, pruned={adaln_t_table is not None}, "
+                "all active weights verified)"
+            )
+        return transformer
+
+    def _release_partition_dit(self, pipe: Any, device: torch.device) -> None:
+        """Drop the ~20 GB MiniMax-H3 DiT from unified memory outside Stage 2 denoising."""
+        if self._dit_offloader is not None:
+            self._dit_offloader.release_all_to_cpu()
+            self._dit_offloader = None
+        if self._dit_stager is not None:
+            self._dit_stager.release()
+            self._dit_stager = None
+        if pipe is not None:
+            clear_kwargs: Dict[str, Any] = {}
+            specs = getattr(pipe, "_component_specs", {})
+            for attr in ("transformer", "transformer_ref"):
+                comp = getattr(pipe, attr, None)
+                if comp is not None:
+                    comp.to("cpu")
+                    clear_kwargs[attr] = None
+                elif attr in specs:
+                    clear_kwargs[attr] = None
+            comp = None
+            if clear_kwargs:
+                pipe.update_components(**clear_kwargs)
+        self._dit_on_gpu = False
+        gc.collect()
+        clear_device_cache(device)
 
     @staticmethod
     def _wrap_modular_pipeline_device(pipe: Any, device: torch.device) -> Any:
@@ -688,9 +853,16 @@ class RealMiniMaxH3Runner:
             )
 
         self._evict_active_pipe_only()
+        self._active_paths = paths
         cfg_dir = self._ensure_configs(on_log=on_log)
         device, compute_dtype = resolve_compute_device_and_dtype()
-        self._ensure_shared_qwen3vl(cfg_dir=cfg_dir, te_path=paths["text_encoder"], on_log=on_log)
+        staged_unified_memory = device.type == "mps"
+        if staged_unified_memory:
+            # On Apple Unified Memory, load Qwen3-VL-32B (~25.3 GB) only for Stage 1 and
+            # the 33B DiT (~20 GB) only for Stage 2 so the two never coexist in RAM.
+            self._ensure_shared_tokenizer_and_processor(cfg_dir)
+        else:
+            self._ensure_shared_qwen3vl(cfg_dir=cfg_dir, te_path=paths["text_encoder"], on_log=on_log)
 
         from accelerate import init_empty_weights
         from diffusers import (
@@ -698,82 +870,20 @@ class RealMiniMaxH3Runner:
             AutoencoderKLMiniMaxH3Audio,
             AutoencoderKLMiniMaxH3Image,
             MiniMaxH3ImageBlocks,
-            MiniMaxH3ImageTransformer2DModel,
             MiniMaxH3Scheduler,
-            MiniMaxH3Transformer3DModel,
         )
         from diffusers.image_processor import VaeImageProcessor
         from diffusers.modular_pipelines.minimax_h3 import MiniMaxH3Blocks
         from diffusers.video_processor import VideoProcessor
 
+        transformer = (
+            None
+            if staged_unified_memory
+            else self._load_partition_dit(partition, paths["dit"], device, compute_dtype, on_log=on_log)
+        )
+
         if partition == "H3-Image":
             img_cfg_dir = self._ensure_image_configs(on_log=on_log)
-            tr_cfg = json.loads((img_cfg_dir / "transformer_diffusers" / "config.json").read_text(encoding="utf-8"))
-            num_pdd = int(tr_cfg.get("num_pdd_heads", 6))
-
-            dit_raw = load_safetensors_state_dict(paths["dit"], device="cpu")
-            dit_mapped, adaln_t_table = convert_minimax_h3_dit_state_dict(
-                dit_raw,
-                num_attention_heads=tr_cfg.get("num_attention_heads", 56),
-                attention_head_dim=tr_cfg.get("attention_head_dim", 128),
-                num_pdd_heads=num_pdd,
-            )
-            del dit_raw
-            if adaln_t_table is not None:
-                tr_cfg["time_embed_dim"] = int(adaln_t_table.shape[1])
-
-            with init_empty_weights():
-                transformer = MiniMaxH3ImageTransformer2DModel.from_config(tr_cfg)
-            dit_missing, dit_unexp = quantized_module_swap_from_state_dict(
-                transformer, dit_mapped, compute_dtype=compute_dtype
-            )
-            del dit_mapped
-            _validate_checkpoint_keys(
-                "MiniMax-H3 Image DiT", dit_missing, dit_unexp,
-                _PRUNED_TIME_EMBEDDER_KEYS if adaln_t_table is not None else (),
-            )
-
-            from diffusers.models.transformers.transformer_minimax_h3_image import MiniMaxH3ImageRotaryPosEmbed
-
-            transformer.rope = MiniMaxH3ImageRotaryPosEmbed(
-                rope_freq_dim=tr_cfg.get("rope_freq_dim", 16),
-                rope_theta=tr_cfg.get("rope_theta", 10000.0),
-            )
-            if adaln_t_table is not None:
-                transformer.time_proj = nn.Identity()
-                transformer.time_embedder = _PrunedAdalnTableEmbedder(adaln_t_table)
-                transformer.norm_out = _PrunedAdaLayerNormOut(
-                    transformer.norm_out.norm, transformer.norm_out.linear
-                )
-                for blk in transformer.transformer_blocks:
-                    blk.adaln_proj = _PrunedAdaLayerNormModulation(
-                        hidden_size=tr_cfg.get("hidden_size", 5376),
-                        orig_linear=blk.adaln_proj.linear,
-                    )
-            _materialize_remaining_meta(transformer, compute_dtype)
-            transformer.eval()
-
-            num_blocks = len(transformer.transformer_blocks)
-            dit_resident = compute_resident_blocks(self.config, num_blocks, estimated_model_vram_gb=20.0)
-            self._dit_offloader = (
-                StrataBlockOffloadManager(
-                    transformer.transformer_blocks, device=device, resident_vram_blocks=dit_resident
-                )
-                if dit_resident < num_blocks
-                else None
-            )
-            self._dit_stager = (
-                PinnedModuleStager(transformer, device)
-                if (self._dit_offloader is None and device.type == "cuda")
-                else None
-            )
-            if on_log:
-                on_log(
-                    f"[MiniMax-H3-Image DiT] Loaded '{paths['dit'].name}' "
-                    f"({dit_resident}/{num_blocks} Counter blocks, pruned={adaln_t_table is not None}, "
-                    "all active weights verified)"
-                )
-
             ivae_cfg = AutoencoderKLMiniMaxH3Image.load_config(str(img_cfg_dir / "vae_diffusers"))
             with init_empty_weights():
                 image_vae = AutoencoderKLMiniMaxH3Image.from_config(ivae_cfg)
@@ -814,76 +924,6 @@ class RealMiniMaxH3Runner:
             self._pipe = self._wrap_modular_pipeline_device(pipe, device)
             self._loaded_partition = partition
             return
-
-        # 2. MiniMax-H3 33B Video+Audio DiT (`FL2VA` or `Ref2VA`)
-        tr_cfg_file = cfg_dir / ("transformer_ref" if partition == "Ref2VA" else "transformer") / "config.json"
-        if not tr_cfg_file.exists():
-            tr_cfg_file = cfg_dir / "transformer" / "config.json"
-        tr_cfg = json.loads(tr_cfg_file.read_text(encoding="utf-8"))
-
-        dit_raw = load_safetensors_state_dict(paths["dit"], device="cpu")
-        dit_mapped, adaln_t_table = convert_minimax_h3_dit_state_dict(
-            dit_raw,
-            num_attention_heads=tr_cfg.get("num_attention_heads", 56),
-            attention_head_dim=tr_cfg.get("attention_head_dim", 128),
-        )
-        del dit_raw
-
-        if adaln_t_table is not None:
-            tr_cfg["time_embed_dim"] = int(adaln_t_table.shape[1])
-
-        with init_empty_weights():
-            transformer = MiniMaxH3Transformer3DModel.from_config(tr_cfg)
-
-        dit_missing, dit_unexp = quantized_module_swap_from_state_dict(
-            transformer, dit_mapped, compute_dtype=compute_dtype
-        )
-        del dit_mapped
-        _validate_checkpoint_keys(
-            "MiniMax-H3 Video DiT", dit_missing, dit_unexp,
-            _PRUNED_TIME_EMBEDDER_KEYS if adaln_t_table is not None else (),
-        )
-
-        from diffusers.models.transformers.transformer_minimax_h3 import MiniMaxH3RotaryPosEmbed
-
-        transformer.rope = MiniMaxH3RotaryPosEmbed(
-            rope_freq_dim=tr_cfg.get("rope_freq_dim", 16),
-            rope_theta=tr_cfg.get("rope_theta", 10000.0),
-        )
-        if adaln_t_table is not None:
-            transformer.time_proj = nn.Identity()
-            transformer.time_embedder = _PrunedAdalnTableEmbedder(adaln_t_table)
-            transformer.norm_out = _PrunedAdaLayerNormOut(
-                transformer.norm_out.norm, transformer.norm_out.linear
-            )
-            for blk in transformer.transformer_blocks:
-                blk.adaln_proj = _PrunedAdaLayerNormModulation(
-                    hidden_size=tr_cfg.get("hidden_size", 5376),
-                    orig_linear=blk.adaln_proj.linear,
-                )
-        _materialize_remaining_meta(transformer, compute_dtype)
-        transformer.eval()
-
-        num_blocks = len(transformer.transformer_blocks)
-        dit_resident = compute_resident_blocks(self.config, num_blocks, estimated_model_vram_gb=20.0)
-        self._dit_offloader = (
-            StrataBlockOffloadManager(
-                transformer.transformer_blocks, device=device, resident_vram_blocks=dit_resident
-            )
-            if dit_resident < num_blocks
-            else None
-        )
-        self._dit_stager = (
-            PinnedModuleStager(transformer, device)
-            if (self._dit_offloader is None and device.type == "cuda")
-            else None
-        )
-        if on_log:
-            on_log(
-                f"[MiniMax-H3 33B DiT ({partition})] Loaded '{paths['dit'].name}' "
-                f"({dit_resident}/{num_blocks} Counter blocks, pruned={adaln_t_table is not None}, "
-                "all active weights verified)"
-            )
 
         # 3. Video VAE (CNN Encoder + 36-layer 3D ViT Decoder)
         vvae_cfg = AutoencoderKLMiniMaxH3.load_config(str(cfg_dir / "vae"))
@@ -948,7 +988,10 @@ class RealMiniMaxH3Runner:
             transformer.to(device)
         self._dit_on_gpu = True
 
-    def _evict_dit(self, transformer: nn.Module, device: torch.device) -> None:
+    def _evict_dit(self, transformer: Optional[nn.Module], device: torch.device) -> None:
+        if transformer is None:
+            self._dit_on_gpu = False
+            return
         if self._dit_offloader is not None:
             self._dit_offloader.release_all_to_cpu()
             transformer.to("cpu")
@@ -967,26 +1010,104 @@ class RealMiniMaxH3Runner:
         on_log: Optional[Callable[[str], None]] = None,
     ) -> Tuple[Any, Any]:
         sub_blocks = pipe.blocks.sub_blocks
-        self.memory.begin_qwen3_vl_stage(cache_hit=False)
-        if self._te_offloader is not None:
-            pipe.text_encoder.model.visual.to(device)
-            pipe.text_encoder.model.language_model.embed_tokens.to(device)
-            pipe.text_encoder.model.language_model.norm.to(device)
-            pipe.text_encoder.model.language_model.rotary_emb.to(device)
-            self._te_offloader.prepare()
-            self._te_offloader.attach_hooks()
-        else:
-            pipe.text_encoder.to(device)
+        if getattr(pipe, "text_encoder", None) is None:
+            if device.type == "mps" and (
+                getattr(pipe, "transformer", None) is not None
+                or getattr(pipe, "transformer_ref", None) is not None
+            ):
+                self._release_partition_dit(pipe, device)
+            cfg_dir = self._ensure_configs(on_log=on_log)
+            te_path = self._active_paths.get("text_encoder") or self._find_weights(self._loaded_partition or "FL2VA")["text_encoder"]
+            self._ensure_shared_qwen3vl(cfg_dir=cfg_dir, te_path=te_path, on_log=on_log)
+            pipe.update_components(
+                text_encoder=self._text_encoder,
+                tokenizer=self._tokenizer,
+                processor=self._processor,
+            )
 
-        if on_log:
-            on_log("[MiniMax-H3 Stage 1/3] Running Qwen3-VL-32B Layer-50 multimodal conditioning...")
-        with prefer_cudnn_sdpa(device):
-            pipe, state = sub_blocks["text_encoder"](pipe, state)
-        if self._te_offloader is not None:
-            self._te_offloader.release_all_to_cpu()
-        pipe.text_encoder.to("cpu")
-        clear_device_cache(device)
-        self.memory.evict_qwen3_vl_stage()
+        self.memory.begin_qwen3_vl_stage(cache_hit=False)
+        try:
+            if self._te_offloader is not None:
+                pipe.text_encoder.model.visual.to(device)
+                pipe.text_encoder.model.language_model.embed_tokens.to(device)
+                pipe.text_encoder.model.language_model.norm.to(device)
+                pipe.text_encoder.model.language_model.rotary_emb.to(device)
+                self._te_offloader.prepare()
+                self._te_offloader.attach_hooks()
+            else:
+                pipe.text_encoder.to(device)
+
+            if on_log:
+                on_log("[MiniMax-H3 Stage 1/3] Running Qwen3-VL-32B Layer-50 multimodal conditioning...")
+            with prefer_cudnn_sdpa(device):
+                pipe, state = sub_blocks["text_encoder"](pipe, state)
+        finally:
+            if device.type == "mps":
+                self._release_shared_qwen3vl(pipe, device)
+            else:
+                if self._te_offloader is not None:
+                    self._te_offloader.release_all_to_cpu()
+                if getattr(pipe, "text_encoder", None) is not None:
+                    pipe.text_encoder.to("cpu")
+                clear_device_cache(device)
+            self.memory.evict_qwen3_vl_stage()
+        return pipe, state
+
+    def _run_stage2_denoise(
+        self,
+        partition: str,
+        pipe: Any,
+        state: Any,
+        device: torch.device,
+        compute_dtype: torch.dtype,
+        keep_dit_warm: bool,
+        log_msg_fn: Callable[[int, int], str],
+        on_log: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[Any, Any]:
+        sub_blocks = pipe.blocks.sub_blocks
+        tr_key = "transformer_ref" if partition == "Ref2VA" else "transformer"
+        if getattr(pipe, tr_key, None) is None:
+            if device.type == "mps" and (
+                self._text_encoder is not None or getattr(pipe, "text_encoder", None) is not None
+            ):
+                self._release_shared_qwen3vl(pipe, device)
+            dit_path = self._active_paths.get("dit") or self._find_weights(partition)["dit"]
+            loaded = self._load_partition_dit(partition, dit_path, device, compute_dtype, on_log=on_log)
+            if partition == "H3-Image":
+                pipe.update_components(transformer=loaded)
+            else:
+                pipe.update_components(transformer=loaded, transformer_ref=loaded)
+            loaded = None
+
+        transformer = getattr(pipe, tr_key)
+        try:
+            if self._dit_offloader is not None:
+                for name, child in transformer.named_children():
+                    if name != "transformer_blocks":
+                        child.to(device)
+                self._dit_offloader.prepare()
+                self._dit_offloader.attach_hooks()
+                counter_cnt = self._dit_offloader.resident_vram_blocks
+                pantry_cnt = self._dit_offloader.total_blocks - counter_cnt
+            else:
+                self._stage_dit(transformer, device)
+                counter_cnt = len(transformer.transformer_blocks)
+                pantry_cnt = 0
+
+            if on_log:
+                on_log(log_msg_fn(counter_cnt, pantry_cnt))
+            with prefer_cudnn_sdpa(device):
+                pipe, state = sub_blocks["denoise"](pipe, state)
+        finally:
+            if device.type == "mps":
+                if self._dit_offloader is not None:
+                    self._dit_offloader.release_all_to_cpu()
+                transformer.to("cpu")
+                transformer = None
+                self._release_partition_dit(pipe, device)
+            elif not keep_dit_warm:
+                self._evict_dit(transformer, device)
+                transformer = None
         return pipe, state
 
     @torch.inference_mode()
@@ -1006,9 +1127,8 @@ class RealMiniMaxH3Runner:
         self.memory.switch_partition("H3-Image")
         self._ensure_loaded(partition="H3-Image", on_log=on_log)
 
-        device, _ = resolve_compute_device_and_dtype()
+        device, compute_dtype = resolve_compute_device_and_dtype()
         pipe = self._pipe
-        transformer = pipe.transformer
 
         width = max(256, round(width / 32) * 32)
         height = max(256, round(height / 32) * 32)
@@ -1045,7 +1165,7 @@ class RealMiniMaxH3Runner:
             self.memory.evict_qwen3_vl_stage()
         else:
             if self._dit_on_gpu:
-                self._evict_dit(transformer, device)
+                self._evict_dit(getattr(pipe, "transformer", None), device)
             pipe, state = self._run_stage1_text_encoder(pipe, state, device, on_log=on_log)
             if cache_key:
                 pe_val = state.get("prompt_embeds")
@@ -1074,28 +1194,19 @@ class RealMiniMaxH3Runner:
         else:
             pipe, state = sub_blocks["vae_encoder"](pipe, state)
 
-        if self._dit_offloader is not None:
-            for name, child in transformer.named_children():
-                if name != "transformer_blocks":
-                    child.to(device)
-            self._dit_offloader.prepare()
-            self._dit_offloader.attach_hooks()
-            counter_cnt = self._dit_offloader.resident_vram_blocks
-            pantry_cnt = self._dit_offloader.total_blocks - counter_cnt
-        else:
-            self._stage_dit(transformer, device)
-            counter_cnt = len(transformer.transformer_blocks)
-            pantry_cnt = 0
-
-        if on_log:
-            on_log(
+        pipe, state = self._run_stage2_denoise(
+            partition="H3-Image",
+            pipe=pipe,
+            state=state,
+            device=device,
+            compute_dtype=compute_dtype,
+            keep_dit_warm=keep_dit_warm,
+            log_msg_fn=lambda c, p: (
                 f"[MiniMax-H3-Image Stage 2/3] Denoising 6 PDD steps @ {width}x{height} "
-                f"({counter_cnt}/50 Counter, {pantry_cnt}/50 Pantry)..."
-            )
-        with prefer_cudnn_sdpa(device):
-            pipe, state = sub_blocks["denoise"](pipe, state)
-        if not keep_dit_warm:
-            self._evict_dit(transformer, device)
+                f"({c}/50 Counter, {p}/50 Pantry)..."
+            ),
+            on_log=on_log,
+        )
 
         self.memory.begin_vae_stage()
         pipe.vae.to(device)
@@ -1107,7 +1218,7 @@ class RealMiniMaxH3Runner:
         except torch.cuda.OutOfMemoryError:
             if not self._dit_on_gpu:
                 raise
-            self._evict_dit(transformer, device)
+            self._evict_dit(getattr(pipe, "transformer", None), device)
             pipe.vae.to(device)
             with prefer_cudnn_sdpa(device):
                 pipe, state = sub_blocks["decode"](pipe, state)
@@ -1153,10 +1264,9 @@ class RealMiniMaxH3Runner:
         self.memory.switch_partition(partition)
         self._ensure_loaded(partition=partition, on_log=on_log)
 
-        device, _ = resolve_compute_device_and_dtype()
+        device, compute_dtype = resolve_compute_device_and_dtype()
         pipe = self._pipe
         tr_key = "transformer_ref" if partition == "Ref2VA" else "transformer"
-        transformer = getattr(pipe, tr_key)
 
         width = max(256, round(width / 32) * 32)
         height = max(256, round(height / 32) * 32)
@@ -1208,7 +1318,7 @@ class RealMiniMaxH3Runner:
             self.memory.evict_qwen3_vl_stage()
         else:
             if self._dit_on_gpu:
-                self._evict_dit(transformer, device)
+                self._evict_dit(getattr(pipe, tr_key, None), device)
             pipe, state = self._run_stage1_text_encoder(pipe, state, device, on_log=on_log)
             if cache_key:
                 pe_val = state.get("prompt_embeds")
@@ -1243,29 +1353,20 @@ class RealMiniMaxH3Runner:
         else:
             pipe, state = sub_blocks["vae_encoder"](pipe, state)
 
-        # Stage 2: 33B DiT Denoising (100% Counter on >=28 GB GPUs, or async Pinned RAM Pantry)
-        if self._dit_offloader is not None:
-            for name, child in transformer.named_children():
-                if name != "transformer_blocks":
-                    child.to(device)
-            self._dit_offloader.prepare()
-            self._dit_offloader.attach_hooks()
-            counter_cnt = self._dit_offloader.resident_vram_blocks
-            pantry_cnt = self._dit_offloader.total_blocks - counter_cnt
-        else:
-            self._stage_dit(transformer, device)
-            counter_cnt = len(transformer.transformer_blocks)
-            pantry_cnt = 0
-
-        if on_log:
-            on_log(
-                f"[MiniMax-H3 Stage 2/3] Denoising 33B DiT ({counter_cnt}/50 Counter, "
-                f"{pantry_cnt}/50 Pinned RAM Pantry)..."
-            )
-        with prefer_cudnn_sdpa(device):
-            pipe, state = sub_blocks["denoise"](pipe, state)
-        if not keep_dit_warm:
-            self._evict_dit(transformer, device)
+        # Stage 2: 33B DiT Denoising (100% Counter on >=28 GB GPUs / 64 GB Macs, or async Pinned RAM Pantry)
+        pipe, state = self._run_stage2_denoise(
+            partition=partition,
+            pipe=pipe,
+            state=state,
+            device=device,
+            compute_dtype=compute_dtype,
+            keep_dit_warm=keep_dit_warm,
+            log_msg_fn=lambda c, p: (
+                f"[MiniMax-H3 Stage 2/3] Denoising 33B DiT ({c}/50 Counter, "
+                f"{p}/50 Pinned RAM Pantry)..."
+            ),
+            on_log=on_log,
+        )
 
         # Stage 3: Tiled ViT Video VAE + BigVGAN Audio VAE Decode -> H.264/AAC MP4
         self.memory.begin_vae_stage()
@@ -1279,7 +1380,7 @@ class RealMiniMaxH3Runner:
         except torch.cuda.OutOfMemoryError:
             if not self._dit_on_gpu:
                 raise
-            self._evict_dit(transformer, device)
+            self._evict_dit(getattr(pipe, tr_key, None), device)
             pipe.vae.to(device)
             pipe.audio_vae.to(device)
             with prefer_cudnn_sdpa(device):
@@ -1307,8 +1408,6 @@ class RealMiniMaxH3Runner:
     def _evict_active_pipe_only(self) -> None:
         if self._pipe is None:
             return
-        import gc
-
         if self._dit_offloader is not None:
             self._dit_offloader.release_all_to_cpu()
             self._dit_offloader = None
@@ -1321,14 +1420,19 @@ class RealMiniMaxH3Runner:
                 comp.to("cpu")
         self._pipe = None
         self._loaded_partition = None
+        self._active_paths = {}
         self._dit_on_gpu = False
         gc.collect()
         clear_device_cache()
 
     def evict(self) -> None:
         self._evict_active_pipe_only()
+        device, _ = resolve_compute_device_and_dtype()
+        if device.type == "mps":
+            self._release_shared_qwen3vl(None, device)
+            return
         if self._te_offloader is not None:
             self._te_offloader.release_all_to_cpu()
         if self._text_encoder is not None:
             self._text_encoder.to("cpu")
-        clear_device_cache()
+        clear_device_cache(device)

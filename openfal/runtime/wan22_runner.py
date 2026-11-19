@@ -14,6 +14,7 @@ and `StrataBlockOffloadManager` so:
 
 from __future__ import annotations
 
+import gc
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -542,6 +543,10 @@ class RealWan22Runner:
                 self._te_stager.evict_to_cpu()
             else:
                 self._text_encoder.to("cpu")
+            if device.type == "mps":
+                # Unified memory shares CPU and Metal RAM: release UMT5 before loading 14B DiT experts.
+                self._text_encoder = None
+                gc.collect()
             clear_device_cache(device)
             self.memory.evict_qwen3_vl_stage()
             if on_log:
@@ -607,6 +612,8 @@ class RealWan22Runner:
 
         active_key: Optional[str] = None
         active_tuple: Optional[Tuple[Any, Optional[StrataBlockOffloadManager]]] = None
+        model: Any = None
+        offloader: Optional[StrataBlockOffloadManager] = None
 
         if on_log:
             on_log(
@@ -614,72 +621,89 @@ class RealWan22Runner:
                 f"boundary={boundary_ts})"
             )
 
-        with prefer_cudnn_sdpa(device):
-            for i, t in enumerate(timesteps):
-                is_high = (boundary_ts is None) or (float(t.item()) >= boundary_ts)
-                expert_key = f"{variant}:high" if is_high else f"{variant}:low"
-                expert_path = hi_path if is_high else (lo_path or hi_path)
+        try:
+            with prefer_cudnn_sdpa(device):
+                for i, t in enumerate(timesteps):
+                    is_high = (boundary_ts is None) or (float(t.item()) >= boundary_ts)
+                    expert_key = f"{variant}:high" if is_high else f"{variant}:low"
+                    expert_path = hi_path if is_high else (lo_path or hi_path)
 
-                if active_key != expert_key:
-                    if active_tuple is not None:
-                        self._deactivate_expert(active_tuple[0], active_tuple[1], device, expert_key=active_key)
-                    active_tuple = self._get_expert(expert_key, expert_path, cfg_dir, on_log=on_log)
-                    self._activate_expert(active_tuple[0], active_tuple[1], device, expert_key=expert_key)
-                    active_key = expert_key
+                    if active_key != expert_key:
+                        if active_tuple is not None:
+                            self._deactivate_expert(active_tuple[0], active_tuple[1], device, expert_key=active_key)
+                            if device.type == "mps" and active_key is not None:
+                                # Release the previous 14B expert from unified RAM before loading the next one.
+                                self._experts.pop(active_key, None)
+                                active_tuple = None
+                                model = None
+                                offloader = None
+                                gc.collect()
+                                clear_device_cache(device)
+                        active_tuple = self._get_expert(expert_key, expert_path, cfg_dir, on_log=on_log)
+                        self._activate_expert(active_tuple[0], active_tuple[1], device, expert_key=expert_key)
+                        active_key = expert_key
 
-                model, offloader = active_tuple
-                cur_cfg = guidance_scale if is_high else g2
-                model_in = (
-                    torch.cat([latents.to(compute_dtype), condition.to(compute_dtype)], dim=1)
-                    if condition is not None
-                    else latents.to(compute_dtype)
-                )
-                ts_in = t.expand(latents.shape[0])
+                    model, offloader = active_tuple
+                    cur_cfg = guidance_scale if is_high else g2
+                    model_in = (
+                        torch.cat([latents.to(compute_dtype), condition.to(compute_dtype)], dim=1)
+                        if condition is not None
+                        else latents.to(compute_dtype)
+                    )
+                    ts_in = t.expand(latents.shape[0])
 
-                # Batch cond + uncond CFG in one forward pass on >=24 GB CUDA GPUs when DiT is fully resident
-                batch_cfg = (
-                    do_cfg
-                    and neg_embeds is not None
-                    and device.type == "cuda"
-                    and offloader is None
-                    and self.config.profile.total_vram_gb >= 24.0
-                )
-                if batch_cfg:
-                    pred_both = model(
-                        hidden_states=torch.cat([model_in, model_in], dim=0),
-                        timestep=ts_in.expand(2),
-                        encoder_hidden_states=torch.cat([prompt_embeds, neg_embeds], dim=0),
-                        return_dict=False,
-                    )[0]
-                    noise_pred_cond, noise_uncond = pred_both.chunk(2, dim=0)
-                    noise_pred = noise_uncond + cur_cfg * (noise_pred_cond - noise_uncond)
-                else:
-                    noise_pred = model(
-                        hidden_states=model_in,
-                        timestep=ts_in,
-                        encoder_hidden_states=prompt_embeds,
-                        return_dict=False,
-                    )[0]
-                    if do_cfg and neg_embeds is not None:
-                        noise_uncond = model(
-                            hidden_states=model_in,
-                            timestep=ts_in,
-                            encoder_hidden_states=neg_embeds,
+                    # Batch cond + uncond CFG in one forward pass on >=24 GB CUDA GPUs when DiT is fully resident
+                    batch_cfg = (
+                        do_cfg
+                        and neg_embeds is not None
+                        and device.type == "cuda"
+                        and offloader is None
+                        and self.config.profile.total_vram_gb >= 24.0
+                    )
+                    if batch_cfg:
+                        pred_both = model(
+                            hidden_states=torch.cat([model_in, model_in], dim=0),
+                            timestep=ts_in.expand(2),
+                            encoder_hidden_states=torch.cat([prompt_embeds, neg_embeds], dim=0),
                             return_dict=False,
                         )[0]
-                        noise_pred = noise_uncond + cur_cfg * (noise_pred - noise_uncond)
+                        noise_pred_cond, noise_uncond = pred_both.chunk(2, dim=0)
+                        noise_pred = noise_uncond + cur_cfg * (noise_pred_cond - noise_uncond)
+                    else:
+                        noise_pred = model(
+                            hidden_states=model_in,
+                            timestep=ts_in,
+                            encoder_hidden_states=prompt_embeds,
+                            return_dict=False,
+                        )[0]
+                        if do_cfg and neg_embeds is not None:
+                            noise_uncond = model(
+                                hidden_states=model_in,
+                                timestep=ts_in,
+                                encoder_hidden_states=neg_embeds,
+                                return_dict=False,
+                            )[0]
+                            noise_pred = noise_uncond + cur_cfg * (noise_pred - noise_uncond)
 
-                latents = scheduler.step(noise_pred, t, latents, return_dict=False)[0]
-                self.memory.record_dit_block_step(
-                    step_idx=i,
-                    total_steps=steps,
-                    active_block=(offloader.resident_vram_blocks if offloader else len(model.blocks)) - 1,
-                    prefetch_block=None,
-                    dma_ms=0.0,
-                )
-
-        if active_tuple is not None:
-            self._deactivate_expert(active_tuple[0], active_tuple[1], device, expert_key=active_key)
+                    latents = scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+                    self.memory.record_dit_block_step(
+                        step_idx=i,
+                        total_steps=steps,
+                        active_block=(offloader.resident_vram_blocks if offloader else len(model.blocks)) - 1,
+                        prefetch_block=None,
+                        dma_ms=0.0,
+                    )
+        finally:
+            if active_tuple is not None:
+                self._deactivate_expert(active_tuple[0], active_tuple[1], device, expert_key=active_key)
+                if device.type == "mps" and active_key is not None:
+                    self._experts.pop(active_key, None)
+            active_tuple = None
+            model = None
+            offloader = None
+            if device.type == "mps":
+                gc.collect()
+                clear_device_cache(device)
 
         # -------- Stage 3: AutoencoderKLWan Decode -> H.264 MP4 --------
         self.memory.begin_vae_stage()
@@ -700,7 +724,7 @@ class RealWan22Runner:
 
     def evict(self) -> None:
         device, _ = resolve_compute_device_and_dtype()
-        for key, (model, offloader) in self._experts.items():
+        for key, (model, offloader) in list(self._experts.items()):
             self._deactivate_expert(model, offloader, device, expert_key=key)
         for stager in self._expert_stagers.values():
             stager.release()
@@ -712,4 +736,9 @@ class RealWan22Runner:
             self._text_encoder.to("cpu")
         if self._vae is not None:
             self._vae.to("cpu")
+        if device.type == "mps":
+            self._experts.clear()
+            self._text_encoder = None
+            self._vae = None
+            gc.collect()
         clear_device_cache(device)

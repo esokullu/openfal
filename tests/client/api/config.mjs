@@ -74,6 +74,45 @@ export async function uploadSampleFile(fileNameOrPath) {
   return data.url;
 }
 
+const TRANSIENT_FETCH_CODES = new Set([
+  "EPIPE",
+  "ECONNRESET",
+  "ECONNABORTED",
+  "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+]);
+
+function isTransientFetchError(err) {
+  if (!err) return false;
+  const code = err.code || err.cause?.code;
+  if (code && TRANSIENT_FETCH_CODES.has(code)) return true;
+  if (err instanceof TypeError && /fetch failed/i.test(err.message || "")) {
+    return code !== "ECONNREFUSED";
+  }
+  return false;
+}
+
+async function fetchWithRetry(url, init, { maxRetries = 6, baseDelayMs = 500, deadline = Infinity } = {}) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fetch(url, init);
+    } catch (err) {
+      attempt += 1;
+      if (!isTransientFetchError(err) || attempt > maxRetries || Date.now() > deadline) {
+        throw err;
+      }
+      const delay = Math.min(5000, baseDelayMs * 2 ** (attempt - 1));
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
 /**
  * Download a generated image or video URL to `tests/client/api/outputs/<filename>`.
  */
@@ -84,7 +123,7 @@ export async function downloadOutput(url, outFileName) {
     fs.writeFileSync(dest, Buffer.from(b64, "base64"));
     return dest;
   }
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) {
     throw new Error(`Failed to download ${url}: HTTP ${res.status}`);
   }
@@ -146,14 +185,27 @@ async function createFalClient() {
       if (onQueueUpdate) onQueueUpdate(initial);
 
       let seenLogs = (initial.logs || []).length;
+      let consecutivePollErrors = 0;
       while (true) {
         if (Date.now() > deadline) {
           await fetch(`${OPENFAL_URL}/requests/${requestId}/cancel`, { method: "PUT" }).catch(() => {});
           throw new Error(`Job ${requestId} exceeded test timeout (${TEST_TIMEOUT_MS}ms)`);
         }
-        const statusRes = await fetch(
-          `${OPENFAL_URL}/requests/${requestId}/status?logs=${logs ? 1 : 0}`
-        );
+        let statusRes;
+        try {
+          statusRes = await fetch(
+            `${OPENFAL_URL}/requests/${requestId}/status?logs=${logs ? 1 : 0}`
+          );
+          consecutivePollErrors = 0;
+        } catch (err) {
+          consecutivePollErrors += 1;
+          if (!isTransientFetchError(err) || consecutivePollErrors > 10 || Date.now() > deadline) {
+            throw err;
+          }
+          const backoffMs = Math.min(5000, 500 * consecutivePollErrors);
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
         if (!statusRes.ok) {
           throw new Error(`Status poll failed (${statusRes.status}): ${await statusRes.text()}`);
         }
@@ -173,7 +225,7 @@ async function createFalClient() {
         await new Promise((r) => setTimeout(r, 500));
       }
 
-      const resultRes = await fetch(`${OPENFAL_URL}/requests/${requestId}`);
+      const resultRes = await fetchWithRetry(`${OPENFAL_URL}/requests/${requestId}`, undefined, { deadline });
       if (!resultRes.ok) {
         throw new Error(`Result fetch failed (${resultRes.status}): ${await resultRes.text()}`);
       }
