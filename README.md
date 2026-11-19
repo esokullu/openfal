@@ -30,6 +30,19 @@ The `minimax/h3-max/*` names route to the corresponding local H3 partitions. The
 
 The API accepts common fal-style route names and request/queue conventions. Compatibility does not imply feature parity with the hosted service. Use `GET /v1/endpoints` and `/docs` for the local route inventory and schema. Some accepted compatibility fields, including safety-checker and prompt-expansion options, do not invoke equivalent hosted services. `has_nsfw_concepts` is not a moderation guarantee.
 
+## Measured RTX 5090 Benchmarks (32 GiB)
+
+Sequential VRAM-isolated runs on a single NVIDIA GeForce RTX 5090 (`--warmup 1 --repeats 2 --concurrency 1 --sequential-local`; `openfal` and `ComfyUI` native on Windows, `vLLM-Omni` on the same GPU under WSL2). Full methodology, cold-start/startup latencies, and raw JSON telemetry are in [docs/benchmark-rtx-5090-2026-11-18.md](docs/benchmark-rtx-5090-2026-11-18.md) and [benchmark/results/bench_NVIDIA_GeForce_RTX_5090_full_comparison.md](benchmark/results/bench_NVIDIA_GeForce_RTX_5090_full_comparison.md).
+
+| Scenario | Workload | `openfal` Warm (Peak VRAM) | `ComfyUI` Warm (Peak VRAM) | `vLLM-Omni` Warm (Peak VRAM) |
+| --- | --- | ---: | ---: | ---: |
+| `qwen21_t2i` | Qwen-Image-2.1-Turbo (`1344×768`, 8 steps) | `3.98 s` (`24.7 GB`) | `5.32 s` (`16.6 GB`) | **`2.45 s`** (`24.7 GB`) |
+| `minimax_h3_t2i` | MiniMax-H3-Image (`1344×768`, 6 PDD steps) | **`3.47 s`** (`26.1 GB`) | `3.83 s` (`30.8 GB`) | `65.00 s` (`16.3 GB`) |
+| `wan22_i2v_14b` | Wan 2.2 A14B I2V (`848×480`, 33f @ 16 fps, 20 steps) | `109.14 s` (`19.3 GB`) | `85.87 s` (`31.3 GB`) | **`75.58 s`** (`21.2 GB`) |
+| `minimax_h3_i2v` | MiniMax-H3 FL2VA I2V + 32 kHz stereo audio (`832×480`, 20 steps) | `52.78 s` (`26.4 GB`) | **`48.34 s`** (`30.9 GB`) | `116.41 s` (`14.2 GB`)\* |
+
+\*`openfal` and `ComfyUI` generate `73` frames (`3.04 s` @ `24 fps`); `vLLM-Omni` enforces a `4 s` minimum duration and outputs `107` frames (`4.46 s`). Server startup time: `1.8 s` (`openfal`) vs `18.6 s` (`ComfyUI`) vs `53–129 s` (`vLLM-Omni`).
+
 ## Install and start on Windows
 
 Python 3.10+ is required. On Windows and Linux NVIDIA GPUs, install a **CUDA-enabled PyTorch build first** (otherwise `pip install -e ".[inference]"` pulls CPU-only PyTorch from PyPI on Windows):
@@ -275,7 +288,7 @@ node tests/client/api/run_all.mjs
 
 The API suite runs model cases independently, retains request/response metadata and media in a fresh output directory, continues after failures, and exits nonzero if any case fails. Wan Animate and replacement tests require both identity and driving inputs plus the complete supporting asset set. See [the client test guide](tests/client/README.md) and [sample provenance](tests/client/samples/README.md) for options and evaluation criteria. Real GPU tests and visual/audio inspection are necessary in addition to unit tests; a passing installer or host test does not establish end-to-end generation quality.
 
-The [2026-11-17 Windows validation record](docs/validation-2026-11-17.md) documents real outputs, regression checks and the remaining Apple Silicon hardware verification. The [2026-11-18 RTX 5090 engine benchmark](docs/benchmark-rtx-5090-2026-11-18.md) compares `openfal`, `ComfyUI`, and `vLLM-Omni` across text-to-image and image-to-video workloads for Qwen-Image-2.1, Wan 2.2, and MiniMax-H3.
+The [2026-11-17 Windows validation record](docs/validation-2026-11-17.md) documents real outputs, regression checks and the remaining Apple Silicon hardware verification. The [RTX 5090 engine benchmark](docs/benchmark-rtx-5090-2026-11-18.md) (updated 2026-11-19) compares `openfal`, `ComfyUI`, and `vLLM-Omni` across text-to-image and image-to-video workloads for Qwen-Image-2.1, Wan 2.2, and MiniMax-H3.
 
 `OPENFAL_SYNTHETIC_FALLBACK=1` explicitly enables development placeholder rendering. Leave it unset for real inference. Synthetic output is labeled in the API and Studio; missing model assets never silently enable it. `/health` reports API liveness and the synthetic-mode flag, not a complete readiness or output-quality guarantee.
 
