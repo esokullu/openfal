@@ -32,25 +32,36 @@ The API accepts common fal-style route names and request/queue conventions. Comp
 
 ## Install and start on Windows
 
-Python 3.10+ is required. The inference extra installs the Python inference libraries and video/audio dependencies. Use a PyTorch build compatible with the compute device you intend to run.
+Python 3.10+ is required. On Windows and Linux NVIDIA GPUs, install a **CUDA-enabled PyTorch build first** (otherwise `pip install -e ".[inference]"` pulls CPU-only PyTorch from PyPI on Windows):
 
 ```powershell
 git clone https://github.com/esokullu/openfal.git
 cd openfal
+
+# 1. Install CUDA PyTorch first (match your NVIDIA driver; cu128 supports RTX 40/50 series):
+py -3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+
+# 2. Install openfal and its inference dependencies:
 py -3.11 -m pip install -e ".[inference]"
 
-# Check the devices PyTorch can use:
+# 3. Check the devices PyTorch can use:
 py -3.11 -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 openfal detect
 
-# Install the smallest supported image-generation setup (~16.1 GB):
+# 4. Install the smallest supported image-generation setup (~16.1 GB):
 openfal autosetup --tier minimal -y
 
-# Start the local API and Studio:
-openfal serve --host 0.0.0.0 --port 8008
+# 5. Start the local API and Studio (binds 127.0.0.1 by default):
+openfal serve --port 8008
 ```
 
-If `openfal` is not on `PATH`, use `py -3.11 -m openfal.cli` in its place. Open `http://localhost:8008/` on the server machine for Studio, or `/docs` for the API explorer.
+To accept connections from another machine on your LAN, bind explicitly and protect the server with an API key (`Authorization: Key <key>`, `Authorization: Bearer <key>`, or `X-API-Key: <key>`):
+
+```powershell
+openfal serve --host 0.0.0.0 --port 8008 --api-key "your-local-secret"
+```
+
+If `openfal` is not on `PATH`, use `py -3.11 -m openfal.cli` in its place. Open `http://127.0.0.1:8008/` on the server machine for Studio, or `/docs` for the API explorer.
 
 On Linux/macOS, use `python3 -m pip install -e ".[inference]"` and the same `openfal` commands. Device selection can fall back to MPS or CPU when CUDA is unavailable. MPS compute uses BF16 only after a capability probe succeeds, otherwise FP32. When Metal cannot store FP8 tensors, the packed weights remain on CPU and decoded compute tensors are transferred to MPS. Host regression tests cover these branches; actual Mac inference has not been validated. Memory requirements and performance need testing on the target Mac.
 
@@ -268,6 +279,6 @@ The [2026-11-17 Windows validation record](docs/validation-2026-11-17.md) docume
 
 `OPENFAL_SYNTHETIC_FALLBACK=1` explicitly enables development placeholder rendering. Leave it unset for real inference. Synthetic output is labeled in the API and Studio; missing model assets never silently enable it. `/health` reports API liveness and the synthetic-mode flag, not a complete readiness or output-quality guarantee.
 
-The server is a local inference service, not a managed hosting platform. It has no built-in authentication for generation, file upload or model administration, and its queue state is held in memory. Restrict access to trusted clients or add deployment access controls; queued work does not survive server restarts. Validate the endpoints, model assets, input types and hardware settings your application needs before shipping it. The unsupported capabilities listed above remain unavailable even when the rest of the suite succeeds.
+The server is a local inference service, not a managed hosting platform. By default `openfal serve` binds `127.0.0.1`; pass `--api-key` (or set `OPENFAL_API_KEY`) whenever exposing `--host 0.0.0.0` on a LAN, and restrict network access to trusted clients. Its queue state is held in memory and does not survive server restarts. Validate the endpoints, model assets, input types and hardware settings your application needs before shipping it. The unsupported capabilities listed above remain unavailable even when the rest of the suite succeeds.
 
 The application source is MIT-licensed; see [LICENSE](LICENSE). Model weights retain their upstream license terms.

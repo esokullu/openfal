@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>openfal Studio — MiniMax H3 Strata-DiT Offload Engine</title>
+  <title>openfal Studio — Local fal-Compatible Inference Server (Qwen-Image-2.1, Wan 2.2 &amp; MiniMax-H3)</title>
   <style>
     :root {
       --bg-0: #090b10;
@@ -307,7 +307,7 @@
       <div class="logo-badge">of</div>
       <div>
         <h1>openfal <span class="pill">Wan 2.2 MoE &bull; Qwen-Image-2.1 &bull; MiniMax-H3</span></h1>
-        <span class="sub">Strata-Inspired 3-Tier Offload Engine &bull; fal.ai Compatible API &bull; MIT License</span>
+        <span class="sub">Local fal-Compatible Inference Server &bull; Python SDK &amp; Studio &bull; MIT License</span>
       </div>
     </div>
     <div class="header-controls">
@@ -457,7 +457,7 @@
         </div>
 
         <button id="runBtn" class="btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="runInference()">
-          ⚡ Generate with openfal Strata-DiT Engine
+          ⚡ Generate with openfal
         </button>
       </div>
 
@@ -898,7 +898,7 @@ console.log(result);`;
         logBox.textContent += `[ERROR] ${err.message}\n`;
       } finally {
         runBtn.disabled = false;
-        runBtn.textContent = "⚡ Generate with openfal Strata-DiT Engine";
+        runBtn.textContent = "⚡ Generate with openfal";
         await refreshTelemetry();
       }
     }

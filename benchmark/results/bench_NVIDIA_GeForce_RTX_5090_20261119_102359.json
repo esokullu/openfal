@@ -1,0 +1,197 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "entries": [
+    {
+      "engine": "openfal",
+      "scenario_id": "qwen21_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 1.848,
+      "cold_sec": 16.225,
+      "warm_mean_sec": 3.984,
+      "warm_p50_sec": 3.984,
+      "warm_min_sec": 3.974,
+      "warm_max_sec": 3.994,
+      "batch_wall_sec": 7.968,
+      "throughput_req_per_min": 15.06,
+      "peak_vram_mib": 25333.0,
+      "mean_gpu_util_pct": 35.9,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 16.225,
+          "reported_infer_sec": 15.837,
+          "output_bytes": 1639260,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 3.994,
+          "reported_infer_sec": 3.678,
+          "output_bytes": 1649964,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 3.974,
+          "reported_infer_sec": 3.742,
+          "output_bytes": 1526055,
+          "engine_mode": "real_pytorch"
+        }
+      ]
+    },
+    {
+      "engine": "openfal",
+      "scenario_id": "minimax_h3_t2i",
+      "modality": "image",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 1.809,
+      "cold_sec": 32.443,
+      "warm_mean_sec": 3.472,
+      "warm_p50_sec": 3.472,
+      "warm_min_sec": 3.471,
+      "warm_max_sec": 3.473,
+      "batch_wall_sec": 6.945,
+      "throughput_req_per_min": 17.28,
+      "peak_vram_mib": 26711.0,
+      "mean_gpu_util_pct": 19.5,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 32.443,
+          "reported_infer_sec": 32.16,
+          "output_bytes": 1889202,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 3.471,
+          "reported_infer_sec": 3.038,
+          "output_bytes": 1719808,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 3.473,
+          "reported_infer_sec": 3.034,
+          "output_bytes": 1770522,
+          "engine_mode": "real_pytorch"
+        }
+      ]
+    },
+    {
+      "engine": "openfal",
+      "scenario_id": "wan22_i2v_14b",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 1.858,
+      "cold_sec": 127.267,
+      "warm_mean_sec": 109.138,
+      "warm_p50_sec": 109.138,
+      "warm_min_sec": 108.887,
+      "warm_max_sec": 109.388,
+      "batch_wall_sec": 218.275,
+      "throughput_req_per_min": 0.55,
+      "peak_vram_mib": 19803.0,
+      "mean_gpu_util_pct": 92.2,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 127.267,
+          "reported_infer_sec": 126.995,
+          "output_bytes": 549382,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 108.887,
+          "reported_infer_sec": 108.651,
+          "output_bytes": 525355,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 109.388,
+          "reported_infer_sec": 108.964,
+          "output_bytes": 835754,
+          "engine_mode": "real_pytorch"
+        }
+      ]
+    },
+    {
+      "engine": "openfal",
+      "scenario_id": "minimax_h3_i2v",
+      "modality": "video",
+      "concurrency": 1,
+      "status": "ok",
+      "error": null,
+      "startup_sec": 1.812,
+      "cold_sec": 84.454,
+      "warm_mean_sec": 52.785,
+      "warm_p50_sec": 52.785,
+      "warm_min_sec": 52.531,
+      "warm_max_sec": 53.039,
+      "batch_wall_sec": 105.57,
+      "throughput_req_per_min": 1.14,
+      "peak_vram_mib": 27061.0,
+      "mean_gpu_util_pct": 76.2,
+      "engine_mode": "real_pytorch",
+      "samples": [
+        {
+          "iteration": 0,
+          "is_cold": true,
+          "is_warmup": true,
+          "wall_sec": 84.454,
+          "reported_infer_sec": 84.09,
+          "output_bytes": 1212149,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 1,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 53.039,
+          "reported_infer_sec": 52.67,
+          "output_bytes": 1155334,
+          "engine_mode": "real_pytorch"
+        },
+        {
+          "iteration": 2,
+          "is_cold": false,
+          "is_warmup": false,
+          "wall_sec": 52.531,
+          "reported_infer_sec": 52.313,
+          "output_bytes": 586854,
+          "engine_mode": "real_pytorch"
+        }
+      ]
+    }
+  ]
+}

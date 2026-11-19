@@ -38,6 +38,8 @@ def cmd_serve(args: argparse.Namespace) -> None:
     cfg = get_default_config(profile_id=selected_profile)
     cfg.host = args.host
     cfg.port = args.port
+    if getattr(args, "api_key", None) is not None:
+        cfg.api_key = args.api_key or None
     if args.weights_dir:
         cfg.weights_dir = weights_path
 
@@ -45,7 +47,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
     app = create_app(cfg)
     print("==========================================================================")
-    print("  openfal v0.1.0 — Strata-DiT Offload Engine (Wan 2.2 MoE / Qwen-Image-2.1 / MiniMax H3)")
+    print("  openfal v0.1.0 — Local fal-Compatible Inference Server (Qwen-Image-2.1 / Wan 2.2 / MiniMax H3)")
     print(f"  Hardware Profile : {cfg.profile.display_name} ({cfg.profile_id})")
     if hw_info and hw_info.get("selected_compute_gpus"):
         gpu_desc = ", ".join(f"GPU {g['index']}: {g['name']} ({g['vram_gb']} GB)" for g in hw_info["selected_compute_gpus"])
@@ -53,11 +55,12 @@ def cmd_serve(args: argparse.Namespace) -> None:
     if hw_info and hw_info.get("ignored_gpus"):
         ign_desc = ", ".join(f"GPU {g['index']}: {g['name']} [{g['reason']}]" for g in hw_info["ignored_gpus"])
         print(f"  Ignored GPU(s)   : {ign_desc}")
-    print(f"  VRAM Counter     : {cfg.profile.resident_vram_blocks}/50 DiT blocks ({cfg.profile.quantization.value})")
-    print(f"  Host RAM Pantry  : {50 - cfg.profile.resident_vram_blocks}/50 DiT blocks (Async PCIe DMA)")
     print(f"  Bind Address     : {cfg.host}:{cfg.port}")
+    print(f"  API Auth         : {'Enabled (API key required)' if cfg.api_key else 'Disabled (set --api-key or OPENFAL_API_KEY to enable)'}")
+    if cfg.host in ("0.0.0.0", "::") and not cfg.api_key:
+        print("  WARNING          : Binding all interfaces without an API key; set --api-key or restrict network access.")
     print(f"  Studio Web UI    : http://{cfg.host if cfg.host != '0.0.0.0' else 'localhost'}:{cfg.port}/")
-    print(f"  fal.ai REST API  : http://{cfg.host if cfg.host != '0.0.0.0' else 'localhost'}:{cfg.port}/wan/v2.2/text-to-video")
+    print(f"  OpenAPI / Docs   : http://{cfg.host if cfg.host != '0.0.0.0' else 'localhost'}:{cfg.port}/docs")
     print("==========================================================================")
     uvicorn.run(app, host=cfg.host, port=cfg.port, log_level="info")
 
@@ -393,23 +396,32 @@ def cmd_benchmark(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="openfal",
-        description="Strata-inspired 3-Tier Offload Inference Engine & fal.ai Server for MiniMax H3",
+        description="Local fal-compatible inference server, CLI, and Studio for Qwen-Image-2.1, Wan 2.2, and MiniMax H3",
     )
     sub = parser.add_subparsers(dest="command")
 
-    p_serve = sub.add_parser("serve", help="Start the fal.ai-compatible API server & Studio Web UI")
-    p_serve.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
+    p_serve = sub.add_parser("serve", help="Start the fal-compatible API server & Studio Web UI")
+    p_serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind host (default: 127.0.0.1; pass 0.0.0.0 for LAN access)",
+    )
     p_serve.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+    p_serve.add_argument(
+        "--api-key",
+        default=None,
+        help="Optional API key (or set OPENFAL_API_KEY) required on API requests via Authorization: Key <key>",
+    )
     p_serve.add_argument(
         "--profile",
         choices=["auto"] + list(HARDWARE_PROFILES.keys()),
         default="auto",
-        help="Consumer GPU offload profile (default: auto-detect compute GPUs)",
+        help="Hardware memory profile (default: auto-detect compute GPUs)",
     )
-    p_serve.add_argument("--weights-dir", default=None, help="Path to MiniMax-H3 weights directory")
+    p_serve.add_argument("--weights-dir", default=None, help="Path to local weights directory")
     p_serve.set_defaults(func=cmd_serve)
 
-    p_info = sub.add_parser("info", help="Show Strata 3-Tier memory hierarchy telemetry for a profile")
+    p_info = sub.add_parser("info", help="Show estimated memory profile telemetry")
     p_info.add_argument(
         "--profile",
         choices=list(HARDWARE_PROFILES.keys()),
@@ -417,17 +429,17 @@ def main() -> None:
     )
     p_info.set_defaults(func=cmd_info)
 
-    p_detect = sub.add_parser("detect", help="Auto-detect GPUs, System RAM, NVMe space and recommend a Strata profile")
+    p_detect = sub.add_parser("detect", help="Auto-detect GPUs, system RAM, and free disk space")
     p_detect.add_argument("--weights-dir", default="./weights/MiniMax-H3")
     p_detect.set_defaults(func=cmd_detect)
 
-    p_models = sub.add_parser("models", help="Inspect local installation & 50-block Strata shard status of MiniMax-H3")
+    p_models = sub.add_parser("models", help="Inspect local model installation and asset readiness")
     p_models.add_argument("--weights-dir", default="./weights/MiniMax-H3")
     p_models.set_defaults(func=cmd_models)
 
     p_dl = sub.add_parser(
         "download",
-        help="Download MiniMax-H3 / MiniMax-H3-Image weights from Hugging Face & pack 50-block Strata shards",
+        help="Download supported model checkpoints and runtime assets from Hugging Face",
     )
     p_dl.add_argument("--weights-dir", default="./weights/MiniMax-H3", help="Target directory for weights")
     p_dl.add_argument(

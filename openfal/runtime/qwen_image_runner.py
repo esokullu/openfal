@@ -38,6 +38,7 @@ from openfal.runtime.common import (
     load_safetensors_state_dict,
     resolve_compute_device_and_dtype,
 )
+from openfal.runtime.attention import prefer_cudnn_sdpa
 from openfal.runtime.quant import (
     StrataBlockOffloadManager,
     quantized_module_swap_from_state_dict,
@@ -240,6 +241,7 @@ class RealQwenImage21Runner:
         self._sample_sigmas: Optional[List[float]] = None
         self._dit_offloader: Optional[StrataBlockOffloadManager] = None
         self._te_offloader: Optional[StrataBlockOffloadManager] = None
+        self._on_gpu: set[str] = set()
         self._prompt_embed_cache: Dict[str, Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]] = {}
 
     def resolve_weight_paths(self) -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
@@ -481,6 +483,14 @@ class RealQwenImage21Runner:
 
         pipe = self._pipe
         device, compute_dtype = resolve_compute_device_and_dtype()
+        # Qwen3-VL-8B (~8.5 GB) + DiT (~7.8 GB) + VAE (~0.5 GB) = ~16.8 GB total:
+        # keep components warm on >=24 GB CUDA GPUs instead of copying 8+ GB CPU<->GPU every image.
+        keep_warm_vram = (
+            device.type == "cuda"
+            and self._dit_offloader is None
+            and self._te_offloader is None
+            and self.config.profile.total_vram_gb >= 24.0
+        )
 
         # Round dimensions to multiple of 32 (vae_scale_factor*2 = 16 -> 32 safest for 2x2 tokens)
         width = max(256, (width // 32) * 32)
@@ -532,25 +542,28 @@ class RealQwenImage21Runner:
                         "VRAM Counter + pinned RAM Pantry)..."
                     )
             else:
-                pipe.text_encoder.to(device)
+                if "text_encoder" not in self._on_gpu:
+                    pipe.text_encoder.to(device)
+                    self._on_gpu.add("text_encoder")
                 if on_log:
-                    on_log("[Qwen3-VL-8B] Encoding prompt in INT8 ConvRot on GPU Counter...")
+                    on_log("[Qwen3-VL-8B] Encoding prompt in INT8 ConvRot on GPU...")
 
-            prompt_embeds, prompt_embeds_mask, image_pad_mask = pipe.encode_prompt(
-                prompt=prompt,
-                image=te_input_images,
-                device=device,
-                num_images_per_prompt=1,
-            )
-            if do_cfg:
-                neg_embeds, neg_mask, neg_img_pad_mask = pipe.encode_prompt(
-                    prompt=negative_prompt or "",
+            with prefer_cudnn_sdpa(device):
+                prompt_embeds, prompt_embeds_mask, image_pad_mask = pipe.encode_prompt(
+                    prompt=prompt,
                     image=te_input_images,
                     device=device,
                     num_images_per_prompt=1,
                 )
-            else:
-                neg_embeds = neg_mask = neg_img_pad_mask = None
+                if do_cfg:
+                    neg_embeds, neg_mask, neg_img_pad_mask = pipe.encode_prompt(
+                        prompt=negative_prompt or "",
+                        image=te_input_images,
+                        device=device,
+                        num_images_per_prompt=1,
+                    )
+                else:
+                    neg_embeds = neg_mask = neg_img_pad_mask = None
 
             if t2i_cache_key and not do_cfg:
                 if len(self._prompt_embed_cache) > 64:
@@ -561,18 +574,21 @@ class RealQwenImage21Runner:
                     image_pad_mask.detach().cpu(),
                 )
 
-            # Evict Stage 1 text encoder completely before DiT starts
-            if self._te_offloader is not None:
-                self._te_offloader.release_all_to_cpu()
-            pipe.text_encoder.to("cpu")
-            clear_device_cache(device)
+            if not keep_warm_vram:
+                # Evict Stage 1 text encoder completely before DiT starts on tight-VRAM / MPS hosts
+                if self._te_offloader is not None:
+                    self._te_offloader.release_all_to_cpu()
+                pipe.text_encoder.to("cpu")
+                self._on_gpu.discard("text_encoder")
+                clear_device_cache(device)
+                if on_log:
+                    on_log("[Qwen3-VL-8B] Extracted multimodal embeddings & evicted text encoder from VRAM")
             self.memory.evict_qwen3_vl_stage()
-            if on_log:
-                on_log("[Qwen3-VL-8B] Extracted multimodal embeddings & evicted text encoder from VRAM")
 
         # ---------------- Stage 2: QwenImage21Transformer2DModel Denoising ----------------
-        if cond_imgs is not None:
+        if cond_imgs is not None and "vae" not in self._on_gpu:
             pipe.vae.to(device)
+            self._on_gpu.add("vae")
 
         gen_dev = "cpu" if device.type == "mps" else device
         generator = torch.Generator(device=gen_dev).manual_seed(int(seed))
@@ -587,8 +603,9 @@ class RealQwenImage21Runner:
             device,
             generator,
         )
-        if cond_imgs is not None:
+        if cond_imgs is not None and not keep_warm_vram:
             pipe.vae.to("cpu")
+            self._on_gpu.discard("vae")
             clear_device_cache(device)
 
         img_shapes = [
@@ -626,7 +643,9 @@ class RealQwenImage21Runner:
             counter_cnt = self._dit_offloader.resident_vram_blocks
             pantry_cnt = self._dit_offloader.total_blocks - counter_cnt
         else:
-            pipe.transformer.to(device)
+            if "transformer" not in self._on_gpu:
+                pipe.transformer.to(device)
+                self._on_gpu.add("transformer")
             counter_cnt = len(pipe.transformer.transformer_blocks)
             pantry_cnt = 0
 
@@ -642,56 +661,61 @@ class RealQwenImage21Runner:
         neg_cache = QwenImage21KVCache(num_blocks) if (cache_enabled and do_cfg) else None
 
         pipe.scheduler.set_begin_index(0)
-        for i, t in enumerate(timesteps):
-            kv_mode = "extract" if (cache_enabled and i == 0) else ("cached" if cache_enabled else None)
-            latent_in = torch.cat([input_images_latents, latents], dim=1) if input_images_latents is not None else latents
-            t_vec = t.expand(latents.shape[0]).to(latents.dtype)
+        with prefer_cudnn_sdpa(device):
+            for i, t in enumerate(timesteps):
+                kv_mode = "extract" if (cache_enabled and i == 0) else ("cached" if cache_enabled else None)
+                latent_in = torch.cat([input_images_latents, latents], dim=1) if input_images_latents is not None else latents
+                t_vec = t.expand(latents.shape[0]).to(latents.dtype)
 
-            noise_pred = pipe.transformer(
-                hidden_states=latent_in,
-                timestep=t_vec / 1000.0,
-                encoder_hidden_states=prompt_embeds,
-                encoder_hidden_states_mask=prompt_embeds_mask,
-                img_shapes=img_shapes,
-                img_mask=image_pad_mask,
-                kv_cache=cond_cache,
-                kv_cache_mode=kv_mode,
-                return_dict=False,
-            )[0]
-            noise_pred = noise_pred[:, -latents.size(1) :]
-
-            if do_cfg and neg_embeds is not None:
-                neg_pred = pipe.transformer(
+                noise_pred = pipe.transformer(
                     hidden_states=latent_in,
                     timestep=t_vec / 1000.0,
-                    encoder_hidden_states=neg_embeds,
-                    encoder_hidden_states_mask=neg_mask,
+                    encoder_hidden_states=prompt_embeds,
+                    encoder_hidden_states_mask=prompt_embeds_mask,
                     img_shapes=img_shapes,
-                    img_mask=neg_img_pad_mask,
-                    kv_cache=neg_cache,
+                    img_mask=image_pad_mask,
+                    kv_cache=cond_cache,
                     kv_cache_mode=kv_mode,
                     return_dict=False,
-                )[0][:, -latents.size(1) :]
-                noise_pred = neg_pred + guidance_scale * (noise_pred - neg_pred)
+                )[0]
+                noise_pred = noise_pred[:, -latents.size(1) :]
 
-            latents = pipe.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
-            self.memory.record_dit_block_step(
-                step_idx=i,
-                total_steps=actual_steps,
-                active_block=min(num_blocks - 1, counter_cnt),
-                prefetch_block=None if pantry_cnt == 0 else min(num_blocks - 1, counter_cnt + 1),
-                dma_ms=0.0,
-            )
+                if do_cfg and neg_embeds is not None:
+                    neg_pred = pipe.transformer(
+                        hidden_states=latent_in,
+                        timestep=t_vec / 1000.0,
+                        encoder_hidden_states=neg_embeds,
+                        encoder_hidden_states_mask=neg_mask,
+                        img_shapes=img_shapes,
+                        img_mask=neg_img_pad_mask,
+                        kv_cache=neg_cache,
+                        kv_cache_mode=kv_mode,
+                        return_dict=False,
+                    )[0][:, -latents.size(1) :]
+                    noise_pred = neg_pred + guidance_scale * (noise_pred - neg_pred)
 
-        if self._dit_offloader is not None:
-            self._dit_offloader.release_all_to_cpu()
-        else:
-            pipe.transformer.to("cpu")
-        clear_device_cache(device)
+                latents = pipe.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+                self.memory.record_dit_block_step(
+                    step_idx=i,
+                    total_steps=actual_steps,
+                    active_block=min(num_blocks - 1, counter_cnt),
+                    prefetch_block=None if pantry_cnt == 0 else min(num_blocks - 1, counter_cnt + 1),
+                    dma_ms=0.0,
+                )
+
+        if not keep_warm_vram:
+            if self._dit_offloader is not None:
+                self._dit_offloader.release_all_to_cpu()
+            else:
+                pipe.transformer.to("cpu")
+                self._on_gpu.discard("transformer")
+            clear_device_cache(device)
 
         # ---------------- Stage 3: AutoencoderKLQwenImage21 Decode ----------------
         self.memory.begin_vae_stage()
-        pipe.vae.to(device)
+        if "vae" not in self._on_gpu:
+            pipe.vae.to(device)
+            self._on_gpu.add("vae")
         unpacked = pipe._unpack_latents(latents, height, width, pipe.vae_scale_factor).to(
             device=device, dtype=compute_dtype
         )
@@ -704,10 +728,13 @@ class RealQwenImage21Runner:
             .view(1, pipe.vae.config.z_dim, 1, 1, 1)
         )
         unpacked = unpacked * lstd + lmean
-        decoded = pipe.vae.decode(unpacked, return_dict=False)[0][:, :, 0]
+        with prefer_cudnn_sdpa(device):
+            decoded = pipe.vae.decode(unpacked, return_dict=False)[0][:, :, 0]
         pil_img = pipe.image_processor.postprocess(decoded, output_type="pil")[0]
-        pipe.vae.to("cpu")
-        clear_device_cache(device)
+        if not keep_warm_vram:
+            pipe.vae.to("cpu")
+            self._on_gpu.discard("vae")
+            clear_device_cache(device)
         self.memory.finish_generation()
 
         if pil_img.mode == "RGBA":
@@ -722,6 +749,7 @@ class RealQwenImage21Runner:
 
     def evict(self) -> None:
         """Unload GPU residency cleanly when switching to a different backend partition."""
+        self._on_gpu.clear()
         if self._pipe is None:
             return
         if self._dit_offloader is not None:

@@ -28,34 +28,50 @@ import httpx
 
 
 class OpenFalClient:
-    def __init__(self, base_url: Optional[str] = None, timeout: float = 120.0):
-        self.base_url = (base_url or os.environ.get("OPENFAL_BASE_URL", "http://localhost:8000")).rstrip("/")
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        timeout: float = 120.0,
+        api_key: Optional[str] = None,
+    ):
+        self.base_url = (base_url or os.environ.get("OPENFAL_BASE_URL", "http://127.0.0.1:8000")).rstrip("/")
         self.timeout = timeout
+        self.api_key = api_key if api_key is not None else (
+            os.environ.get("OPENFAL_API_KEY") or os.environ.get("FAL_KEY") or None
+        )
+
+    def _headers(self, extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        headers: Dict[str, str] = {}
+        if self.api_key:
+            headers["Authorization"] = f"Key {self.api_key}"
+        if extra:
+            headers.update(extra)
+        return headers
 
     def run(self, endpoint_id: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         ep = endpoint_id.lstrip("/")
-        with httpx.Client(base_url=self.base_url, timeout=self.timeout) as client:
+        with httpx.Client(base_url=self.base_url, timeout=self.timeout, headers=self._headers()) as client:
             resp = client.post(f"/{ep}", json=arguments)
             resp.raise_for_status()
             return resp.json()
 
     def submit(self, endpoint_id: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         ep = endpoint_id.lstrip("/")
-        with httpx.Client(base_url=self.base_url, timeout=self.timeout) as client:
+        with httpx.Client(base_url=self.base_url, timeout=self.timeout, headers=self._headers()) as client:
             resp = client.post(f"/queue/{ep}", json=arguments)
             resp.raise_for_status()
             return resp.json()
 
     def status(self, endpoint_id: str, request_id: str, with_logs: bool = True) -> Dict[str, Any]:
         ep = endpoint_id.lstrip("/")
-        with httpx.Client(base_url=self.base_url, timeout=self.timeout) as client:
+        with httpx.Client(base_url=self.base_url, timeout=self.timeout, headers=self._headers()) as client:
             resp = client.get(f"/{ep}/requests/{request_id}/status", params={"logs": int(with_logs)})
             resp.raise_for_status()
             return resp.json()
 
     def result(self, endpoint_id: str, request_id: str) -> Dict[str, Any]:
         ep = endpoint_id.lstrip("/")
-        with httpx.Client(base_url=self.base_url, timeout=self.timeout) as client:
+        with httpx.Client(base_url=self.base_url, timeout=self.timeout, headers=self._headers()) as client:
             resp = client.get(f"/{ep}/requests/{request_id}")
             resp.raise_for_status()
             return resp.json()
@@ -93,7 +109,7 @@ class OpenFalClient:
             resp = client.post(
                 "/v1/storage/upload",
                 content=p.read_bytes(),
-                headers={"Content-Type": content_type},
+                headers=self._headers({"Content-Type": content_type}),
             )
             resp.raise_for_status()
             return resp.json()["url"]
@@ -102,14 +118,28 @@ class OpenFalClient:
 _default_client = OpenFalClient()
 
 
-def run(endpoint_id: str, arguments: Dict[str, Any], base_url: Optional[str] = None) -> Dict[str, Any]:
-    client = OpenFalClient(base_url=base_url) if base_url else _default_client
-    return client.run(endpoint_id, arguments)
+def _resolve_client(base_url: Optional[str], api_key: Optional[str]) -> OpenFalClient:
+    if base_url or api_key is not None:
+        return OpenFalClient(base_url=base_url, api_key=api_key)
+    return _default_client
 
 
-def submit(endpoint_id: str, arguments: Dict[str, Any], base_url: Optional[str] = None) -> Dict[str, Any]:
-    client = OpenFalClient(base_url=base_url) if base_url else _default_client
-    return client.submit(endpoint_id, arguments)
+def run(
+    endpoint_id: str,
+    arguments: Dict[str, Any],
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _resolve_client(base_url, api_key).run(endpoint_id, arguments)
+
+
+def submit(
+    endpoint_id: str,
+    arguments: Dict[str, Any],
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _resolve_client(base_url, api_key).submit(endpoint_id, arguments)
 
 
 def status(
@@ -117,14 +147,18 @@ def status(
     request_id: str,
     with_logs: bool = True,
     base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
-    client = OpenFalClient(base_url=base_url) if base_url else _default_client
-    return client.status(endpoint_id, request_id, with_logs=with_logs)
+    return _resolve_client(base_url, api_key).status(endpoint_id, request_id, with_logs=with_logs)
 
 
-def result(endpoint_id: str, request_id: str, base_url: Optional[str] = None) -> Dict[str, Any]:
-    client = OpenFalClient(base_url=base_url) if base_url else _default_client
-    return client.result(endpoint_id, request_id)
+def result(
+    endpoint_id: str,
+    request_id: str,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _resolve_client(base_url, api_key).result(endpoint_id, request_id)
 
 
 def subscribe(
@@ -133,9 +167,9 @@ def subscribe(
     with_logs: bool = True,
     on_queue_update: Optional[Callable[[Dict[str, Any]], None]] = None,
     base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
-    client = OpenFalClient(base_url=base_url) if base_url else _default_client
-    return client.subscribe(
+    return _resolve_client(base_url, api_key).subscribe(
         endpoint_id=endpoint_id,
         arguments=arguments,
         with_logs=with_logs,
@@ -143,6 +177,9 @@ def subscribe(
     )
 
 
-def upload_file(path: str | Path, base_url: Optional[str] = None) -> str:
-    client = OpenFalClient(base_url=base_url) if base_url else _default_client
-    return client.upload_file(path)
+def upload_file(
+    path: str | Path,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> str:
+    return _resolve_client(base_url, api_key).upload_file(path)

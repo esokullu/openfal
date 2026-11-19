@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import time
 from collections import deque
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -33,6 +34,56 @@ _FP8_DTYPES = frozenset(
     getattr(torch, name) for name in ("float8_e4m3fn", "float8_e5m2", "float8_e4m3fnuz", "float8_e5m2fnuz")
     if hasattr(torch, name)
 )
+
+_FP8_SCALED_MM_CAPABLE: Dict[int, bool] = {}
+_INT8_MM_CAPABLE: Dict[int, bool] = {}
+
+
+def _cuda_fp8_scaled_mm_supported(device: torch.device) -> bool:
+    if device.type != "cuda" or os.environ.get("OPENFAL_FP8_SCALED_MM", "1") == "0":
+        return False
+    if not hasattr(torch, "_scaled_mm") or not hasattr(torch, "float8_e4m3fn"):
+        return False
+    idx = 0 if device.index is None else int(device.index)
+    cached = _FP8_SCALED_MM_CAPABLE.get(idx)
+    if cached is not None:
+        return cached
+    ok = False
+    try:
+        if torch.cuda.is_available() and torch.cuda.get_device_capability(idx) >= (8, 9):
+            a = torch.zeros((16, 16), device=device, dtype=torch.float8_e4m3fn)
+            b = torch.zeros((16, 16), device=device, dtype=torch.float8_e4m3fn).t()
+            s = torch.ones((1,), device=device, dtype=torch.float32)
+            out = torch._scaled_mm(a, b, scale_a=s, scale_b=s, out_dtype=torch.bfloat16, use_fast_accum=True)
+            if isinstance(out, tuple):
+                out = out[0]
+            ok = out.shape == (16, 16)
+    except Exception:
+        ok = False
+    _FP8_SCALED_MM_CAPABLE[idx] = ok
+    return ok
+
+
+def _cuda_int8_mm_supported(device: torch.device) -> bool:
+    if device.type != "cuda" or os.environ.get("OPENFAL_INT8_MM", "1") == "0":
+        return False
+    if not hasattr(torch, "_int_mm"):
+        return False
+    idx = 0 if device.index is None else int(device.index)
+    cached = _INT8_MM_CAPABLE.get(idx)
+    if cached is not None:
+        return cached
+    ok = False
+    try:
+        if torch.cuda.is_available() and torch.cuda.get_device_capability(idx) >= (8, 0):
+            a = torch.zeros((32, 16), device=device, dtype=torch.int8)
+            b = torch.zeros((16, 16), device=device, dtype=torch.int8).t()
+            out = torch._int_mm(a, b)
+            ok = out.shape == (32, 16) and out.dtype == torch.int32
+    except Exception:
+        ok = False
+    _INT8_MM_CAPABLE[idx] = ok
+    return ok
 
 
 def _storage_device(tensor: torch.Tensor, device: torch.device) -> torch.device:
@@ -185,13 +236,58 @@ class StrataConvRotLinear(_QuantizedStorageMixin, nn.Module):
         return w
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Rotate input x along K -> compute dense INT8*scale matmul in compute dtype without permanently
-        # rotating W (equivalent because (x H_G) (W_rot)^T = x H_G H_G^T W_orig^T = x W_orig^T).
+        # Rotate input x along K -> compute INT8*scale matmul without permanently rotating W
+        # (equivalent because (x H_G) (W_rot)^T = x H_G H_G^T W_orig^T = x W_orig^T).
         x_in = apply_group_hadamard(x, group_size=self.group_size) if self.convrot else x
+        b = (
+            self.bias
+            if (self.bias is None or (self.bias.device == x.device and self.bias.dtype == x.dtype))
+            else self.bias.to(device=x.device, dtype=x.dtype)
+        )
+
+        # Native INT8 Tensor Core GEMM on CUDA (ConvRot smooths activation outliers for clean INT8)
+        if (
+            self.weight_i8.device == x.device
+            and x.dtype in (torch.bfloat16, torch.float16)
+            and self.in_features % 8 == 0
+            and self.out_features % 8 == 0
+            and self.weight_scale.shape[-1] == 1
+            and _cuda_int8_mm_supported(x.device)
+        ):
+            x_2d = x_in.reshape(-1, self.in_features)
+            m = x_2d.shape[0]
+            if m > 0:
+                x_amax = (
+                    torch.linalg.vector_norm(x_2d, ord=float("inf"), dim=-1, keepdim=True)
+                    .to(torch.float32)
+                    .clamp_(min=1e-12)
+                )
+                x_scale = x_amax / 127.0
+                x_i8 = (x_2d * (127.0 / x_amax).to(x_2d.dtype)).round_().clamp_(-127, 127).to(torch.int8)
+                target_m = max(24, ((m + 7) // 8) * 8)
+                pad = target_m - m
+                if pad > 0:
+                    x_i8 = F.pad(x_i8, (0, 0, 0, pad))
+                out_i32 = torch._int_mm(x_i8.contiguous(), self.weight_i8.t())
+                if pad > 0:
+                    out_i32 = out_i32[:m]
+                scale_b = self.weight_scale.reshape(1, -1)
+                out = (out_i32.to(torch.float32) * (x_scale * scale_b)).to(x.dtype)
+                if b is not None:
+                    out = out + b
+                return out.reshape(*x.shape[:-1], self.out_features)
+
+        # Output-scaled fallback avoids allocating a second [out, in] weight matrix when scale is per-row/scalar
+        if self.weight_scale.shape[-1] == 1:
+            out = F.linear(x_in, self.weight_i8.to(device=x.device, dtype=x.dtype))
+            out = out * self.weight_scale.to(device=x.device, dtype=x.dtype).reshape(-1)
+            if b is not None:
+                out = out + b
+            return out
+
         w_deq = self.weight_i8.to(device=x.device, dtype=x.dtype) * self.weight_scale.to(
             device=x.device, dtype=x.dtype
         )
-        b = self.bias.to(device=x.device, dtype=x.dtype) if self.bias is not None else None
         return F.linear(x_in, w_deq, b)
 
     def extra_repr(self) -> str:
@@ -293,8 +389,50 @@ class StrataFP8ScaledLinear(_QuantizedStorageMixin, nn.Module):
         return weight * self.weight_scale.to(device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b = (
+            self.bias
+            if (self.bias is None or (self.bias.device == x.device and self.bias.dtype == x.dtype))
+            else self.bias.to(device=x.device, dtype=x.dtype)
+        )
+
+        # Native FP8 Tensor Core GEMM (`torch._scaled_mm`) on CUDA SM >= 8.9 (Ada/Hopper/Blackwell)
+        if (
+            self.weight_fp8.device == x.device
+            and self.weight_fp8.dtype == torch.float8_e4m3fn
+            and x.dtype in (torch.bfloat16, torch.float16)
+            and self.weight_scale.numel() == 1
+            and self.in_features % 16 == 0
+            and self.out_features % 16 == 0
+            and _cuda_fp8_scaled_mm_supported(x.device)
+        ):
+            x_2d = x.reshape(-1, self.in_features)
+            m = x_2d.shape[0]
+            if m > 0:
+                x_amax = torch.linalg.vector_norm(x_2d, ord=float("inf")).to(torch.float32).clamp_(min=1e-12)
+                scale_a = (x_amax / 448.0).reshape(1)
+                inv_scale = (448.0 / x_amax).to(x_2d.dtype)
+                x_fp8 = (x_2d * inv_scale).clamp_(-448.0, 448.0).to(torch.float8_e4m3fn)
+                out = torch._scaled_mm(
+                    x_fp8,
+                    self.weight_fp8.t(),
+                    scale_a=scale_a,
+                    scale_b=self.weight_scale.reshape(1),
+                    bias=b,
+                    out_dtype=x.dtype,
+                    use_fast_accum=True,
+                )
+                if isinstance(out, tuple):
+                    out = out[0]
+                return out.reshape(*x.shape[:-1], self.out_features)
+
+        if self.weight_fp8.device == x.device and self.weight_scale.shape[-1] == 1:
+            out = F.linear(x, self.weight_fp8.to(dtype=x.dtype))
+            out = out * self.weight_scale.to(device=x.device, dtype=x.dtype).reshape(-1)
+            if b is not None:
+                out = out + b
+            return out
+
         w_deq = self._dequantized_weight(x.device, x.dtype)
-        b = self.bias.to(device=x.device, dtype=x.dtype) if self.bias is not None else None
         return F.linear(x, w_deq, b)
 
     def extra_repr(self) -> str:
@@ -484,10 +622,13 @@ class StrataBlockOffloadManager:
         self._pin_cpu = bool(pin_memory and self._use_cuda_stream)
 
     def prepare(self) -> None:
-        """Place Counter blocks on GPU and pin Pantry blocks in host CPU RAM."""
+        """Place Counter blocks on GPU and pin Pantry blocks in host CPU RAM (idempotent for Pantry)."""
         for idx, block in enumerate(self.blocks):
             if idx < self.resident_vram_blocks:
                 block.to(self.device)
+                continue
+
+            if idx in self._pinned_cpu_backing:
                 continue
 
             # Ensure Pantry blocks sit on CPU first (and optionally pin floating/int8 tensors)
@@ -665,3 +806,143 @@ class StrataBlockOffloadManager:
             if self._prefetch_stream is not None:
                 self._prefetch_stream.synchronize()
             torch.cuda.empty_cache()
+
+
+def _host_has_headroom_for_pinning(byte_count: int) -> bool:
+    """Return True if host RAM has ample headroom to page-lock `byte_count` bytes."""
+    if os.environ.get("OPENFAL_PIN_SWAP", "1") == "0":
+        return False
+    try:
+        import psutil
+
+        avail = int(psutil.virtual_memory().available)
+        # Keep at least 2x model size + 8 GiB free so OS/page-pool never starves.
+        return avail >= (byte_count * 2 + 8 * 1024 * 1024 * 1024)
+    except Exception:
+        return False
+
+
+class PinnedModuleStager:
+    """Fast pinned-RAM H2D + O(1) zero-D2H eviction helper for read-only inference modules.
+
+    Instead of `module.to(device)` copying pageable host memory at ~4.5 GB/s and
+    `module.to("cpu")` copying every weight back over PCIe on eviction, this helper
+    pins read-only CPU weights once (when ample host RAM is available), streams H2D
+    non-blockingly at ~22+ GB/s, and evicts in O(1) by restoring the cached pinned CPU
+    tensor handles.
+    """
+
+    def __init__(self, module: nn.Module, device: torch.device):
+        self.module = module
+        self.device = torch.device(device)
+        self._enabled = self.device.type == "cuda" and torch.cuda.is_available()
+        self._prepared = False
+        self._on_device = False
+        self._pinned_params: List[Tuple[nn.Parameter, torch.Tensor]] = []
+        self._pinned_buffers: List[Tuple[nn.Module, str, torch.Tensor]] = []
+
+    def _prepare_if_needed(self) -> None:
+        if self._prepared or not self._enabled:
+            return
+        self._prepared = True
+
+        total_bytes = 0
+        seen_ids: set[int] = set()
+        for p in self.module.parameters(recurse=True):
+            if id(p) not in seen_ids:
+                seen_ids.add(id(p))
+                total_bytes += p.numel() * p.element_size()
+        for b in self.module.buffers(recurse=True):
+            if b is not None and id(b) not in seen_ids:
+                seen_ids.add(id(b))
+                total_bytes += b.numel() * b.element_size()
+
+        if total_bytes <= 0 or not _host_has_headroom_for_pinning(total_bytes):
+            self._enabled = False
+            return
+
+        # Ensure baseline tensors sit on CPU, then pin once and cache handles.
+        self.module.to("cpu")
+        pinned_by_key: Dict[Tuple[int, Tuple[int, ...], torch.dtype, Tuple[int, ...]], torch.Tensor] = {}
+
+        def _pin(tensor: torch.Tensor) -> torch.Tensor:
+            if tensor.numel() == 0:
+                return tensor.detach().contiguous()
+            key = (tensor.data_ptr(), tuple(tensor.shape), tensor.dtype, tuple(tensor.stride()))
+            cached = pinned_by_key.get(key)
+            if cached is not None:
+                return cached
+            t = tensor.detach().contiguous()
+            if not t.is_pinned():
+                try:
+                    t = t.pin_memory()
+                except RuntimeError:
+                    pass
+            pinned_by_key[key] = t
+            return t
+
+        params: List[Tuple[nn.Parameter, torch.Tensor]] = []
+        for _, param in self.module.named_parameters(recurse=True):
+            t = _pin(param.data)
+            param.data = t
+            params.append((param, t))
+
+        buffers: List[Tuple[nn.Module, str, torch.Tensor]] = []
+        for mod in self.module.modules():
+            for bname, buf in list(mod._buffers.items()):
+                if buf is None:
+                    continue
+                t = _pin(buf)
+                mod._buffers[bname] = t
+                buffers.append((mod, bname, t))
+
+        self._pinned_params = params
+        self._pinned_buffers = buffers
+
+    def stage_to_device(self, device: Optional[torch.device] = None) -> None:
+        dev = torch.device(device) if device is not None else self.device
+        if dev != self.device or not self._enabled:
+            self.module.to(dev)
+            self._on_device = True
+            return
+        self._prepare_if_needed()
+        if not self._enabled:
+            self.module.to(dev)
+            self._on_device = True
+            return
+        if self._on_device:
+            return
+        gpu_by_id: Dict[int, torch.Tensor] = {}
+
+        def _move(cpu_t: torch.Tensor, target_dev: torch.device) -> torch.Tensor:
+            tid = id(cpu_t)
+            cached = gpu_by_id.get(tid)
+            if cached is not None:
+                return cached
+            moved = cpu_t.to(target_dev, non_blocking=True)
+            gpu_by_id[tid] = moved
+            return moved
+
+        for param, cpu_t in self._pinned_params:
+            param.data = _move(cpu_t, dev)
+        for mod, bname, cpu_t in self._pinned_buffers:
+            mod._buffers[bname] = _move(cpu_t, _storage_device(cpu_t, dev))
+        torch.cuda.current_stream(dev).synchronize()
+        self._on_device = True
+
+    def evict_to_cpu(self) -> None:
+        if not self._enabled or not self._prepared:
+            self.module.to("cpu")
+            self._on_device = False
+            return
+        for param, cpu_t in self._pinned_params:
+            param.data = cpu_t
+        for mod, bname, cpu_t in self._pinned_buffers:
+            mod._buffers[bname] = cpu_t
+        self._on_device = False
+
+    def release(self) -> None:
+        self.evict_to_cpu()
+        self._pinned_params.clear()
+        self._pinned_buffers.clear()
+        self._prepared = False

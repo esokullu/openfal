@@ -810,3 +810,48 @@ def test_real_weights_do_not_silently_fallback(tmp_path: Path, monkeypatch):
             endpoint_id="minimax/h3/text-to-image",
             payload={"prompt": "test"},
         )
+
+
+def test_compute_resident_blocks_fills_available_vram_and_scales_down_on_small_gpus(monkeypatch):
+    from openfal.config import EngineConfig
+    from openfal.runtime.common import compute_resident_blocks
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    cfg_32 = EngineConfig(profile_id="single_5090_32gb")
+    assert compute_resident_blocks(cfg_32, total_blocks=40, estimated_model_vram_gb=14.3) == 40
+    assert compute_resident_blocks(cfg_32, total_blocks=50, estimated_model_vram_gb=20.0) == 50
+    assert compute_resident_blocks(cfg_32, total_blocks=50, estimated_model_vram_gb=25.5, headroom_gb=7.5) == 48
+
+    cfg_16 = EngineConfig(profile_id="single_16gb_lowvram")
+    assert compute_resident_blocks(cfg_16, total_blocks=32, estimated_model_vram_gb=7.8) == 32
+    assert compute_resident_blocks(cfg_16, total_blocks=40, estimated_model_vram_gb=14.3) == 30
+    assert compute_resident_blocks(cfg_16, total_blocks=50, estimated_model_vram_gb=20.0) == 27
+
+    cfg_12 = EngineConfig(profile_id="single_12gb_minimum")
+    assert compute_resident_blocks(cfg_12, total_blocks=50, estimated_model_vram_gb=20.0) == 17
+
+
+def test_pinned_module_stager_and_cudnn_sdpa_context_on_cpu():
+    from openfal.runtime.attention import prefer_cudnn_sdpa
+    from openfal.runtime.quant import PinnedModuleStager, StrataFP8ScaledLinear
+
+    mod = StrataFP8ScaledLinear(
+        weight_fp8=torch.zeros((16, 16), dtype=torch.float8_e4m3fn),
+        weight_scale=torch.tensor(0.5),
+        bias=torch.ones(16, dtype=torch.float32),
+        compute_dtype=torch.float32,
+    )
+    stager = PinnedModuleStager(mod, torch.device("cpu"))
+    stager.stage_to_device(torch.device("cpu"))
+    x = torch.randn(5, 16, dtype=torch.float32)
+    out = mod(x)
+    assert out.shape == (5, 16)
+    assert torch.allclose(out, torch.ones(5, 16))
+    stager.evict_to_cpu()
+    stager.release()
+
+    with prefer_cudnn_sdpa(torch.device("cpu")):
+        q = torch.randn(1, 2, 8, 16)
+        attn_out = torch.nn.functional.scaled_dot_product_attention(q, q, q)
+        assert attn_out.shape == q.shape

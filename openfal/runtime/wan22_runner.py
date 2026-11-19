@@ -33,7 +33,12 @@ from openfal.runtime.common import (
     load_safetensors_state_dict,
     resolve_compute_device_and_dtype,
 )
-from openfal.runtime.quant import StrataBlockOffloadManager, quantized_module_swap_from_state_dict
+from openfal.runtime.attention import prefer_cudnn_sdpa
+from openfal.runtime.quant import (
+    PinnedModuleStager,
+    StrataBlockOffloadManager,
+    quantized_module_swap_from_state_dict,
+)
 
 
 # Wan's published defaults explicitly suppress overexposure, stylization and
@@ -135,8 +140,11 @@ class RealWan22Runner:
 
         self._tokenizer: Any = None
         self._text_encoder: Any = None
+        self._te_stager: Optional[PinnedModuleStager] = None
         self._vae: Any = None
         self._experts: Dict[str, Tuple[Any, Optional[StrataBlockOffloadManager]]] = {}
+        self._expert_stagers: Dict[str, PinnedModuleStager] = {}
+        self._prompt_embed_cache: Dict[str, torch.Tensor] = {}
         self._cfg_dirs: Dict[str, Path] = {}
 
     def _search_roots(self) -> List[Path]:
@@ -341,13 +349,7 @@ class RealWan22Runner:
         model.eval()
 
         num_blocks = len(model.blocks)
-        resident = min(
-            num_blocks,
-            min(
-                self.config.profile.resident_vram_blocks,
-                compute_resident_blocks(self.config, total_blocks=num_blocks, estimated_model_vram_gb=14.3),
-            ),
-        )
+        resident = compute_resident_blocks(self.config, total_blocks=num_blocks, estimated_model_vram_gb=14.3)
         offloader: Optional[StrataBlockOffloadManager] = None
         if resident < num_blocks:
             offloader = StrataBlockOffloadManager(
@@ -364,7 +366,13 @@ class RealWan22Runner:
             )
         return model, offloader
 
-    def _activate_expert(self, model: nn.Module, offloader: Optional[StrataBlockOffloadManager], device: torch.device) -> None:
+    def _activate_expert(
+        self,
+        model: nn.Module,
+        offloader: Optional[StrataBlockOffloadManager],
+        device: torch.device,
+        expert_key: Optional[str] = None,
+    ) -> None:
         if offloader is not None:
             for p in model.parameters(recurse=False):
                 p.data = p.data.to(device)
@@ -376,13 +384,29 @@ class RealWan22Runner:
                     child.to(device)
             offloader.prepare()
             offloader.attach_hooks()
+        elif expert_key is not None and device.type == "cuda":
+            stager = self._expert_stagers.get(expert_key)
+            if stager is None:
+                stager = PinnedModuleStager(model, device)
+                self._expert_stagers[expert_key] = stager
+            stager.stage_to_device(device)
         else:
             model.to(device)
 
-    def _deactivate_expert(self, model: nn.Module, offloader: Optional[StrataBlockOffloadManager], device: torch.device) -> None:
+    def _deactivate_expert(
+        self,
+        model: nn.Module,
+        offloader: Optional[StrataBlockOffloadManager],
+        device: torch.device,
+        expert_key: Optional[str] = None,
+    ) -> None:
         if offloader is not None:
             offloader.release_all_to_cpu()
-        model.to("cpu")
+            model.to("cpu")
+        elif expert_key is not None and expert_key in self._expert_stagers:
+            self._expert_stagers[expert_key].evict_to_cpu()
+        else:
+            model.to("cpu")
         clear_device_cache(device)
 
     @torch.inference_mode()
@@ -452,41 +476,76 @@ class RealWan22Runner:
             boundary_ratio = None
 
         # -------- Stage 1: UMT5-XXL Prompt Encoding + Eviction --------
-        self.memory.begin_qwen3_vl_stage(cache_hit=False)
-        self._text_encoder.to(device)
-        if on_log:
-            on_log("[Wan2.2 UMT5-XXL] Encoding prompt on GPU Counter (FP8)...")
-
-        def _encode_t5(texts: List[str]) -> torch.Tensor:
-            clean = [t.strip() for t in texts]
-            text_inputs = self._tokenizer(
-                clean,
-                padding="max_length",
-                max_length=512,
-                truncation=True,
-                add_special_tokens=True,
-                return_attention_mask=True,
-                return_tensors="pt",
-            )
-            ids = text_inputs.input_ids.to(device)
-            mask = text_inputs.attention_mask.to(device)
-            seq_lens = mask.gt(0).sum(dim=1).long()
-            embeds = self._text_encoder(ids, mask).last_hidden_state.to(compute_dtype)
-            # Zero out padding and re-pad per official Wan convention
-            trimmed = [u[:v] for u, v in zip(embeds, seq_lens)]
-            padded = [torch.cat([u, u.new_zeros(512 - u.size(0), u.size(1))]) for u in trimmed]
-            return torch.stack(padded, dim=0)
-
         do_cfg = guidance_scale > 1.0 or (guidance_scale_2 is not None and guidance_scale_2 > 1.0)
-        prompt_embeds = _encode_t5([prompt])
         neg_prompt = negative_prompt or WAN_DEFAULT_NEGATIVE_PROMPT
-        neg_embeds = _encode_t5([neg_prompt]) if do_cfg else None
+        use_te_cache = bool(self.config.enable_text_encoder_cache)
+        pos_key = prompt.strip()
+        neg_key = neg_prompt.strip()
+        cached_pos = self._prompt_embed_cache.get(pos_key) if use_te_cache else None
+        cached_neg = self._prompt_embed_cache.get(neg_key) if (use_te_cache and do_cfg) else None
+        all_cached = cached_pos is not None and (not do_cfg or cached_neg is not None)
 
-        self._text_encoder.to("cpu")
-        clear_device_cache(device)
-        self.memory.evict_qwen3_vl_stage()
-        if on_log:
-            on_log("[Wan2.2 UMT5-XXL] Evicted UMT5-XXL from VRAM (0 MB resident)")
+        if all_cached:
+            self.memory.begin_qwen3_vl_stage(cache_hit=True)
+            prompt_embeds = cached_pos.to(device=device, dtype=compute_dtype)
+            neg_embeds = cached_neg.to(device=device, dtype=compute_dtype) if do_cfg and cached_neg is not None else None
+            if on_log:
+                on_log("[Wan2.2 UMT5-XXL] Text embedding cache HIT (0 ms text encoder pass)")
+            self.memory.evict_qwen3_vl_stage()
+        else:
+            self.memory.begin_qwen3_vl_stage(cache_hit=False)
+            if device.type == "cuda":
+                if self._te_stager is None:
+                    self._te_stager = PinnedModuleStager(self._text_encoder, device)
+                self._te_stager.stage_to_device(device)
+            else:
+                self._text_encoder.to(device)
+            if on_log:
+                on_log("[Wan2.2 UMT5-XXL] Encoding prompt on GPU Counter (FP8)...")
+
+            def _encode_t5(texts: List[str]) -> torch.Tensor:
+                clean = [t.strip() for t in texts]
+                text_inputs = self._tokenizer(
+                    clean,
+                    padding="max_length",
+                    max_length=512,
+                    truncation=True,
+                    add_special_tokens=True,
+                    return_attention_mask=True,
+                    return_tensors="pt",
+                )
+                ids = text_inputs.input_ids.to(device)
+                mask = text_inputs.attention_mask.to(device)
+                seq_lens = mask.gt(0).sum(dim=1).long()
+                with prefer_cudnn_sdpa(device):
+                    embeds = self._text_encoder(ids, mask).last_hidden_state.to(compute_dtype)
+                # Zero out padding and re-pad per official Wan convention
+                trimmed = [u[:v] for u, v in zip(embeds, seq_lens)]
+                padded = [torch.cat([u, u.new_zeros(512 - u.size(0), u.size(1))]) for u in trimmed]
+                return torch.stack(padded, dim=0)
+
+            prompt_embeds = cached_pos.to(device=device, dtype=compute_dtype) if cached_pos is not None else _encode_t5([prompt])
+            if do_cfg:
+                neg_embeds = cached_neg.to(device=device, dtype=compute_dtype) if cached_neg is not None else _encode_t5([neg_prompt])
+            else:
+                neg_embeds = None
+
+            if use_te_cache:
+                if len(self._prompt_embed_cache) > 64:
+                    self._prompt_embed_cache.clear()
+                if cached_pos is None:
+                    self._prompt_embed_cache[pos_key] = prompt_embeds.detach().cpu()
+                if do_cfg and neg_embeds is not None and cached_neg is None:
+                    self._prompt_embed_cache[neg_key] = neg_embeds.detach().cpu()
+
+            if self._te_stager is not None:
+                self._te_stager.evict_to_cpu()
+            else:
+                self._text_encoder.to("cpu")
+            clear_device_cache(device)
+            self.memory.evict_qwen3_vl_stage()
+            if on_log:
+                on_log("[Wan2.2 UMT5-XXL] Evicted UMT5-XXL from VRAM (0 MB resident)")
 
         # -------- Prepare Latents (+ I2V Conditioning) --------
         gen_dev = "cpu" if device.type == "mps" else device
@@ -555,60 +614,80 @@ class RealWan22Runner:
                 f"boundary={boundary_ts})"
             )
 
-        for i, t in enumerate(timesteps):
-            is_high = (boundary_ts is None) or (float(t.item()) >= boundary_ts)
-            expert_key = f"{variant}:high" if is_high else f"{variant}:low"
-            expert_path = hi_path if is_high else (lo_path or hi_path)
+        with prefer_cudnn_sdpa(device):
+            for i, t in enumerate(timesteps):
+                is_high = (boundary_ts is None) or (float(t.item()) >= boundary_ts)
+                expert_key = f"{variant}:high" if is_high else f"{variant}:low"
+                expert_path = hi_path if is_high else (lo_path or hi_path)
 
-            if active_key != expert_key:
-                if active_tuple is not None:
-                    self._deactivate_expert(active_tuple[0], active_tuple[1], device)
-                active_tuple = self._get_expert(expert_key, expert_path, cfg_dir, on_log=on_log)
-                self._activate_expert(active_tuple[0], active_tuple[1], device)
-                active_key = expert_key
+                if active_key != expert_key:
+                    if active_tuple is not None:
+                        self._deactivate_expert(active_tuple[0], active_tuple[1], device, expert_key=active_key)
+                    active_tuple = self._get_expert(expert_key, expert_path, cfg_dir, on_log=on_log)
+                    self._activate_expert(active_tuple[0], active_tuple[1], device, expert_key=expert_key)
+                    active_key = expert_key
 
-            model, offloader = active_tuple
-            cur_cfg = guidance_scale if is_high else g2
-            model_in = (
-                torch.cat([latents.to(compute_dtype), condition.to(compute_dtype)], dim=1)
-                if condition is not None
-                else latents.to(compute_dtype)
-            )
-            ts_in = t.expand(latents.shape[0])
+                model, offloader = active_tuple
+                cur_cfg = guidance_scale if is_high else g2
+                model_in = (
+                    torch.cat([latents.to(compute_dtype), condition.to(compute_dtype)], dim=1)
+                    if condition is not None
+                    else latents.to(compute_dtype)
+                )
+                ts_in = t.expand(latents.shape[0])
 
-            noise_pred = model(
-                hidden_states=model_in,
-                timestep=ts_in,
-                encoder_hidden_states=prompt_embeds,
-                return_dict=False,
-            )[0]
-            if do_cfg and neg_embeds is not None:
-                noise_uncond = model(
-                    hidden_states=model_in,
-                    timestep=ts_in,
-                    encoder_hidden_states=neg_embeds,
-                    return_dict=False,
-                )[0]
-                noise_pred = noise_uncond + cur_cfg * (noise_pred - noise_uncond)
+                # Batch cond + uncond CFG in one forward pass on >=24 GB CUDA GPUs when DiT is fully resident
+                batch_cfg = (
+                    do_cfg
+                    and neg_embeds is not None
+                    and device.type == "cuda"
+                    and offloader is None
+                    and self.config.profile.total_vram_gb >= 24.0
+                )
+                if batch_cfg:
+                    pred_both = model(
+                        hidden_states=torch.cat([model_in, model_in], dim=0),
+                        timestep=ts_in.expand(2),
+                        encoder_hidden_states=torch.cat([prompt_embeds, neg_embeds], dim=0),
+                        return_dict=False,
+                    )[0]
+                    noise_pred_cond, noise_uncond = pred_both.chunk(2, dim=0)
+                    noise_pred = noise_uncond + cur_cfg * (noise_pred_cond - noise_uncond)
+                else:
+                    noise_pred = model(
+                        hidden_states=model_in,
+                        timestep=ts_in,
+                        encoder_hidden_states=prompt_embeds,
+                        return_dict=False,
+                    )[0]
+                    if do_cfg and neg_embeds is not None:
+                        noise_uncond = model(
+                            hidden_states=model_in,
+                            timestep=ts_in,
+                            encoder_hidden_states=neg_embeds,
+                            return_dict=False,
+                        )[0]
+                        noise_pred = noise_uncond + cur_cfg * (noise_pred - noise_uncond)
 
-            latents = scheduler.step(noise_pred, t, latents, return_dict=False)[0]
-            self.memory.record_dit_block_step(
-                step_idx=i,
-                total_steps=steps,
-                active_block=(offloader.resident_vram_blocks if offloader else len(model.blocks)) - 1,
-                prefetch_block=None,
-                dma_ms=0.0,
-            )
+                latents = scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+                self.memory.record_dit_block_step(
+                    step_idx=i,
+                    total_steps=steps,
+                    active_block=(offloader.resident_vram_blocks if offloader else len(model.blocks)) - 1,
+                    prefetch_block=None,
+                    dma_ms=0.0,
+                )
 
         if active_tuple is not None:
-            self._deactivate_expert(active_tuple[0], active_tuple[1], device)
+            self._deactivate_expert(active_tuple[0], active_tuple[1], device, expert_key=active_key)
 
         # -------- Stage 3: AutoencoderKLWan Decode -> H.264 MP4 --------
         self.memory.begin_vae_stage()
         self._vae.to(device)
         z_lat = latents.to(device=device, dtype=vae_dtype)
         z_lat = z_lat / lstd + lmean
-        decoded = self._vae.decode(z_lat, return_dict=False)[0]
+        with prefer_cudnn_sdpa(device):
+            decoded = self._vae.decode(z_lat, return_dict=False)[0]
         video_proc = VideoProcessor(vae_scale_factor=s_scale)
         frames = video_proc.postprocess_video(decoded, output_type="pil")[0]
         self._vae.to("cpu")
@@ -621,8 +700,14 @@ class RealWan22Runner:
 
     def evict(self) -> None:
         device, _ = resolve_compute_device_and_dtype()
-        for model, offloader in self._experts.values():
-            self._deactivate_expert(model, offloader, device)
+        for key, (model, offloader) in self._experts.items():
+            self._deactivate_expert(model, offloader, device, expert_key=key)
+        for stager in self._expert_stagers.values():
+            stager.release()
+        self._expert_stagers.clear()
+        if self._te_stager is not None:
+            self._te_stager.release()
+            self._te_stager = None
         if self._text_encoder is not None:
             self._text_encoder.to("cpu")
         if self._vae is not None:

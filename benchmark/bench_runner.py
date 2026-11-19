@@ -371,6 +371,7 @@ def _run_openfal_once(
             else res["images"][0]["url"]
         )
         raw_bytes = client.get(media_url).content
+        _maybe_save_sample(scenario.scenario_id, seed, "mp4" if scenario.modality == "video" else "png", raw_bytes)
         reported = (res.get("timings") or {}).get("inference")
         return reported, len(raw_bytes), mode
 

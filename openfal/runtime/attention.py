@@ -3,12 +3,43 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+import os
 
 import torch
 import torch.nn.functional as F
 
 
 _QWEN_ATTENTION_NAME = "openfal_qwen_sdpa"
+
+
+def prefer_cudnn_sdpa(device: torch.device | None = None):
+    """Prefer Flash / cuDNN SDPA over memory-efficient SDPA on CUDA.
+
+    On Windows PyTorch builds without standalone FlashAttention wheels, PyTorch's
+    default SDPA priority selects memory-efficient attention ahead of cuDNN even
+    though cuDNN Flash Attention is ~2.4-2.5x faster on Ada/Hopper/Blackwell GPUs
+    for long unmasked DiT/ViT sequences. Setting priority order keeps automatic
+    fallback to memory-efficient (and math if needed) whenever an unsupported
+    custom mask is passed.
+    """
+    if os.environ.get("OPENFAL_CUDNN_SDPA", "1") == "0":
+        return nullcontext()
+    if device is not None and device.type != "cuda":
+        return nullcontext()
+    if not torch.cuda.is_available():
+        return nullcontext()
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+    backends = [
+        SDPBackend.FLASH_ATTENTION,
+        SDPBackend.CUDNN_ATTENTION,
+        SDPBackend.EFFICIENT_ATTENTION,
+        SDPBackend.MATH,
+    ]
+    try:
+        return sdpa_kernel(backends, set_priority=True)
+    except TypeError:
+        return nullcontext()
 
 
 def qwen_prompt_attention(
@@ -51,11 +82,14 @@ def qwen_prompt_attention(
     if query.device.type == "cuda":
         from torch.nn.attention import SDPBackend, sdpa_kernel
 
-        backends = [SDPBackend.EFFICIENT_ATTENTION]
+        backends = [SDPBackend.CUDNN_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]
         if torch.backends.cuda.is_flash_attention_available():
             backends.insert(0, SDPBackend.FLASH_ATTENTION)
         # Never silently allocate the quadratic math fallback for reference video.
-        backend_context = sdpa_kernel(backends)
+        try:
+            backend_context = sdpa_kernel(backends, set_priority=True)
+        except TypeError:
+            backend_context = sdpa_kernel(backends)
 
     with backend_context:
         output = F.scaled_dot_product_attention(

@@ -408,8 +408,9 @@ HARDWARE_PROFILES: Dict[str, HardwareProfile] = {
 
 @dataclass
 class EngineConfig:
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 8000
+    api_key: Optional[str] = field(default_factory=lambda: os.environ.get("OPENFAL_API_KEY") or None)
     profile_id: str = "dual_5060ti_32gb"
     weights_dir: Path = field(default_factory=lambda: Path(os.environ.get("OPENFAL_WEIGHTS_DIR", "./weights/MiniMax-H3")))
     output_dir: Path = field(default_factory=lambda: Path(os.environ.get("OPENFAL_OUTPUT_DIR", "./outputs")))

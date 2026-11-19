@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hmac
 import json
 import uuid
 from pathlib import Path
@@ -220,21 +221,56 @@ def _base_url_from_request(request: Request) -> str:
     return f"{scheme}://{host}"
 
 
+_PUBLIC_PATHS = frozenset({"/", "/health", "/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc"})
+
+
+def _extract_request_api_key(request: Request) -> Optional[str]:
+    auth = request.headers.get("authorization", "").strip()
+    if auth:
+        parts = auth.split(None, 1)
+        if len(parts) == 2 and parts[0].lower() in ("key", "bearer"):
+            return parts[1].strip()
+    header_key = request.headers.get("x-api-key", "").strip()
+    if header_key:
+        return header_key
+    query_key = request.query_params.get("api_key", "").strip()
+    return query_key or None
+
+
 def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
     cfg = config or get_default_config()
     runner = OpenFalRunner(cfg)
     queue_mgr = FalQueueManager(runner)
 
     app = FastAPI(
-        title="openfal — Strata-DiT Offload Engine (Wan 2.2 MoE, Qwen-Image-2.1 & MiniMax H3)",
+        title="openfal — Local fal-Compatible Inference Server (Qwen-Image-2.1, Wan 2.2 & MiniMax H3)",
         description=(
-            "Strata-inspired 3-tier VRAM/RAM/NVMe offload inference engine for Wan 2.2 MoE (27B-A14B), "
-            "Qwen-Image-2.1-Turbo (7B), and MiniMax H3 (33B Stereo Audio & Omni-Ref) "
-            "with drop-in fal.ai API compatibility and Studio Web UI."
+            "Local PyTorch inference server for Qwen-Image-2.1, Wan 2.2, and MiniMax H3 "
+            "with a fal-compatible REST/queue/SSE API, Python SDK, and built-in Studio Web UI."
         ),
         version="0.1.0",
         license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
     )
+
+    if cfg.api_key:
+        expected_key = cfg.api_key
+
+        @app.middleware("http")
+        async def api_key_auth_middleware(request: Request, call_next):
+            if request.method == "OPTIONS" or request.url.path in _PUBLIC_PATHS:
+                return await call_next(request)
+            provided = _extract_request_api_key(request)
+            if not provided or not hmac.compare_digest(provided, expected_key):
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "detail": (
+                            "Missing or invalid API key. Supply 'Authorization: Key <key>', "
+                            "'Authorization: Bearer <key>', or 'X-API-Key: <key>'."
+                        )
+                    },
+                )
+            return await call_next(request)
 
     app.add_middleware(
         CORSMiddleware,
@@ -269,6 +305,7 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
             "sleeping": runner.memory.sleeping,
             "active_profile": cfg.profile_id,
             "synthetic_mode": use_synthetic_fallback(),
+            "auth_enabled": bool(cfg.api_key),
         }
 
     # -------------------------------------------------------------------------

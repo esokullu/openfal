@@ -11,6 +11,7 @@ plus Qwen3-VL-32B Layer-50 streamed text/vision conditioning (`StrataBlockOffloa
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -33,9 +34,23 @@ from openfal.runtime.common import (
     load_safetensors_state_dict,
     resolve_compute_device_and_dtype,
 )
-from openfal.runtime.quant import StrataBlockOffloadManager, quantized_module_swap_from_state_dict
-from openfal.runtime.attention import configure_qwen_prompt_attention
+from openfal.runtime.quant import (
+    PinnedModuleStager,
+    StrataBlockOffloadManager,
+    quantized_module_swap_from_state_dict,
+)
+from openfal.runtime.attention import configure_qwen_prompt_attention, prefer_cudnn_sdpa
 from openfal.runtime.qwen_image_runner import convert_qwen3vl_text_encoder_state_dict
+
+
+def _image_digest(img: Optional[Image.Image]) -> str:
+    if img is None:
+        return "none"
+    rgb = img if img.mode == "RGB" else img.convert("RGB")
+    h = hashlib.sha256()
+    h.update(f"{rgb.size[0]}x{rgb.size[1]}:".encode("ascii"))
+    h.update(rgb.tobytes())
+    return h.hexdigest()[:16]
 
 
 class _PrunedAdalnTableEmbedder(nn.Module):
@@ -492,12 +507,15 @@ class RealMiniMaxH3Runner:
         self._pipe: Any = None
         self._loaded_partition: Optional[str] = None
         self._dit_offloader: Optional[StrataBlockOffloadManager] = None
+        self._dit_stager: Optional[PinnedModuleStager] = None
+        self._dit_on_gpu: bool = False
         self._text_encoder: Any = None
         self._tokenizer: Any = None
         self._processor: Any = None
         self._te_offloader: Optional[StrataBlockOffloadManager] = None
         self._cfg_dir: Optional[Path] = None
         self._img_cfg_dir: Optional[Path] = None
+        self._prompt_embed_cache: Dict[str, Tuple[torch.Tensor, Optional[torch.Tensor]]] = {}
 
     def _find_weights(self, partition: str) -> Dict[str, Optional[Path]]:
         dit = None
@@ -608,11 +626,10 @@ class RealMiniMaxH3Runner:
         configure_qwen_prompt_attention(text_encoder)
 
         te_layers = text_encoder.model.language_model.layers
-        # Stream Qwen3-VL-32B (~25.3 GB INT8) through a rolling layer window on <=48 GB GPUs
-        if self.config.profile.total_vram_gb < 48.0:
-            te_resident = min(len(te_layers), max(4, min(16, int((self.config.profile.total_vram_gb - 12.0) // 0.5))))
-        else:
-            te_resident = len(te_layers)
+        # Size Qwen3-VL-32B (~25.5 GB INT8) layer residency dynamically from available VRAM
+        te_resident = compute_resident_blocks(
+            self.config, len(te_layers), estimated_model_vram_gb=25.5, headroom_gb=7.5
+        )
         self._te_offloader = (
             StrataBlockOffloadManager(te_layers, device=device, resident_vram_blocks=te_resident)
             if te_resident < len(te_layers)
@@ -737,18 +754,17 @@ class RealMiniMaxH3Runner:
             transformer.eval()
 
             num_blocks = len(transformer.transformer_blocks)
-            dit_resident = min(
-                num_blocks,
-                min(
-                    self.config.profile.resident_vram_blocks,
-                    compute_resident_blocks(self.config, num_blocks, estimated_model_vram_gb=20.0),
-                ),
-            )
+            dit_resident = compute_resident_blocks(self.config, num_blocks, estimated_model_vram_gb=20.0)
             self._dit_offloader = (
                 StrataBlockOffloadManager(
                     transformer.transformer_blocks, device=device, resident_vram_blocks=dit_resident
                 )
                 if dit_resident < num_blocks
+                else None
+            )
+            self._dit_stager = (
+                PinnedModuleStager(transformer, device)
+                if (self._dit_offloader is None and device.type == "cuda")
                 else None
             )
             if on_log:
@@ -849,18 +865,17 @@ class RealMiniMaxH3Runner:
         transformer.eval()
 
         num_blocks = len(transformer.transformer_blocks)
-        dit_resident = min(
-            num_blocks,
-            min(
-                self.config.profile.resident_vram_blocks,
-                compute_resident_blocks(self.config, num_blocks, estimated_model_vram_gb=20.0),
-            ),
-        )
+        dit_resident = compute_resident_blocks(self.config, num_blocks, estimated_model_vram_gb=20.0)
         self._dit_offloader = (
             StrataBlockOffloadManager(
                 transformer.transformer_blocks, device=device, resident_vram_blocks=dit_resident
             )
             if dit_resident < num_blocks
+            else None
+        )
+        self._dit_stager = (
+            PinnedModuleStager(transformer, device)
+            if (self._dit_offloader is None and device.type == "cuda")
             else None
         )
         if on_log:
@@ -924,6 +939,26 @@ class RealMiniMaxH3Runner:
         self._pipe = self._wrap_modular_pipeline_device(pipe, device)
         self._loaded_partition = partition
 
+    def _stage_dit(self, transformer: nn.Module, device: torch.device) -> None:
+        if self._dit_on_gpu:
+            return
+        if self._dit_stager is not None:
+            self._dit_stager.stage_to_device(device)
+        else:
+            transformer.to(device)
+        self._dit_on_gpu = True
+
+    def _evict_dit(self, transformer: nn.Module, device: torch.device) -> None:
+        if self._dit_offloader is not None:
+            self._dit_offloader.release_all_to_cpu()
+            transformer.to("cpu")
+        elif self._dit_stager is not None:
+            self._dit_stager.evict_to_cpu()
+        else:
+            transformer.to("cpu")
+        self._dit_on_gpu = False
+        clear_device_cache(device)
+
     def _run_stage1_text_encoder(
         self,
         pipe: Any,
@@ -945,7 +980,8 @@ class RealMiniMaxH3Runner:
 
         if on_log:
             on_log("[MiniMax-H3 Stage 1/3] Running Qwen3-VL-32B Layer-50 multimodal conditioning...")
-        pipe, state = sub_blocks["text_encoder"](pipe, state)
+        with prefer_cudnn_sdpa(device):
+            pipe, state = sub_blocks["text_encoder"](pipe, state)
         if self._te_offloader is not None:
             self._te_offloader.release_all_to_cpu()
         pipe.text_encoder.to("cpu")
@@ -995,12 +1031,48 @@ class RealMiniMaxH3Runner:
         sub_blocks = pipe.blocks.sub_blocks
 
         pipe, state = sub_blocks["before_encode"](pipe, state)
-        pipe, state = self._run_stage1_text_encoder(pipe, state, device, on_log=on_log)
+        cache_key = f"H3-Image|{prompt}" if (not reference_images and self.config.enable_text_encoder_cache) else None
+        cached_te = self._prompt_embed_cache.get(cache_key) if cache_key else None
+        if cached_te is not None:
+            self.memory.begin_qwen3_vl_stage(cache_hit=True)
+            pe_cpu, tags_cpu = cached_te
+            state.set("prompt_embeds", pe_cpu.to(device=device))
+            if tags_cpu is not None:
+                # `build_image_packed_sequence` builds `token_tags` on CPU and copies to GPU after.
+                state.set("text_token_tags", tags_cpu.clone())
+            if on_log:
+                on_log("[MiniMax-H3 Qwen3-VL-32B] Text embedding cache HIT (0 ms text encoder pass)")
+            self.memory.evict_qwen3_vl_stage()
+        else:
+            if self._dit_on_gpu:
+                self._evict_dit(transformer, device)
+            pipe, state = self._run_stage1_text_encoder(pipe, state, device, on_log=on_log)
+            if cache_key:
+                pe_val = state.get("prompt_embeds")
+                tags_val = state.get("text_token_tags")
+                if pe_val is not None:
+                    if len(self._prompt_embed_cache) > 64:
+                        self._prompt_embed_cache.clear()
+                    self._prompt_embed_cache[cache_key] = (
+                        pe_val.detach().cpu(),
+                        tags_val.detach().cpu() if tags_val is not None else None,
+                    )
 
-        pipe.vae.to(device)
-        pipe, state = sub_blocks["vae_encoder"](pipe, state)
-        pipe.vae.to("cpu")
-        clear_device_cache(device)
+        keep_dit_warm = (
+            device.type == "cuda"
+            and self._dit_offloader is None
+            and self.config.profile.total_vram_gb >= 28.0
+        )
+
+        if reference_images:
+            pipe.vae.to(device)
+            with prefer_cudnn_sdpa(device):
+                pipe, state = sub_blocks["vae_encoder"](pipe, state)
+            pipe.vae.to("cpu")
+            if not keep_dit_warm:
+                clear_device_cache(device)
+        else:
+            pipe, state = sub_blocks["vae_encoder"](pipe, state)
 
         if self._dit_offloader is not None:
             for name, child in transformer.named_children():
@@ -1011,7 +1083,7 @@ class RealMiniMaxH3Runner:
             counter_cnt = self._dit_offloader.resident_vram_blocks
             pantry_cnt = self._dit_offloader.total_blocks - counter_cnt
         else:
-            transformer.to(device)
+            self._stage_dit(transformer, device)
             counter_cnt = len(transformer.transformer_blocks)
             pantry_cnt = 0
 
@@ -1020,19 +1092,28 @@ class RealMiniMaxH3Runner:
                 f"[MiniMax-H3-Image Stage 2/3] Denoising 6 PDD steps @ {width}x{height} "
                 f"({counter_cnt}/50 Counter, {pantry_cnt}/50 Pantry)..."
             )
-        pipe, state = sub_blocks["denoise"](pipe, state)
-        if self._dit_offloader is not None:
-            self._dit_offloader.release_all_to_cpu()
-        transformer.to("cpu")
-        clear_device_cache(device)
+        with prefer_cudnn_sdpa(device):
+            pipe, state = sub_blocks["denoise"](pipe, state)
+        if not keep_dit_warm:
+            self._evict_dit(transformer, device)
 
         self.memory.begin_vae_stage()
         pipe.vae.to(device)
         if on_log:
             on_log("[MiniMax-H3-Image Stage 3/3] Decoding 24-layer ViT Image VAE...")
-        pipe, state = sub_blocks["decode"](pipe, state)
+        try:
+            with prefer_cudnn_sdpa(device):
+                pipe, state = sub_blocks["decode"](pipe, state)
+        except torch.cuda.OutOfMemoryError:
+            if not self._dit_on_gpu:
+                raise
+            self._evict_dit(transformer, device)
+            pipe.vae.to(device)
+            with prefer_cudnn_sdpa(device):
+                pipe, state = sub_blocks["decode"](pipe, state)
         pipe.vae.to("cpu")
-        clear_device_cache(device)
+        if not keep_dit_warm:
+            clear_device_cache(device)
         self.memory.finish_generation()
 
         pil_img = state.get("images")[0]
@@ -1108,20 +1189,61 @@ class RealMiniMaxH3Runner:
         # Stage 0: Layout / pre-encode preparation (lightweight)
         pipe, state = sub_blocks["before_encode"](pipe, state)
 
-        # Stage 1: Qwen3-VL-32B Layer-50 conditioning + immediate VRAM eviction
-        pipe, state = self._run_stage1_text_encoder(pipe, state, device, on_log=on_log)
+        # Stage 1: Qwen3-VL-32B Layer-50 conditioning (+ multimodal embedding cache for FL2VA)
+        cache_key: Optional[str] = None
+        if self.config.enable_text_encoder_cache and partition == "FL2VA":
+            cache_key = (
+                f"FL2VA|{prompt}|{width}x{height}|"
+                f"{_image_digest(start_image)}|{_image_digest(end_image)}"
+            )
+        cached_te = self._prompt_embed_cache.get(cache_key) if cache_key else None
+        if cached_te is not None:
+            self.memory.begin_qwen3_vl_stage(cache_hit=True)
+            pe_cpu, tags_cpu = cached_te
+            state.set("prompt_embeds", pe_cpu.to(device=device))
+            if tags_cpu is not None:
+                state.set("text_token_tags", tags_cpu.clone())
+            if on_log:
+                on_log("[MiniMax-H3 Qwen3-VL-32B] Multimodal conditioning cache HIT (0 ms text encoder pass)")
+            self.memory.evict_qwen3_vl_stage()
+        else:
+            if self._dit_on_gpu:
+                self._evict_dit(transformer, device)
+            pipe, state = self._run_stage1_text_encoder(pipe, state, device, on_log=on_log)
+            if cache_key:
+                pe_val = state.get("prompt_embeds")
+                tags_val = state.get("text_token_tags")
+                if pe_val is not None:
+                    if len(self._prompt_embed_cache) > 64:
+                        self._prompt_embed_cache.clear()
+                    self._prompt_embed_cache[cache_key] = (
+                        pe_val.detach().cpu(),
+                        tags_val.detach().cpu() if tags_val is not None else None,
+                    )
+
+        keep_dit_warm = (
+            device.type == "cuda"
+            and self._dit_offloader is None
+            and self.config.profile.total_vram_gb >= 28.0
+        )
 
         # Stage 1b: Condition VAE encoding (when start/end/ref media is provided)
-        pipe.vae.to(device)
-        if getattr(pipe, "audio_vae", None) is not None:
-            pipe.audio_vae.to(device)
-        pipe, state = sub_blocks["vae_encoder"](pipe, state)
-        pipe.vae.to("cpu")
-        if getattr(pipe, "audio_vae", None) is not None:
-            pipe.audio_vae.to("cpu")
-        clear_device_cache(device)
+        has_cond_media = bool(start_image is not None or end_image is not None or refs)
+        if has_cond_media:
+            pipe.vae.to(device)
+            if getattr(pipe, "audio_vae", None) is not None and refs:
+                pipe.audio_vae.to(device)
+            with prefer_cudnn_sdpa(device):
+                pipe, state = sub_blocks["vae_encoder"](pipe, state)
+            pipe.vae.to("cpu")
+            if getattr(pipe, "audio_vae", None) is not None:
+                pipe.audio_vae.to("cpu")
+            if not keep_dit_warm:
+                clear_device_cache(device)
+        else:
+            pipe, state = sub_blocks["vae_encoder"](pipe, state)
 
-        # Stage 2: 33B DiT Denoising (Strata 30/50 VRAM Counter + 20/50 Pinned RAM Pantry)
+        # Stage 2: 33B DiT Denoising (100% Counter on >=28 GB GPUs, or async Pinned RAM Pantry)
         if self._dit_offloader is not None:
             for name, child in transformer.named_children():
                 if name != "transformer_blocks":
@@ -1131,7 +1253,7 @@ class RealMiniMaxH3Runner:
             counter_cnt = self._dit_offloader.resident_vram_blocks
             pantry_cnt = self._dit_offloader.total_blocks - counter_cnt
         else:
-            transformer.to(device)
+            self._stage_dit(transformer, device)
             counter_cnt = len(transformer.transformer_blocks)
             pantry_cnt = 0
 
@@ -1140,11 +1262,10 @@ class RealMiniMaxH3Runner:
                 f"[MiniMax-H3 Stage 2/3] Denoising 33B DiT ({counter_cnt}/50 Counter, "
                 f"{pantry_cnt}/50 Pinned RAM Pantry)..."
             )
-        pipe, state = sub_blocks["denoise"](pipe, state)
-        if self._dit_offloader is not None:
-            self._dit_offloader.release_all_to_cpu()
-        transformer.to("cpu")
-        clear_device_cache(device)
+        with prefer_cudnn_sdpa(device):
+            pipe, state = sub_blocks["denoise"](pipe, state)
+        if not keep_dit_warm:
+            self._evict_dit(transformer, device)
 
         # Stage 3: Tiled ViT Video VAE + BigVGAN Audio VAE Decode -> H.264/AAC MP4
         self.memory.begin_vae_stage()
@@ -1152,10 +1273,21 @@ class RealMiniMaxH3Runner:
         pipe.audio_vae.to(device)
         if on_log:
             on_log("[MiniMax-H3 Stage 3/3] Decoding Video ViT VAE + 32kHz BigVGAN Stereo Audio...")
-        pipe, state = sub_blocks["decode"](pipe, state)
+        try:
+            with prefer_cudnn_sdpa(device):
+                pipe, state = sub_blocks["decode"](pipe, state)
+        except torch.cuda.OutOfMemoryError:
+            if not self._dit_on_gpu:
+                raise
+            self._evict_dit(transformer, device)
+            pipe.vae.to(device)
+            pipe.audio_vae.to(device)
+            with prefer_cudnn_sdpa(device):
+                pipe, state = sub_blocks["decode"](pipe, state)
         pipe.vae.to("cpu")
         pipe.audio_vae.to("cpu")
-        clear_device_cache(device)
+        if not keep_dit_warm:
+            clear_device_cache(device)
         self.memory.finish_generation()
 
         frames = state.get("videos")[0]
@@ -1180,12 +1312,16 @@ class RealMiniMaxH3Runner:
         if self._dit_offloader is not None:
             self._dit_offloader.release_all_to_cpu()
             self._dit_offloader = None
+        if self._dit_stager is not None:
+            self._dit_stager.release()
+            self._dit_stager = None
         for attr in ("transformer", "transformer_ref", "vae", "audio_vae"):
             comp = getattr(self._pipe, attr, None)
             if comp is not None:
                 comp.to("cpu")
         self._pipe = None
         self._loaded_partition = None
+        self._dit_on_gpu = False
         gc.collect()
         clear_device_cache()
 

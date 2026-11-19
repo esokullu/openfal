@@ -200,25 +200,31 @@ def compute_resident_blocks(
     config: EngineConfig,
     total_blocks: int,
     estimated_model_vram_gb: float,
+    headroom_gb: float = 5.0,
 ) -> int:
     """
-    Compute how many Transformer blocks stay permanently resident in the GPU VRAM Counter
-    while the rest stream asynchronously from Pinned Host RAM Pantry.
+    Compute how many Transformer blocks stay permanently resident on the compute device
+    while any overflow streams asynchronously from pinned host RAM.
     """
     profile = config.profile
     if total_blocks <= 0:
         return 0
-    # Leave ~6 GB VRAM headroom for KV cache, activations, and VAE staging
-    usable_vram_gb = max(4.0, profile.total_vram_gb - 6.0)
+
+    effective_vram_gb = float(profile.total_vram_gb)
+    if profile.offload_strategy.value != "unified_memory" and torch.cuda.is_available():
+        try:
+            phys_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            if phys_gb > 0:
+                effective_vram_gb = min(effective_vram_gb, phys_gb)
+        except Exception:
+            pass
+
+    usable_vram_gb = max(4.0, effective_vram_gb - headroom_gb)
     if estimated_model_vram_gb <= usable_vram_gb:
         return total_blocks
 
-    # Scale proportionally from calibrated 50-block hardware profile
-    ratio = profile.resident_vram_blocks / max(1, profile.total_dit_blocks)
-    # Also respect memory fit ratio
     fit_ratio = usable_vram_gb / max(0.1, estimated_model_vram_gb)
-    effective_ratio = min(ratio, fit_ratio) if ratio < 1.0 else fit_ratio
-    resident = max(2, min(total_blocks, int(total_blocks * effective_ratio)))
+    resident = max(2, min(total_blocks, int(total_blocks * fit_ratio)))
     return resident
 
 

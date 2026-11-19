@@ -155,3 +155,30 @@ def test_fal_compatible_sync_and_queue_endpoints(tmp_path: Path) -> None:
     vid_data = res_resp.json()
     assert vid_data["video"]["file_name"].endswith(".mp4")
     assert vid_data["strata_engine"]["partition"] == "Ref2VA"
+
+
+def test_optional_api_key_authentication(tmp_path: Path) -> None:
+    cfg = EngineConfig(
+        profile_id="dual_5060ti_32gb",
+        api_key="super-secret-local-key",
+        weights_dir=tmp_path / "weights",
+        output_dir=tmp_path / "outputs",
+        cache_dir=tmp_path / "cache",
+    )
+    client = TestClient(create_app(cfg))
+
+    # Public health and UI remain reachable
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["auth_enabled"] is True
+    assert client.get("/").status_code == 200
+
+    # Protected routes reject missing or wrong credentials
+    assert client.get("/v1/endpoints").status_code == 401
+    assert client.get("/v1/endpoints", headers={"Authorization": "Key wrong"}).status_code == 401
+
+    # Accepts fal-style Authorization: Key, Bearer, X-API-Key, and query param
+    assert client.get("/v1/endpoints", headers={"Authorization": "Key super-secret-local-key"}).status_code == 200
+    assert client.get("/v1/endpoints", headers={"Authorization": "Bearer super-secret-local-key"}).status_code == 200
+    assert client.get("/v1/endpoints", headers={"X-API-Key": "super-secret-local-key"}).status_code == 200
+    assert client.get("/v1/endpoints?api_key=super-secret-local-key").status_code == 200
