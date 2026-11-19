@@ -126,3 +126,52 @@ def test_completion_cannot_overwrite_a_successful_cancellation(monkeypatch):
     with queue._execution_lock:
         assert observed == [job.status]
         assert job.status in ("CANCELLED", "COMPLETED")
+
+
+def test_inference_extra_declares_torchvision():
+    from pathlib import Path
+    import re
+
+    text = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    try:
+        import tomllib
+
+        inference_deps = tomllib.loads(text)["project"]["optional-dependencies"]["inference"]
+        assert any(dep.lower().startswith("torchvision") for dep in inference_deps)
+    except ModuleNotFoundError:
+        match = re.search(r"inference\s*=\s*\[(.*?)\]", text, re.S)
+        assert match and "torchvision" in match.group(1).lower()
+
+
+def test_torchvision_missing_fails_fast_before_loading_weights(monkeypatch, tmp_path):
+    import importlib
+    from openfal.engine.memory_hierarchy import StrataMemoryHierarchy
+    from openfal.runtime.minimax_h3_runner import RealMiniMaxH3Runner
+    from openfal.runtime.qwen_image_runner import RealQwenImage21Runner
+    from openfal.runtime.wan_animate_preprocess import preprocess_wan_animate
+
+    real_import = importlib.import_module
+
+    def block_torchvision(name, *args, **kwargs):
+        if name == "torchvision" or name.startswith("torchvision."):
+            raise ImportError("No module named 'torchvision'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", block_torchvision)
+    cfg = EngineConfig(weights_dir=tmp_path / "weights", output_dir=tmp_path / "outputs", cache_dir=tmp_path / "cache")
+    mem = StrataMemoryHierarchy(cfg)
+
+    with pytest.raises(RuntimeError, match="torchvision"):
+        RealQwenImage21Runner(cfg, mem)._ensure_loaded()
+    with pytest.raises(RuntimeError, match="torchvision"):
+        RealMiniMaxH3Runner(cfg, mem)._ensure_loaded("FL2VA")
+    with pytest.raises(RuntimeError, match="torchvision"):
+        preprocess_wan_animate(
+            tmp_path / "missing.mp4",
+            weights_dir=tmp_path / "weights",
+            width=64,
+            height=64,
+            fps=16,
+            num_frames=4,
+            mode="replace",
+        )

@@ -65,7 +65,7 @@ report = {
     "compute_device": str(device),
     "compute_dtype": str(dtype),
     "packages": {name: importlib.metadata.version(name) for name in (
-        "torch", "diffusers", "transformers", "accelerate", "onnxruntime", "ftfy",
+        "torch", "torchvision", "diffusers", "transformers", "accelerate", "onnxruntime", "ftfy",
     )},
 }
 Path(os.environ["OPENFAL_VALIDATION_DIR"], "runtime.json").write_text(
@@ -116,15 +116,18 @@ Animate additionally needs the complete pinned CLIP, detector, pose and SAM2 ass
 set described in the [setup guide](../README.md#complete-setup-before-inference).
 
 Start the server in a second terminal from the same repository. Activate the same
-virtual environment and use the same weights path. Keep its output as `server.log`
-in the validation directory if collecting a shareable report.
+virtual environment and use the same weights path. Keep the Mac plugged into
+full-wattage AC power with the lid open (or clamshell with an external display)
+and wrap the server with `caffeinate -dims` so idle sleep does not pause Metal
+compute or trip wall-clock client timeouts. Keep its output as `server.log` in
+the validation directory if collecting a shareable report.
 
 ```bash
 source .venv/bin/activate
 unset OPENFAL_SYNTHETIC_FALLBACK PYTORCH_ENABLE_MPS_FALLBACK
 export OPENFAL_WEIGHTS_DIR="$PWD/weights/MiniMax-H3"
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-  openfal serve --host 127.0.0.1 --port 8008 --weights-dir "$OPENFAL_WEIGHTS_DIR"
+  caffeinate -dims openfal serve --host 127.0.0.1 --port 8008 --weights-dir "$OPENFAL_WEIGHTS_DIR"
 ```
 
 The offline flags make missing model assets fail during this verification instead
@@ -134,16 +137,16 @@ that `/health` reports `synthetic_mode: false` and that generation responses rep
 
 ## Run and inspect the real client suite
 
-In the first terminal, with the validation variables still set:
+In the first terminal, with the validation variables still set (`OPENFAL_TEST_TIMEOUT_MS`
+is an explicit test deadline, not a promised runtime):
 
 ```bash
 export OPENFAL_URL="http://127.0.0.1:8008"
 export OPENFAL_OUTPUTS_DIR="$OPENFAL_VALIDATION_DIR/media"
 export OPENFAL_TEST_SEED=20261117
-# Make this deadline explicit: it is a test limit, not a promised runtime.
 export OPENFAL_TEST_TIMEOUT_MS=7200000
 set -o pipefail
-node tests/client/api/run_all.mjs 2>&1 | tee "$OPENFAL_VALIDATION_DIR/client-suite.log"
+caffeinate -dims node tests/client/api/run_all.mjs 2>&1 | tee "$OPENFAL_VALIDATION_DIR/client-suite.log"
 python tests/client/inspect_outputs.py "$OPENFAL_OUTPUTS_DIR"
 ```
 

@@ -281,7 +281,7 @@ class RealQwenImage21Runner:
         if self._pipe is not None:
             return
 
-        check_inference_dependencies(("diffusers", "transformers", "accelerate"))
+        check_inference_dependencies(("diffusers", "transformers", "accelerate", "torchvision"))
 
         dit_path, te_path, vae_path = self.resolve_weight_paths()
         missing_weights = [

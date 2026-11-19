@@ -21,7 +21,9 @@ from openfal.config import EngineConfig
 from openfal.model_assets import HF_CONFIGS, unsupported_checkpoint_format
 
 
-def check_inference_dependencies(packages: Iterable[str] = ("diffusers", "transformers", "accelerate")) -> None:
+def check_inference_dependencies(
+    packages: Iterable[str] = ("diffusers", "transformers", "accelerate", "torchvision"),
+) -> None:
     """
     Ensure PyTorch neural inference dependencies are importable.
 
@@ -40,8 +42,8 @@ def check_inference_dependencies(packages: Iterable[str] = ("diffusers", "transf
             "Real model weights are present on disk, but required inference packages are missing: "
             f"{', '.join(missing)}.\n"
             "Install them cleanly into this Python environment with:\n"
-            '  pip install -e ".[inference]"   (or: pip install "diffusers>=0.43.0" "transformers>=5.23.0" '
-            '"accelerate>=1.0.0" "sentencepiece>=0.2.0" "protobuf>=4.25.0" "einops>=0.7.0")'
+            '  pip install -e ".[inference]"   (or: pip install "torchvision>=0.19.0" "diffusers>=0.43.0" '
+            '"transformers>=5.23.0" "accelerate>=1.0.0" "sentencepiece>=0.2.0" "protobuf>=4.25.0" "einops>=0.7.0")'
         )
 
     # Guard against stale/ABI-mismatched optional torchaudio wheels (e.g. after upgrading torch for Blackwell)

@@ -148,6 +148,7 @@ async function createFalClient() {
       let seenLogs = (initial.logs || []).length;
       while (true) {
         if (Date.now() > deadline) {
+          await fetch(`${OPENFAL_URL}/requests/${requestId}/cancel`, { method: "PUT" }).catch(() => {});
           throw new Error(`Job ${requestId} exceeded test timeout (${TEST_TIMEOUT_MS}ms)`);
         }
         const statusRes = await fetch(

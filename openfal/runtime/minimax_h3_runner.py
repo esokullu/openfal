@@ -659,7 +659,7 @@ class RealMiniMaxH3Runner:
         if self._pipe is not None and self._loaded_partition == partition:
             return
 
-        check_inference_dependencies(("diffusers", "transformers", "accelerate"))
+        check_inference_dependencies(("diffusers", "transformers", "accelerate", "torchvision"))
 
         paths = self._find_weights(partition)
         required_keys = ("dit", "text_encoder", "image_vae") if partition == "H3-Image" else ("dit", "text_encoder", "video_vae", "audio_vae")

@@ -303,6 +303,9 @@ def _augment_replacement_mask(mask: np.ndarray) -> np.ndarray:
 def _segment_video(frames, landmarks, sam_path: Path, device, on_log):
     import cv2
     import torch
+    from openfal.runtime.common import check_inference_dependencies
+
+    check_inference_dependencies(("transformers", "torchvision"))
     from transformers import Sam2VideoModel, Sam2VideoProcessor
 
     device = torch.device(device)
@@ -370,6 +373,10 @@ def preprocess_wan_animate(
 
     if mode not in ("animate", "replace"):
         raise ValueError("Wan Animate mode must be 'animate' or 'replace'")
+    if mode == "replace":
+        from openfal.runtime.common import check_inference_dependencies
+
+        check_inference_dependencies(("transformers", "torchvision"))
     assets = require_animate_assets(weights_dir)
     frames, indices = _read_video_frames(driving_video, width, height, fps, num_frames)
     if on_log:
