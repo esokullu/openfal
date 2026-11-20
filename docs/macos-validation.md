@@ -138,7 +138,11 @@ that `/health` reports `synthetic_mode: false` and that generation responses rep
 ## Run and inspect the real client suite
 
 In the first terminal, with the validation variables still set (`OPENFAL_TEST_TIMEOUT_MS`
-is an explicit test deadline, not a promised runtime):
+is an explicit test deadline, not a promised runtime; `7200000` covers image, Wan 2.2, and
+MiniMax FL2VA runs on a 64 GB M4 Max, while MiniMax `Ref2VA` endpoints upscale reference
+images to `reference_image_short_edge = 2048` and can take 4+ hours — raise
+`OPENFAL_TEST_TIMEOUT_MS` to `21600000`–`28800000` when running `reference_to_video.mjs`
+or `video_recast_animate.mjs --model=minimax`):
 
 ```bash
 export OPENFAL_URL="http://127.0.0.1:8008"
@@ -175,7 +179,7 @@ OPENFAL_ANIMATE_MODE=replace bash tests/client/curl/05_animate_recast_wan22.sh
 Report the exact Mac model, RAM, macOS/Python/PyTorch versions, compute dtype,
 revision, skipped/failed tests, model assets, inference parameters, elapsed time,
 observed memory pressure/swap and inspected outputs. A successful case establishes
-that combination only. Actual Mac full-model inference, visual/audio quality,
-large-model capacity, multi-segment replacement and sustained runtime have not been
-validated by the Windows host tests. Intel Mac CPU fallback is also outside the
-Apple Silicon MPS validation described here.
+that combination only. See [the 2026-11-19 M4 Max 64 GB validation record](validation-macos-2026-11-19.md)
+for the first recorded Apple Silicon run (`12/13` endpoints verified; `minimax/h3-max/recast`,
+multi-segment replacement, and 24–48 GB Macs remain unvalidated). Intel Mac CPU fallback is
+also outside the Apple Silicon MPS validation described here.
