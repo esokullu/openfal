@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>openfal Studio — Local fal-Compatible Inference Server (Qwen-Image-2.1, Wan 2.2 &amp; MiniMax-H3)</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='0' y2='64' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%2318203f'/%3E%3Cstop offset='1' stop-color='%23090c18'/%3E%3C/linearGradient%3E%3ClinearGradient id='r' x1='110' y1='410' x2='410' y2='110' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%2322d3ee'/%3E%3Cstop offset='0.5' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%23c084fc'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23bg)'/%3E%3Cg transform='translate(32 32) scale(0.1287) translate(-270 -242)'%3E%3Cpath d='M387.5 267.5A132 132 0 1 1 260.6 124.1' fill='none' stroke='url(%23r)' stroke-width='56' stroke-linecap='round'/%3E%3Cpath d='M372.0 68.0Q385.0 127.0 444.0 140.0Q385.0 153.0 372.0 212.0Q359.0 153.0 300.0 140.0Q359.0 127.0 372.0 68.0Z' fill='%23fff'/%3E%3C/g%3E%3C/svg%3E" />
   <style>
     :root {
       --bg-0: #090b10;
@@ -54,11 +55,21 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-      background: var(--bg-0);
+      background:
+        radial-gradient(900px 440px at 12% -6%, rgba(56, 189, 248, 0.08), transparent 60%),
+        radial-gradient(820px 420px at 90% 2%, rgba(129, 140, 248, 0.08), transparent 58%),
+        var(--bg-0);
       color: var(--text-0);
       line-height: 1.5;
       min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
       transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    html.light body {
+      background:
+        radial-gradient(900px 440px at 12% -6%, rgba(2, 132, 199, 0.06), transparent 60%),
+        radial-gradient(820px 420px at 90% 2%, rgba(79, 70, 229, 0.05), transparent 58%),
+        var(--bg-0);
     }
     header {
       display: flex;
@@ -80,16 +91,16 @@
       gap: 12px;
     }
     .logo-badge {
-      width: 36px;
-      height: 36px;
-      border-radius: 9px;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #18203f 0%, #090c18 100%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 800;
-      font-size: 16px;
-      color: #090b10;
+      box-shadow: 0 4px 14px rgba(2, 8, 23, 0.3);
+      flex-shrink: 0;
     }
     .brand h1 {
       font-size: 18px;
@@ -148,6 +159,7 @@
     }
     select:focus, input:focus, textarea:focus {
       border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.16);
     }
     button {
       cursor: pointer;
@@ -759,12 +771,84 @@
       padding: 9px 12px;
       font-size: 12.5px;
     }
+    .ui-toast {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 60;
+      background: var(--bg-1);
+      color: var(--text-0);
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      padding: 10px 15px;
+      font-size: 12.5px;
+      font-weight: 600;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+    .ui-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .lightbox-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 70;
+      background: rgba(5, 7, 11, 0.86);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      cursor: zoom-out;
+    }
+    .lightbox-backdrop.open { display: flex; }
+    .lightbox-backdrop img {
+      max-width: 94vw;
+      max-height: 90vh;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+      cursor: default;
+    }
+    .simple-stage img { cursor: zoom-in; }
+    .kbd-hint {
+      font-size: 11px;
+      font-weight: 500;
+      opacity: 0.85;
+      background: rgba(255, 255, 255, 0.16);
+      padding: 2px 6px;
+      border-radius: 5px;
+      margin-left: 6px;
+    }
   </style>
 </head>
 <body>
   <header>
     <div class="brand">
-      <div class="logo-badge">of</div>
+      <div class="logo-badge" aria-hidden="true">
+        <svg width="24" height="24" viewBox="88 60 364 364" fill="none">
+          <defs>
+            <linearGradient id="hdr-ring" x1="110" y1="410" x2="410" y2="110" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#22d3ee"/>
+              <stop offset="0.5" stop-color="#6366f1"/>
+              <stop offset="1" stop-color="#c084fc"/>
+            </linearGradient>
+            <linearGradient id="hdr-spark" x1="300" y1="68" x2="444" y2="212" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#ffffff"/>
+              <stop offset="1" stop-color="#f5d0fe"/>
+            </linearGradient>
+          </defs>
+          <path d="M387.5 267.5A132 132 0 1 1 171.2 154.9" stroke="url(#hdr-ring)" stroke-width="56" stroke-linecap="round"/>
+          <circle cx="219.6" cy="129.1" r="16" fill="#8b8cf8"/>
+          <circle cx="253.7" cy="124.0" r="11" fill="#a78bfa"/>
+          <circle cx="281.2" cy="126.4" r="6.5" fill="#c084fc"/>
+          <path d="M372.0 68.0Q385.0 127.0 444.0 140.0Q385.0 153.0 372.0 212.0Q359.0 153.0 300.0 140.0Q359.0 127.0 372.0 68.0Z" fill="url(#hdr-spark)"/>
+        </svg>
+      </div>
       <div>
         <h1>openfal <span class="pill">Wan 2.2 MoE &bull; Qwen-Image-2.1 &bull; MiniMax-H3</span></h1>
         <span class="sub">Local fal-Compatible Inference Server &bull; Python SDK &amp; Studio</span>
@@ -886,12 +970,13 @@
         <div class="form-group">
           <div class="simple-section-head">
             <label class="simple-label" for="simplePrompt">Prompt</label>
-            <div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span id="simplePromptCount" class="simple-hint">0 chars</span>
               <button type="button" class="simple-link-btn" onclick="fillSimpleExample()">Try example</button>
               <button type="button" class="simple-link-btn" onclick="clearSimplePrompt()" style="color:var(--text-1);">Clear</button>
             </div>
           </div>
-          <textarea id="simplePrompt" class="simple-prompt" placeholder="Describe what you want to create..." oninput="updateSimpleApiPreview()"></textarea>
+          <textarea id="simplePrompt" class="simple-prompt" placeholder="Describe what you want to create..." oninput="onSimplePromptInput()"></textarea>
         </div>
 
         <!-- Dynamic Media Inputs (shown only when task needs image/video) -->
@@ -1081,7 +1166,7 @@
         <div class="simple-actions">
           <button type="button" class="btn-secondary" onclick="resetSimpleForm()">Reset</button>
           <button type="button" id="simpleCancelBtn" class="btn-secondary" style="display:none;border-color:rgba(244,63,94,0.45);color:#fda4af;" onclick="cancelSimpleInference()">Cancel</button>
-          <button type="button" id="simpleRunBtn" class="simple-run-btn" onclick="runSimpleInference()">▶ Run</button>
+          <button type="button" id="simpleRunBtn" class="simple-run-btn" onclick="runSimpleInference()" title="Shortcut: Cmd/Ctrl + Enter">▶ Run <span class="kbd-hint">⌘↵</span></button>
         </div>
       </div>
 
@@ -1100,10 +1185,11 @@
           <!-- Sub-tab: Result -->
           <div id="simpleTabResult">
             <div class="simple-stage" id="simpleMediaStage">
-              <div style="text-align:center;color:var(--text-1);padding:28px;max-width:380px;">
+              <div style="text-align:center;color:var(--text-1);padding:28px;max-width:400px;">
                 <div style="font-size:32px;margin-bottom:8px;">✨</div>
                 <p style="font-size:15px;font-weight:600;color:var(--text-0);margin-bottom:6px;">Ready to create</p>
-                <p style="font-size:12.5px;">Write a prompt on the left and click <b>Run</b>. Your generated image or video will appear here.</p>
+                <p style="font-size:12.5px;margin-bottom:14px;">Write a prompt on the left (or press <b>Cmd/Ctrl + Enter</b>) and click <b>Run</b>. Your generated image or video will appear here.</p>
+                <button type="button" class="btn-secondary" style="font-size:12px;padding:7px 13px;" onclick="fillSimpleExample()">✨ Load Example Prompt</button>
               </div>
             </div>
 
@@ -1344,6 +1430,11 @@
       </div>
     </section>
   </main>
+
+  <div id="uiToast" class="ui-toast" role="status" aria-live="polite"></div>
+  <div id="mediaLightbox" class="lightbox-backdrop" onclick="closeLightbox()">
+    <img id="mediaLightboxImg" src="" alt="Full size preview" onclick="event.stopPropagation()" />
+  </div>
 
   <script>
     // =========================================================================
@@ -1634,6 +1725,7 @@
       applyTheme(getSavedTheme());
       switchMainView(getSavedView());
       initSimplePlayground();
+      bindUiShortcuts();
       await initDesktopIntegration();
 
       try {
@@ -1833,12 +1925,74 @@
       } catch (e) {}
     }
 
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById("uiToast");
+      if (!el || !el.classList) return;
+      el.textContent = msg;
+      el.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        if (el && el.classList) el.classList.remove("show");
+      }, 2200);
+    }
+
+    function openLightbox(src) {
+      const box = document.getElementById("mediaLightbox");
+      const img = document.getElementById("mediaLightboxImg");
+      if (!box || !img || !src) return;
+      img.src = src;
+      if (box.classList) box.classList.add("open");
+    }
+
+    function closeLightbox() {
+      const box = document.getElementById("mediaLightbox");
+      if (box && box.classList) box.classList.remove("open");
+    }
+
+    function onSimplePromptInput() {
+      const promptEl = document.getElementById("simplePrompt");
+      const countEl = document.getElementById("simplePromptCount");
+      if (promptEl && countEl) {
+        const len = (promptEl.value || "").length;
+        countEl.textContent = `${len} char${len === 1 ? "" : "s"}`;
+      }
+      updateSimpleApiPreview();
+    }
+
+    function bindUiShortcuts() {
+      const sp = document.getElementById("simplePrompt");
+      if (sp && typeof sp.addEventListener === "function") {
+        sp.addEventListener("keydown", (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            runSimpleInference();
+          }
+        });
+      }
+      const ap = document.getElementById("promptInput");
+      if (ap && typeof ap.addEventListener === "function") {
+        ap.addEventListener("keydown", (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            runInference();
+          }
+        });
+      }
+      if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closeLightbox();
+        });
+      }
+    }
+
     function fillSimpleExample() {
       const meta = getSimpleModelMeta();
       const promptEl = document.getElementById("simplePrompt");
       if (promptEl && meta && meta.example) {
         promptEl.value = meta.example;
-        updateSimpleApiPreview();
+        onSimplePromptInput();
+        showToast("Example prompt loaded");
       }
     }
 
@@ -1846,7 +2000,7 @@
       const promptEl = document.getElementById("simplePrompt");
       if (promptEl) {
         promptEl.value = "";
-        updateSimpleApiPreview();
+        onSimplePromptInput();
       }
     }
 
@@ -2162,6 +2316,7 @@ const result = await fal.subscribe("${endpoint}", {
       if (!el || typeof navigator === "undefined" || !navigator.clipboard) return;
       navigator.clipboard.writeText(el.textContent || "");
       setSimpleStatus("Copied to clipboard", "ok");
+      showToast("Code snippet copied");
     }
 
     function selectSimpleOutputTab(tab) {
@@ -2228,7 +2383,7 @@ const result = await fal.subscribe("${endpoint}", {
         primaryUrl = out.images[0].url;
         mediaType = "image";
         if (out.images.length === 1) {
-          stage.innerHTML = `<img src="${primaryUrl}" alt="Generated Image" />`;
+          stage.innerHTML = `<img src="${primaryUrl}" alt="Generated Image" title="Click to zoom" onclick="openLightbox('${primaryUrl}')" />`;
         } else {
           const grid = document.createElement("div");
           grid.className = "simple-image-grid";
@@ -2241,6 +2396,7 @@ const result = await fal.subscribe("${endpoint}", {
               if (dl) dl.href = im.url;
               if (openLink) openLink.href = im.url;
               simpleState.lastOutputUrl = im.url;
+              openLightbox(im.url);
             };
             grid.appendChild(img);
           });
@@ -2284,6 +2440,7 @@ const result = await fal.subscribe("${endpoint}", {
         if (details) details.open = true;
         updateSimpleApiPreview();
         setSimpleStatus(`Seed ${simpleState.lastSeed} applied`, "ok");
+        showToast(`Seed ${simpleState.lastSeed} applied`);
       }
     }
 

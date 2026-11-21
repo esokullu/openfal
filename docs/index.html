@@ -8,6 +8,7 @@
     name="description"
     content="Run Qwen-Image-2.1, Wan 2.2, and MiniMax H3 locally with a fal-compatible HTTP/queue API, Python SDK, built-in Studio UI, hardware detection, and one-CLI model downloads."
   />
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
   <script>
     (function () {
       try {
@@ -150,17 +151,10 @@
       letter-spacing: -0.02em;
     }
     .brand:hover { text-decoration: none; }
-    .logo-badge {
-      width: 34px;
-      height: 34px;
-      border-radius: 9px;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      display: grid;
-      place-items: center;
-      color: #090b10;
-      font-weight: 800;
-      font-size: 14px;
-      letter-spacing: -0.03em;
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      display: block;
       flex-shrink: 0;
     }
     nav {
@@ -316,6 +310,7 @@
 
     /* Sections */
     section { padding: 54px 0; }
+    section[id] { scroll-margin-top: 84px; }
     .section-head {
       margin-bottom: 28px;
       max-width: 68ch;
@@ -352,6 +347,11 @@
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 22px;
+      transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+    }
+    .card:hover {
+      border-color: rgba(56, 189, 248, 0.35);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
     }
     .card-num {
       font-family: var(--mono);
@@ -471,8 +471,9 @@
       border-color: var(--border);
       color: var(--accent);
     }
-    .tab-panel { display: none; padding: 18px; }
+    .tab-panel { display: none; padding: 18px; position: relative; }
     .tab-panel.active { display: block; }
+    .tab-panel .copy-btn { top: 14px; right: 14px; }
     .tab-panel pre {
       font-family: var(--mono);
       font-size: 13px;
@@ -508,6 +509,7 @@
       font-weight: 700;
     }
     tr:last-child td { border-bottom: none; }
+    tr.row-openfal td { background: rgba(56, 189, 248, 0.045); }
     td strong { color: var(--text-0); }
     td.muted { color: var(--text-1); }
 
@@ -557,7 +559,17 @@
       .hero-grid, .grid-3, .grid-2, .bundle-grid {
         grid-template-columns: 1fr;
       }
-      nav { display: none; }
+      .nav-inner { flex-wrap: wrap; padding: 10px 0; }
+      nav {
+        order: 3;
+        width: 100%;
+        gap: 14px;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-top: 6px;
+        border-top: 1px solid var(--border-soft);
+      }
+      nav a { white-space: nowrap; font-size: 13px; }
     }
   </style>
 </head>
@@ -565,7 +577,7 @@
   <header>
     <div class="container nav-inner">
       <a class="brand" href="#top">
-        <span class="logo-badge">OF</span>
+        <img class="brand-logo" src="./assets/logo-mark.svg" alt="" width="32" height="32" />
         <span>openfal</span>
       </a>
       <nav aria-label="Primary">
@@ -618,6 +630,7 @@
           <div class="terminal-bar">
             <div class="dots"><i></i><i></i><i></i></div>
             <span>openfal cli — v0.1.0</span>
+            <button class="copy-btn" style="position:static;" type="button" data-copy="openfal detect&#10;openfal autosetup --tier minimal -y&#10;openfal serve --port 8008">Copy</button>
           </div>
           <pre><span class="t-dim"># 1. Inspect GPUs, RAM, and free disk</span>
 <span class="t-cmd">$ openfal detect</span>
@@ -787,6 +800,7 @@
           </div>
 
           <div class="tab-panel active" data-panel="sdk">
+            <button class="copy-btn" type="button" data-copy="import openfal&#10;&#10;server = &quot;http://127.0.0.1:8008&quot;&#10;reference = openfal.upload_file(&quot;portrait.png&quot;, base_url=server)&#10;result = openfal.subscribe(&#10;    &quot;qwen/image-2.1/edit&quot;,&#10;    arguments={&#10;        &quot;prompt&quot;: &quot;Keep the person recognizable and change the lighting to warm evening light&quot;,&#10;        &quot;reference_image_urls&quot;: [reference],&#10;        &quot;resolution&quot;: &quot;768P&quot;,&#10;        &quot;aspect_ratio&quot;: &quot;1:1&quot;,&#10;        &quot;seed&quot;: 20261117,&#10;    },&#10;    base_url=server,&#10;)&#10;print(result[&quot;images&quot;][0][&quot;url&quot;])">Copy</button>
             <pre>import openfal
 
 server = "http://127.0.0.1:8008"
@@ -806,6 +820,7 @@ print(result["images"][0]["url"])</pre>
           </div>
 
           <div class="tab-panel" data-panel="animate">
+            <button class="copy-btn" type="button" data-copy="import openfal&#10;&#10;server = &quot;http://127.0.0.1:8008&quot;&#10;identity = openfal.upload_file(&quot;character.png&quot;, base_url=server)&#10;driver = openfal.upload_file(&quot;performance.mp4&quot;, base_url=server)&#10;result = openfal.subscribe(&#10;    &quot;wan/v2.2/animate&quot;,&#10;    arguments={&#10;        &quot;prompt&quot;: &quot;The reference character follows the driving performance naturally&quot;,&#10;        &quot;face_image_url&quot;: identity,&#10;        &quot;driving_video_url&quot;: driver,&#10;        &quot;resolution&quot;: &quot;480P&quot;,&#10;        &quot;duration&quot;: 3,&#10;        &quot;fps&quot;: 16,&#10;        &quot;seed&quot;: 20261117,&#10;    },&#10;    base_url=server,&#10;)&#10;print(result[&quot;video&quot;][&quot;url&quot;])">Copy</button>
             <pre>import openfal
 
 server = "http://127.0.0.1:8008"
@@ -828,6 +843,7 @@ print(result["video"]["url"])</pre>
           </div>
 
           <div class="tab-panel" data-panel="http">
+            <button class="copy-btn" type="button" data-copy="curl -X POST http://127.0.0.1:8008/qwen/image-2.1/text-to-image \&#10;  -H &quot;Content-Type: application/json&quot; \&#10;  -d '{&quot;prompt&quot;:&quot;A golden poodle running on an Istanbul cobblestone street&quot;,&quot;resolution&quot;:&quot;768P&quot;,&quot;aspect_ratio&quot;:&quot;16:9&quot;,&quot;seed&quot;:20261117}'">Copy</button>
             <pre>curl -X POST http://127.0.0.1:8008/qwen/image-2.1/text-to-image \
   -H "Content-Type: application/json" \
   -d '{
@@ -839,6 +855,7 @@ print(result["video"]["url"])</pre>
           </div>
 
           <div class="tab-panel" data-panel="queue">
+            <button class="copy-btn" type="button" data-copy="curl -X POST http://127.0.0.1:8008/queue/wan/v2.2/text-to-video \&#10;  -H &quot;Content-Type: application/json&quot; \&#10;  -d '{&quot;prompt&quot;:&quot;A dog walking down a quiet street&quot;,&quot;resolution&quot;:&quot;480P&quot;,&quot;duration&quot;:2,&quot;seed&quot;:20261117}'">Copy</button>
             <pre># Submit to queue (returns request_id, status_url, response_url, cancel_url)
 curl -X POST http://127.0.0.1:8008/queue/wan/v2.2/text-to-video \
   -H "Content-Type: application/json" \
@@ -1024,7 +1041,7 @@ curl -N http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;
               </tr>
             </thead>
             <tbody>
-              <tr>
+              <tr class="row-openfal">
                 <td><strong><code>qwen21_t2i</code></strong><br /><span class="muted">1344×768 · 8 steps</span></td>
                 <td>openfal</td>
                 <td class="muted">1.85 s</td>
@@ -1054,7 +1071,7 @@ curl -N http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;
                 <td>24.7 GB (25257 MiB)</td>
                 <td class="muted">74.7%</td>
               </tr>
-              <tr>
+              <tr class="row-openfal">
                 <td><strong><code>minimax_h3_t2i</code></strong><br /><span class="muted">1344×768 · 6 PDD steps · Fastest warm</span></td>
                 <td><strong>openfal</strong></td>
                 <td class="muted">1.81 s</td>
@@ -1084,7 +1101,7 @@ curl -N http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;
                 <td>16.3 GB (16697 MiB)</td>
                 <td class="muted">23.2%</td>
               </tr>
-              <tr>
+              <tr class="row-openfal">
                 <td><strong><code>wan22_i2v_14b</code></strong><br /><span class="muted">848×480 · 33f @ 16 fps · 20 steps</span></td>
                 <td>openfal</td>
                 <td class="muted">1.86 s</td>
@@ -1114,7 +1131,7 @@ curl -N http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;
                 <td>21.2 GB (21729 MiB)</td>
                 <td class="muted">93.6%</td>
               </tr>
-              <tr>
+              <tr class="row-openfal">
                 <td><strong><code>minimax_h3_i2v</code></strong><br /><span class="muted">832×480 · 20 steps · 24 fps + audio</span></td>
                 <td>openfal</td>
                 <td class="muted">1.81 s</td>
