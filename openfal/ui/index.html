@@ -15,6 +15,7 @@
       --text-1: #94a3b8;
       --accent: #38bdf8;
       --accent-2: #818cf8;
+      --fal-purple: #6366f1;
       --emerald: #10b981;
       --amber: #f59e0b;
       --rose: #f43f5e;
@@ -33,7 +34,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 14px 24px;
+      padding: 12px 24px;
       background: rgba(17, 21, 32, 0.92);
       border-bottom: 1px solid var(--border);
       position: sticky;
@@ -68,6 +69,35 @@
       color: var(--text-1);
       display: block;
     }
+    .view-switcher {
+      display: inline-flex;
+      background: var(--bg-0);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3px;
+      gap: 4px;
+    }
+    .view-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-1);
+      padding: 6px 14px;
+      border-radius: 7px;
+      font-size: 12.5px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .view-tab-btn:hover {
+      color: var(--text-0);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .view-tab-btn.active {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(129, 140, 248, 0.22));
+      color: var(--text-0);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
     .header-controls {
       display: flex;
       align-items: center;
@@ -82,6 +112,7 @@
       border-radius: 8px;
       font-size: 13px;
       outline: none;
+      font-family: inherit;
     }
     select:focus, input:focus, textarea:focus {
       border-color: var(--accent);
@@ -94,19 +125,25 @@
       font-size: 13px;
       font-weight: 600;
       transition: all 0.15s ease;
+      font-family: inherit;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none !important;
     }
     .btn-primary {
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
       color: #090b10;
       font-weight: 700;
     }
-    .btn-primary:hover { opacity: 0.92; transform: translateY(-1px); }
+    .btn-primary:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
     .btn-secondary {
       background: var(--bg-2);
       border-color: var(--border);
       color: var(--text-0);
     }
-    .btn-secondary:hover { background: var(--bg-3); }
+    .btn-secondary:hover:not(:disabled) { background: var(--bg-3); }
     .btn-sleep {
       background: rgba(245, 158, 11, 0.14);
       border-color: rgba(245, 158, 11, 0.4);
@@ -116,6 +153,11 @@
       background: rgba(16, 185, 129, 0.14);
       border-color: rgba(16, 185, 129, 0.4);
       color: var(--emerald);
+    }
+    .shared-container {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 16px 24px 0 24px;
     }
     .layout {
       display: grid;
@@ -294,10 +336,387 @@
       background: rgba(56, 189, 248, 0.15);
       color: var(--accent);
     }
+    .pill-ok {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+    .pill-warn {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+    .pill-err {
+      background: rgba(244, 63, 94, 0.16);
+      color: #fda4af;
+    }
     .upload-row {
       display: flex;
       gap: 8px;
       align-items: center;
+    }
+
+    /* ===================================================================== */
+    /* Simple Mode (fal.ai-inspired Clean Playground)                        */
+    /* ===================================================================== */
+    .simple-shell {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 20px 24px 40px 24px;
+    }
+    .simple-task-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .simple-task-pill {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      color: var(--text-1);
+      padding: 9px 15px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .simple-task-pill:hover {
+      border-color: #3d4b6e;
+      color: var(--text-0);
+      background: var(--bg-2);
+    }
+    .simple-task-pill.active {
+      background: rgba(99, 102, 241, 0.18);
+      border-color: var(--accent-2);
+      color: var(--text-0);
+      box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.25);
+    }
+    .simple-grid {
+      display: grid;
+      grid-template-columns: 460px 1fr;
+      gap: 22px;
+      align-items: start;
+    }
+    @media (max-width: 1024px) {
+      .simple-grid { grid-template-columns: 1fr; }
+    }
+    .simple-panel {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .simple-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+    .simple-label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-0);
+    }
+    .simple-hint {
+      font-size: 11.5px;
+      color: var(--text-1);
+    }
+    .simple-link-btn {
+      background: transparent;
+      border: none;
+      padding: 2px 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--accent);
+      border-radius: 5px;
+    }
+    .simple-link-btn:hover {
+      background: rgba(56, 189, 248, 0.12);
+    }
+    .simple-model-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .simple-prompt {
+      min-height: 108px;
+      font-size: 13.5px;
+      line-height: 1.55;
+      background: var(--bg-0);
+      border-color: var(--border);
+      padding: 11px 13px;
+      border-radius: 10px;
+    }
+    .simple-dropzone {
+      border: 1.5px dashed #334155;
+      border-radius: 10px;
+      background: rgba(9, 11, 16, 0.65);
+      padding: 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .simple-dropzone:hover, .simple-dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.06);
+    }
+    .simple-drop-preview {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+    }
+    .simple-drop-preview img, .simple-drop-preview video {
+      width: 68px;
+      height: 68px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #000;
+      flex-shrink: 0;
+    }
+    .simple-ratio-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+    }
+    .ratio-btn {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--text-1);
+      padding: 7px 4px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .ratio-btn:hover { color: var(--text-0); border-color: #3d4b6e; }
+    .ratio-btn.active {
+      background: rgba(56, 189, 248, 0.14);
+      border-color: var(--accent);
+      color: var(--text-0);
+    }
+    .ratio-icon {
+      border: 1.5px solid currentColor;
+      border-radius: 2px;
+      display: block;
+    }
+    .seg-pills {
+      display: inline-flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .seg-pill {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--text-1);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .seg-pill.active {
+      background: rgba(56, 189, 248, 0.14);
+      border-color: var(--accent);
+      color: var(--text-0);
+    }
+    details.simple-accordion {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(9, 11, 16, 0.45);
+      margin-top: 14px;
+      margin-bottom: 16px;
+    }
+    details.simple-accordion summary {
+      cursor: pointer;
+      padding: 10px 13px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-1);
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    details.simple-accordion summary::-webkit-details-marker { display: none; }
+    details.simple-accordion[open] summary {
+      color: var(--text-0);
+      border-bottom: 1px solid var(--border);
+    }
+    .simple-accordion-body {
+      padding: 12px 13px;
+    }
+    .simple-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .simple-run-btn {
+      flex: 1;
+      padding: 11px 18px;
+      font-size: 14px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #6366f1, #38bdf8);
+      color: #ffffff;
+      font-weight: 700;
+      border: none;
+    }
+    .simple-run-btn:hover:not(:disabled) {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+    }
+    .simple-output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 14px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .output-subtabs {
+      display: inline-flex;
+      gap: 4px;
+      background: var(--bg-0);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+    }
+    .output-subtab {
+      background: transparent;
+      border: none;
+      color: var(--text-1);
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .output-subtab.active {
+      background: var(--bg-2);
+      color: var(--text-0);
+    }
+    .simple-stage {
+      background: #05070b;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      min-height: 440px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      padding: 12px;
+    }
+    .simple-stage img, .simple-stage video {
+      max-width: 100%;
+      max-height: 540px;
+      border-radius: 8px;
+      display: block;
+    }
+    .simple-image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      width: 100%;
+    }
+    .simple-image-grid img {
+      width: 100%;
+      max-height: 360px;
+      object-fit: contain;
+      background: #0a0e17;
+      cursor: pointer;
+    }
+    .simple-output-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+      align-items: center;
+    }
+    .simple-spinner {
+      width: 34px;
+      height: 34px;
+      border: 3px solid rgba(56, 189, 248, 0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .simple-history-strip {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-top: 6px;
+    }
+    .history-thumb {
+      width: 124px;
+      flex-shrink: 0;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 6px;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text-0);
+    }
+    .history-thumb:hover, .history-thumb.active {
+      border-color: var(--accent);
+    }
+    .history-thumb-media {
+      width: 100%;
+      height: 70px;
+      border-radius: 6px;
+      background: #05070b;
+      object-fit: cover;
+      display: block;
+      margin-bottom: 5px;
+    }
+    .history-thumb-title {
+      font-size: 10.5px;
+      color: var(--text-1);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ref-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .ref-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px 8px 4px 4px;
+      font-size: 11px;
+    }
+    .ref-chip img {
+      width: 28px;
+      height: 28px;
+      border-radius: 5px;
+      object-fit: cover;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 9px 12px;
+      font-size: 12.5px;
     }
   </style>
 </head>
@@ -307,10 +726,28 @@
       <div class="logo-badge">of</div>
       <div>
         <h1>openfal <span class="pill">Wan 2.2 MoE &bull; Qwen-Image-2.1 &bull; MiniMax-H3</span></h1>
-        <span class="sub">Local fal-Compatible Inference Server &bull; Python SDK &amp; Studio &bull; MIT License</span>
+        <span class="sub">Local fal-Compatible Inference Server &bull; Python SDK &amp; Studio</span>
       </div>
     </div>
-    <div class="header-controls">
+
+    <div class="view-switcher" role="tablist" aria-label="Dashboard Mode">
+      <button id="tabBtnSimple" class="view-tab-btn active" onclick="switchMainView('simple')" role="tab" aria-selected="true">
+        ✨ Simple
+      </button>
+      <button id="tabBtnStudio" class="view-tab-btn" onclick="switchMainView('studio')" role="tab" aria-selected="false">
+        🎛️ Studio (Advanced)
+      </button>
+    </div>
+
+    <div class="header-controls" id="simpleHeaderControls">
+      <span id="simpleHwPill" class="pill" style="display:none;"></span>
+      <button class="btn-secondary" onclick="toggleModelHub()">📦 Models</button>
+      <a href="/docs" target="_blank" style="text-decoration:none;">
+        <button class="btn-secondary">API Docs</button>
+      </a>
+    </div>
+
+    <div class="header-controls" id="studioHeaderControls" style="display:none;">
       <label style="font-size:12px;color:var(--text-1);">Hardware Profile:</label>
       <select id="profileSelect" onchange="switchProfile()" style="width:auto;min-width:270px;"></select>
       <button class="btn-secondary" onclick="toggleModelHub()">📦 HF Model Hub &amp; Installer</button>
@@ -321,29 +758,339 @@
     </div>
   </header>
 
-  <main class="layout">
-    <!-- Left Column: Task Playground -->
-    <section>
-      <div class="card" id="modelHubPanel" style="display:none;border-color:var(--accent);">
-        <div class="card-title">
-          <span>📦 Hugging Face Model Assets &amp; Installer</span>
-          <button class="btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="toggleModelHub()">Close</button>
-        </div>
-        <div id="hwDetectSummary" style="font-size:12px;color:var(--text-1);margin-bottom:10px;">Detecting host hardware...</div>
-        <p style="font-size:12px;color:var(--text-1);">Installed assets indicate the required local files are complete. Generation quality and hardware capacity require separate checks.</p>
+  <div class="shared-container" id="sharedBanners" style="display:none;">
+    <div class="card" id="modelHubPanel" style="display:none;border-color:var(--accent);">
+      <div class="card-title">
+        <span>📦 Hugging Face Model Assets &amp; Installer</span>
+        <button class="btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="toggleModelHub()">Close</button>
+      </div>
+      <div id="hwDetectSummary" style="font-size:12px;color:var(--text-1);margin-bottom:10px;">Detecting host hardware...</div>
+      <p style="font-size:12px;color:var(--text-1);margin-bottom:10px;">Installed assets indicate the required local files are complete. Generation quality and hardware capacity require separate checks.</p>
+      <div class="form-group">
+        <label>Optional Hugging Face Token (`HF_TOKEN` for gated/rate-limited repos)</label>
+        <input type="text" id="hfTokenInput" placeholder="hf_..." />
+      </div>
+      <div id="modelComponentsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+        <button class="btn-primary" onclick="triggerModelInstall('alibaba-only', 'hf_hub', 'fp8_e4m3')">⚡ Install ONLY Alibaba (~94GB FP8)</button>
+        <button class="btn-secondary" style="border-color:var(--accent);" onclick="triggerModelInstall('minimax-only', 'hf_hub', 'fp8_e4m3')">🎵 Install ONLY MiniMax-H3 (~88GB FP8)</button>
+        <button class="btn-secondary" onclick="triggerModelInstall('minimax-omni-compact', 'hf_hub', 'fp8_e4m3')">💾 MiniMax Ref2VA (~48GB FP8/INT8)</button>
+      </div>
+    </div>
+
+    <div id="syntheticModeNotice" class="card" style="display:none;color:#fda4af;">
+      Development mode: outputs are synthetic placeholders, not model inference. Unset <code>OPENFAL_SYNTHETIC_FALLBACK</code> and restart the server for real generation.
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- SIMPLE VIEW (fal.ai-style clean playground)                         -->
+  <!-- =================================================================== -->
+  <section id="simpleView" class="simple-shell">
+    <div class="simple-task-bar" id="simpleTaskBar">
+      <button class="simple-task-pill active" data-simple-task="t2i" onclick="selectSimpleTask('t2i')">
+        🖼️ Text to Image
+      </button>
+      <button class="simple-task-pill" data-simple-task="t2v" onclick="selectSimpleTask('t2v')">
+        🎬 Text to Video
+      </button>
+      <button class="simple-task-pill" data-simple-task="i2v" onclick="selectSimpleTask('i2v')">
+        🎞️ Image to Video
+      </button>
+      <button class="simple-task-pill" data-simple-task="i2i" onclick="selectSimpleTask('i2i')">
+        🪄 Image Edit
+      </button>
+      <button class="simple-task-pill" data-simple-task="animate" onclick="selectSimpleTask('animate')">
+        🎭 Animate / Replace
+      </button>
+    </div>
+
+    <div class="simple-grid">
+      <!-- Simple Left: Clean Input Form -->
+      <div class="simple-panel">
         <div class="form-group">
-          <label>Optional Hugging Face Token (`HF_TOKEN` for gated/rate-limited repos)</label>
-          <input type="text" id="hfTokenInput" placeholder="hf_..." />
+          <div class="simple-section-head">
+            <label class="simple-label" for="simpleModelSelect">Model</label>
+            <span id="simpleModelStatusBadge" class="pill">Checking...</span>
+          </div>
+          <div class="simple-model-row">
+            <select id="simpleModelSelect" onchange="onSimpleModelChange()"></select>
+          </div>
+          <div id="simpleModelDesc" class="simple-hint" style="margin-top:5px;"></div>
         </div>
-        <div id="modelComponentsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-          <button class="btn-primary" onclick="triggerModelInstall('alibaba-only', 'hf_hub', 'fp8_e4m3')">⚡ Install ONLY Alibaba (~94GB FP8)</button>
-          <button class="btn-secondary" style="border-color:var(--accent);" onclick="triggerModelInstall('minimax-only', 'hf_hub', 'fp8_e4m3')">🎵 Install ONLY MiniMax-H3 (~88GB FP8)</button>
-          <button class="btn-secondary" onclick="triggerModelInstall('minimax-omni-compact', 'hf_hub', 'fp8_e4m3')">💾 MiniMax Ref2VA (~48GB FP8/INT8)</button>
+
+        <div class="form-group">
+          <div class="simple-section-head">
+            <label class="simple-label" for="simplePrompt">Prompt</label>
+            <div>
+              <button type="button" class="simple-link-btn" onclick="fillSimpleExample()">Try example</button>
+              <button type="button" class="simple-link-btn" onclick="clearSimplePrompt()" style="color:var(--text-1);">Clear</button>
+            </div>
+          </div>
+          <textarea id="simplePrompt" class="simple-prompt" placeholder="Describe what you want to create..." oninput="updateSimpleApiPreview()"></textarea>
+        </div>
+
+        <!-- Dynamic Media Inputs (shown only when task needs image/video) -->
+        <div id="simpleMediaInputs" style="display:none;">
+          <div class="form-group" id="simplePrimaryImageGroup">
+            <div class="simple-section-head">
+              <label class="simple-label" id="simpleImageLabel">Input Image</label>
+              <button type="button" id="simpleClearImgBtn" class="simple-link-btn" style="display:none;color:var(--rose);" onclick="clearSimplePrimaryImage()">Remove</button>
+            </div>
+            <div class="simple-dropzone" id="simpleImageDropzone"
+              onclick="document.getElementById('simpleImageFile').click()"
+              ondragover="handleSimpleDragOver(event, 'simpleImageDropzone')"
+              ondragleave="handleSimpleDragLeave(event, 'simpleImageDropzone')"
+              ondrop="handleSimpleDrop(event, 'image')">
+              <div id="simpleImageDropEmpty">
+                <div style="font-size:13px;font-weight:600;color:var(--text-0);">Click or drag &amp; drop an image</div>
+                <div class="simple-hint">PNG, JPG or WebP</div>
+              </div>
+              <div id="simpleImageDropPreview" class="simple-drop-preview" style="display:none;">
+                <img id="simpleImageThumb" src="" alt="Selected input" />
+                <div style="min-width:0;flex:1;">
+                  <div id="simpleImageName" style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+                  <div class="simple-hint">Click to replace</div>
+                </div>
+              </div>
+            </div>
+            <input type="file" id="simpleImageFile" accept="image/*" style="display:none;" onchange="uploadSimpleFile('simpleImageFile', 'simpleImageUrl', 'image')" />
+            <input type="text" id="simpleImageUrl" placeholder="or paste image URL (https://... or /files/...)" style="margin-top:8px;" oninput="syncSimpleImagePreview()" />
+          </div>
+
+          <!-- Optional End Image (MiniMax H3 I2V) -->
+          <div class="form-group" id="simpleEndImageGroup" style="display:none;">
+            <div class="simple-section-head">
+              <label class="simple-label">End Frame (Optional)</label>
+              <button type="button" id="simpleClearEndBtn" class="simple-link-btn" style="display:none;color:var(--rose);" onclick="clearSimpleEndImage()">Remove</button>
+            </div>
+            <div class="upload-row">
+              <input type="text" id="simpleEndImageUrl" placeholder="Optional closing frame URL" oninput="syncSimpleEndPreview()" />
+              <input type="file" id="simpleEndImageFile" accept="image/*" style="display:none;" onchange="uploadSimpleFile('simpleEndImageFile', 'simpleEndImageUrl', 'endImage')" />
+              <button type="button" class="btn-secondary" onclick="document.getElementById('simpleEndImageFile').click()">Upload</button>
+            </div>
+          </div>
+
+          <!-- Extra Reference Images (Qwen Edit / MiniMax Ref2V) -->
+          <div class="form-group" id="simpleExtraRefsGroup" style="display:none;">
+            <div class="simple-section-head">
+              <label class="simple-label">Additional Reference Images (Optional)</label>
+              <button type="button" class="simple-link-btn" onclick="document.getElementById('simpleExtraRefFile').click()">+ Add image</button>
+            </div>
+            <input type="file" id="simpleExtraRefFile" accept="image/*" style="display:none;" onchange="uploadSimpleExtraRef()" />
+            <div id="simpleExtraRefsList" class="ref-chip-list"></div>
+          </div>
+
+          <!-- Driving Video (Animate / Recast) -->
+          <div class="form-group" id="simpleVideoGroup" style="display:none;">
+            <div class="simple-section-head">
+              <label class="simple-label">Driving Video (Required)</label>
+              <button type="button" id="simpleClearVidBtn" class="simple-link-btn" style="display:none;color:var(--rose);" onclick="clearSimpleVideo()">Remove</button>
+            </div>
+            <div class="simple-dropzone" id="simpleVideoDropzone"
+              onclick="document.getElementById('simpleVideoFile').click()"
+              ondragover="handleSimpleDragOver(event, 'simpleVideoDropzone')"
+              ondragleave="handleSimpleDragLeave(event, 'simpleVideoDropzone')"
+              ondrop="handleSimpleDrop(event, 'video')">
+              <div id="simpleVideoDropEmpty">
+                <div style="font-size:13px;font-weight:600;color:var(--text-0);">Click or drag &amp; drop a driving video</div>
+                <div class="simple-hint">MP4 / WebM motion reference</div>
+              </div>
+              <div id="simpleVideoDropPreview" class="simple-drop-preview" style="display:none;">
+                <video id="simpleVideoThumb" src="" muted playsinline></video>
+                <div style="min-width:0;flex:1;">
+                  <div id="simpleVideoName" style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+                  <div class="simple-hint">Click to replace</div>
+                </div>
+              </div>
+            </div>
+            <input type="file" id="simpleVideoFile" accept="video/*" style="display:none;" onchange="uploadSimpleFile('simpleVideoFile', 'simpleVideoUrl', 'video')" />
+            <input type="text" id="simpleVideoUrl" placeholder="or paste driving video URL (/files/... or https://...)" style="margin-top:8px;" oninput="syncSimpleVideoPreview()" />
+          </div>
+        </div>
+
+        <!-- Aspect Ratio Selector -->
+        <div class="form-group">
+          <div class="simple-section-head">
+            <label class="simple-label">Aspect Ratio</label>
+          </div>
+          <div class="simple-ratio-grid" id="simpleRatioGrid">
+            <button type="button" class="ratio-btn active" data-ratio="16:9" onclick="selectSimpleRatio('16:9')">
+              <span class="ratio-icon" style="width:18px;height:10px;"></span>16:9
+            </button>
+            <button type="button" class="ratio-btn" data-ratio="9:16" onclick="selectSimpleRatio('9:16')">
+              <span class="ratio-icon" style="width:10px;height:18px;"></span>9:16
+            </button>
+            <button type="button" class="ratio-btn" data-ratio="1:1" onclick="selectSimpleRatio('1:1')">
+              <span class="ratio-icon" style="width:14px;height:14px;"></span>1:1
+            </button>
+            <button type="button" class="ratio-btn" data-ratio="4:3" onclick="selectSimpleRatio('4:3')">
+              <span class="ratio-icon" style="width:16px;height:12px;"></span>4:3
+            </button>
+            <button type="button" class="ratio-btn" data-ratio="3:4" onclick="selectSimpleRatio('3:4')">
+              <span class="ratio-icon" style="width:12px;height:16px;"></span>3:4
+            </button>
+            <button type="button" class="ratio-btn" data-ratio="21:9" onclick="selectSimpleRatio('21:9')">
+              <span class="ratio-icon" style="width:20px;height:9px;"></span>21:9
+            </button>
+          </div>
+        </div>
+
+        <!-- Resolution & Duration / Count -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:13px;">
+          <div>
+            <label class="simple-label" for="simpleResolution" style="display:block;margin-bottom:5px;">Resolution</label>
+            <select id="simpleResolution" onchange="updateSimpleApiPreview()">
+              <option value="480P">480P (Fast)</option>
+              <option value="768P" selected>768P (Default)</option>
+              <option value="1080P">1080P (HD)</option>
+              <option value="2K">2K</option>
+              <option value="4K">4K</option>
+            </select>
+          </div>
+
+          <div id="simpleNumImagesGroup">
+            <label class="simple-label" style="display:block;margin-bottom:5px;">Images</label>
+            <div class="seg-pills" id="simpleNumImagesPills">
+              <button type="button" class="seg-pill active" data-num="1" onclick="selectSimpleNumImages(1)">1</button>
+              <button type="button" class="seg-pill" data-num="2" onclick="selectSimpleNumImages(2)">2</button>
+              <button type="button" class="seg-pill" data-num="3" onclick="selectSimpleNumImages(3)">3</button>
+              <button type="button" class="seg-pill" data-num="4" onclick="selectSimpleNumImages(4)">4</button>
+            </div>
+          </div>
+
+          <div id="simpleDurationGroup" style="display:none;">
+            <div class="simple-section-head" style="margin-bottom:5px;">
+              <label class="simple-label" for="simpleDuration">Duration (sec)</label>
+              <span id="simpleDurationHint" class="simple-hint"></span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <div class="seg-pills" id="simpleDurationPills">
+                <button type="button" class="seg-pill active" data-dur="3" onclick="selectSimpleDuration(3)">3s</button>
+                <button type="button" class="seg-pill" data-dur="5" onclick="selectSimpleDuration(5)">5s</button>
+                <button type="button" class="seg-pill" data-dur="8" onclick="selectSimpleDuration(8)">8s</button>
+              </div>
+              <input type="number" id="simpleDuration" value="3" min="1" max="15" step="1" style="width:66px;" oninput="onSimpleDurationInput()" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Stereo Audio (MiniMax H3 Video only) -->
+        <div class="form-group" id="simpleAudioGroup" style="display:none;">
+          <label class="toggle-row" for="simpleEnableAudio" style="cursor:pointer;">
+            <span>🎵 Native Stereo Audio</span>
+            <input type="checkbox" id="simpleEnableAudio" checked onchange="updateSimpleApiPreview()" style="width:16px;height:16px;accent-color:var(--accent);" />
+          </label>
+        </div>
+
+        <!-- Collapsible Additional Settings -->
+        <details class="simple-accordion" id="simpleAdvancedDetails">
+          <summary>
+            <span>Additional Settings</span>
+            <span class="simple-hint">Steps, CFG, Seed, Negative Prompt</span>
+          </summary>
+          <div class="simple-accordion-body">
+            <div class="form-group">
+              <label for="simpleNegativePrompt">Negative Prompt (optional)</label>
+              <input type="text" id="simpleNegativePrompt" placeholder="blurry, low quality, distorted..." oninput="updateSimpleApiPreview()" />
+            </div>
+            <div class="form-row" style="margin-bottom:0;">
+              <div>
+                <label style="font-size:11px;color:var(--text-1);" for="simpleSteps">Steps</label>
+                <input type="number" id="simpleSteps" placeholder="Auto" min="1" max="100" oninput="updateSimpleApiPreview()" />
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text-1);" for="simpleCfg">Guidance (CFG)</label>
+                <input type="number" id="simpleCfg" placeholder="Auto" min="0" max="20" step="0.5" oninput="updateSimpleApiPreview()" />
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text-1);" for="simpleSeed">Seed</label>
+                <div style="display:flex;gap:4px;">
+                  <input type="text" id="simpleSeed" placeholder="Random" oninput="updateSimpleApiPreview()" />
+                  <button type="button" class="btn-secondary" style="padding:6px 8px;" title="Randomize seed" onclick="randomizeSimpleSeed()">🎲</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <div class="simple-actions">
+          <button type="button" class="btn-secondary" onclick="resetSimpleForm()">Reset</button>
+          <button type="button" id="simpleCancelBtn" class="btn-secondary" style="display:none;border-color:rgba(244,63,94,0.45);color:#fda4af;" onclick="cancelSimpleInference()">Cancel</button>
+          <button type="button" id="simpleRunBtn" class="simple-run-btn" onclick="runSimpleInference()">▶ Run</button>
         </div>
       </div>
 
-      <div id="syntheticModeNotice" class="card" style="display:none;color:#fda4af;">Development mode: outputs are synthetic placeholders, not model inference. Unset OPENFAL_SYNTHETIC_FALLBACK and restart the server for real generation.</div>
+      <!-- Simple Right: Result / Logs / API + History -->
+      <div>
+        <div class="simple-panel">
+          <div class="simple-output-header">
+            <div class="output-subtabs">
+              <button type="button" class="output-subtab active" data-outtab="result" onclick="selectSimpleOutputTab('result')">Result</button>
+              <button type="button" class="output-subtab" data-outtab="logs" onclick="selectSimpleOutputTab('logs')">Logs</button>
+              <button type="button" class="output-subtab" data-outtab="api" onclick="selectSimpleOutputTab('api')">API</button>
+            </div>
+            <span id="simpleStatusBadge" class="pill">Ready</span>
+          </div>
+
+          <!-- Sub-tab: Result -->
+          <div id="simpleTabResult">
+            <div class="simple-stage" id="simpleMediaStage">
+              <div style="text-align:center;color:var(--text-1);padding:28px;max-width:380px;">
+                <div style="font-size:32px;margin-bottom:8px;">✨</div>
+                <p style="font-size:15px;font-weight:600;color:var(--text-0);margin-bottom:6px;">Ready to create</p>
+                <p style="font-size:12.5px;">Write a prompt on the left and click <b>Run</b>. Your generated image or video will appear here.</p>
+              </div>
+            </div>
+
+            <div class="simple-output-bar" id="simpleOutputActions" style="display:none;">
+              <a id="simpleDownloadLink" href="#" download class="btn-secondary" style="text-decoration:none;font-size:12px;padding:7px 12px;border-radius:8px;">⬇ Download</a>
+              <a id="simpleOpenLink" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;font-size:12px;padding:7px 12px;border-radius:8px;">↗ Open</a>
+              <button type="button" id="simpleToI2vBtn" class="btn-secondary" style="display:none;font-size:12px;padding:7px 12px;" onclick="reuseOutputAsInput('i2v')">🎞️ Animate (Image → Video)</button>
+              <button type="button" id="simpleToEditBtn" class="btn-secondary" style="display:none;font-size:12px;padding:7px 12px;" onclick="reuseOutputAsInput('i2i')">🪄 Edit Image</button>
+              <button type="button" id="simpleCopySeedBtn" class="btn-secondary" style="display:none;font-size:12px;padding:7px 12px;" onclick="applyLastSeed()">🎲 Use Seed</button>
+            </div>
+          </div>
+
+          <!-- Sub-tab: Logs -->
+          <div id="simpleTabLogs" style="display:none;">
+            <div class="log-box" id="simpleLogBox" style="max-height:440px;min-height:240px;">[openfal] Ready.</div>
+          </div>
+
+          <!-- Sub-tab: API -->
+          <div id="simpleTabApi" style="display:none;">
+            <div class="simple-section-head">
+              <span class="simple-label">@fal-ai/client (JavaScript)</span>
+              <button type="button" class="simple-link-btn" onclick="copySimpleSnippet('js')">Copy</button>
+            </div>
+            <pre class="code-snippet" id="simpleJsSnippet" style="margin-bottom:14px;"></pre>
+
+            <div class="simple-section-head">
+              <span class="simple-label">cURL</span>
+              <button type="button" class="simple-link-btn" onclick="copySimpleSnippet('curl')">Copy</button>
+            </div>
+            <pre class="code-snippet" id="simpleCurlSnippet"></pre>
+          </div>
+        </div>
+
+        <!-- Recent History Strip -->
+        <div class="simple-panel" id="simpleHistoryCard" style="margin-top:16px;display:none;">
+          <div class="simple-section-head" style="margin-bottom:8px;">
+            <span class="simple-label">Recent Generations</span>
+            <span class="simple-hint" id="simpleHistoryCount"></span>
+          </div>
+          <div class="simple-history-strip" id="simpleHistoryStrip"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!-- STUDIO VIEW (Existing Advanced Engineering & Telemetry Dashboard)   -->
+  <!-- =================================================================== -->
+  <main class="layout" id="studioView" style="display:none;">
+    <!-- Left Column: Task Playground -->
+    <section>
       <div class="card">
         <div class="card-title">
           <span>Multimodal Endpoint (Wan 2.2 MoE + Qwen-Image-2.1 + MiniMax-H3)</span>
@@ -535,30 +1282,1098 @@
   </main>
 
   <script>
+    // =========================================================================
+    // Shared & Studio State
+    // =========================================================================
     let currentEndpoint = "wan/v2.2/text-to-video";
     let currentPartition = "Wan2.2-T2V-A14B";
     let isSleeping = false;
+    let activeMainView = "simple";
+    let modelStatusMap = {};
+
+    const SIMPLE_MODELS = {
+      t2i: [
+        {
+          endpoint: "qwen/image-2.1/text-to-image",
+          name: "Qwen-Image-2.1 Turbo",
+          component: "qwen_image_21",
+          desc: "Fast 7B 8-step text-to-image generation with strong prompt & text rendering.",
+          example: "Editorial studio portrait of a ceramic tea vessel on warm travertine stone, soft morning window light, crisp shadows, 85mm lens.",
+        },
+        {
+          endpoint: "minimax/h3/text-to-image",
+          name: "MiniMax-H3 Image",
+          component: "h3-image",
+          desc: "33B 6-step PDD image model for photorealistic and cinematic compositions.",
+          example: "A cozy alpine wooden cabin glowing warmly at blue hour, snow-dusted pines, subtle mist in the valley, photorealistic.",
+        },
+      ],
+      t2v: [
+        {
+          endpoint: "wan/v2.2/text-to-video",
+          name: "Wan 2.2 MoE",
+          component: "wan22_t2v_moe",
+          desc: "Fast 27B-A14B two-expert MoE video generation (up to 5s at 16 fps).",
+          maxDuration: 5,
+          defaultDuration: 3,
+          example: "Cinematic tracking shot of a cyberpunk motorcyclist gliding through neon-lit rain at night, reflections on wet asphalt.",
+        },
+        {
+          endpoint: "minimax/h3-max/text-to-video",
+          name: "MiniMax-H3 (with Audio)",
+          component: "fl2va",
+          desc: "33B FL2VA video generation with synchronized native stereo audio.",
+          maxDuration: 15,
+          defaultDuration: 5,
+          hasAudio: true,
+          example: "Aerial drone shot flying over emerald ocean waves crashing on dramatic basalt cliffs at sunrise, crashing surf and wind audio.",
+        },
+      ],
+      i2v: [
+        {
+          endpoint: "wan/v2.2/image-to-video",
+          name: "Wan 2.2 MoE",
+          component: "wan22_i2v_moe",
+          desc: "Animate a starting image into smooth video motion (up to 5s at 16 fps).",
+          maxDuration: 5,
+          defaultDuration: 3,
+          imageLabel: "Start Image (Required)",
+          example: "Gentle camera push-in, subtle hair and fabric movement in a soft breeze, natural cinematic motion.",
+        },
+        {
+          endpoint: "minimax/h3/image-to-video",
+          name: "MiniMax-H3 (Start/End + Audio)",
+          component: "fl2va",
+          desc: "Animate a start frame (and optional end frame) with native stereo audio.",
+          maxDuration: 15,
+          defaultDuration: 5,
+          hasAudio: true,
+          allowEndImage: true,
+          imageLabel: "Start Frame (Required)",
+          example: "Smooth cinematic transition as the scene comes alive with natural ambient sound.",
+        },
+        {
+          endpoint: "minimax/h3-max/reference-to-video",
+          name: "MiniMax-H3 Omni Reference",
+          component: "ref2va",
+          desc: "Subject-consistent video generation using up to 9 reference images.",
+          maxDuration: 15,
+          defaultDuration: 5,
+          hasAudio: true,
+          useReferenceList: true,
+          allowExtraRefs: true,
+          imageLabel: "Primary Reference Image (Required)",
+          example: "The reference character walks confidently down a sunlit cobblestone street, cinematic handheld camera.",
+        },
+      ],
+      i2i: [
+        {
+          endpoint: "qwen/image-2.1/edit",
+          name: "Qwen-Image-2.1 Edit",
+          component: "qwen_image_21",
+          desc: "Edit lighting, style, outfits, or backgrounds using up to 10 reference images.",
+          useReferenceList: true,
+          allowExtraRefs: true,
+          imageLabel: "Input Image (Required)",
+          example: "Transform the scene into golden hour sunset lighting while keeping the subject's identity and composition intact.",
+        },
+        {
+          endpoint: "minimax/h3/image-to-image",
+          name: "MiniMax-H3 Image Edit",
+          component: "h3-image",
+          desc: "Reference-guided image editing, restyling, and portrait transformation.",
+          useReferenceList: true,
+          allowExtraRefs: true,
+          imageLabel: "Input Image (Required)",
+          example: "Restyle as a rich oil painting with expressive brushwork while preserving the subject.",
+        },
+      ],
+      animate: [
+        {
+          endpoint: "wan/v2.2/animate",
+          name: "Wan 2.2 Character Animation",
+          component: "wan22_animate",
+          desc: "Animate a character image using the pose and facial motion of a driving video.",
+          maxDuration: 15,
+          defaultDuration: 5,
+          needsVideo: true,
+          isWanAnimate: true,
+          imageLabel: "Character Identity Image (Required)",
+          example: "The character moves naturally following the driving performance, consistent appearance and realistic lighting.",
+        },
+        {
+          endpoint: "wan/v2.2/recast",
+          name: "Wan 2.2 Character Replacement",
+          component: "wan22_animate",
+          desc: "Replace the person in the driving video with your reference identity, preserving the background.",
+          maxDuration: 15,
+          defaultDuration: 5,
+          needsVideo: true,
+          isWanAnimate: true,
+          imageLabel: "Replacement Identity Image (Required)",
+          example: "The replacement character performs the exact motion in the original environment with realistic shadows.",
+        },
+        {
+          endpoint: "minimax/h3-max/recast",
+          name: "MiniMax-H3 Reference Recast",
+          component: "ref2va",
+          desc: "Generative video recast from a driving clip and optional identity reference.",
+          maxDuration: 15,
+          defaultDuration: 5,
+          hasAudio: true,
+          needsVideo: true,
+          isMinimaxRecast: true,
+          imageLabel: "Identity Reference Image (Optional)",
+          example: "Create a new shot inspired by the driving video with the reference character in warm cinematic lighting.",
+        },
+      ],
+    };
+
+    const simpleState = {
+      task: "t2i",
+      modelEndpoint: "qwen/image-2.1/text-to-image",
+      aspectRatio: "16:9",
+      numImages: 1,
+      duration: 3,
+      extraRefs: [],
+      running: false,
+      activeRequestId: null,
+      activeRequestEndpoint: null,
+      outputTab: "result",
+      lastOutputUrl: null,
+      lastOutputType: null,
+      lastSeed: null,
+      history: [],
+      timerHandle: null,
+    };
+
+    function getSavedView() {
+      try {
+        if (typeof localStorage !== "undefined") {
+          const saved = localStorage.getItem("openfal_active_view");
+          if (saved === "simple" || saved === "studio") return saved;
+        }
+      } catch (e) {}
+      return "simple";
+    }
+
+    function switchMainView(view) {
+      activeMainView = view === "studio" ? "studio" : "simple";
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("openfal_active_view", activeMainView);
+        }
+      } catch (e) {}
+
+      const simpleView = document.getElementById("simpleView");
+      const studioView = document.getElementById("studioView");
+      const simpleBtn = document.getElementById("tabBtnSimple");
+      const studioBtn = document.getElementById("tabBtnStudio");
+      const simpleHdr = document.getElementById("simpleHeaderControls");
+      const studioHdr = document.getElementById("studioHeaderControls");
+
+      if (simpleView) simpleView.style.display = activeMainView === "simple" ? "block" : "none";
+      if (studioView) studioView.style.display = activeMainView === "studio" ? "grid" : "none";
+      if (simpleHdr) simpleHdr.style.display = activeMainView === "simple" ? "flex" : "none";
+      if (studioHdr) studioHdr.style.display = activeMainView === "studio" ? "flex" : "none";
+
+      if (simpleBtn && simpleBtn.classList) {
+        simpleBtn.classList.toggle("active", activeMainView === "simple");
+        simpleBtn.setAttribute("aria-selected", String(activeMainView === "simple"));
+      }
+      if (studioBtn && studioBtn.classList) {
+        studioBtn.classList.toggle("active", activeMainView === "studio");
+        studioBtn.setAttribute("aria-selected", String(activeMainView === "studio"));
+      }
+    }
+
+    function updateSharedBannersVisibility() {
+      const banners = document.getElementById("sharedBanners");
+      const hub = document.getElementById("modelHubPanel");
+      const syn = document.getElementById("syntheticModeNotice");
+      if (!banners) return;
+      const show = (hub && hub.style.display !== "none") || (syn && syn.style.display !== "none");
+      banners.style.display = show ? "block" : "none";
+    }
 
     async function initStudio() {
-      const healthRes = await fetch("/health");
-      const health = await healthRes.json();
-      document.getElementById("syntheticModeNotice").style.display = health.synthetic_mode ? "block" : "none";
-      const profRes = await fetch("/v1/engine/profiles");
-      const profData = await profRes.json();
-      const sel = document.getElementById("profileSelect");
-      sel.innerHTML = "";
-      for (const p of profData.profiles) {
-        const opt = document.createElement("option");
-        opt.value = p.profile_id;
-        opt.textContent = `${p.display_name} [${p.quantization}]`;
-        if (p.profile_id === profData.active_profile_id) opt.selected = true;
-        sel.appendChild(opt);
-      }
+      switchMainView(getSavedView());
+      initSimplePlayground();
+
+      try {
+        const healthRes = await fetch("/health");
+        const health = await healthRes.json();
+        document.getElementById("syntheticModeNotice").style.display = health.synthetic_mode ? "block" : "none";
+        updateSharedBannersVisibility();
+      } catch (e) {}
+
+      try {
+        const profRes = await fetch("/v1/engine/profiles");
+        const profData = await profRes.json();
+        const sel = document.getElementById("profileSelect");
+        sel.innerHTML = "";
+        for (const p of profData.profiles) {
+          const opt = document.createElement("option");
+          opt.value = p.profile_id;
+          opt.textContent = `${p.display_name} [${p.quantization}]`;
+          if (p.profile_id === profData.active_profile_id) opt.selected = true;
+          sel.appendChild(opt);
+        }
+      } catch (e) {}
+
       updateCodeSnippet();
-      await refreshTelemetry();
+      await Promise.all([refreshTelemetry(), refreshModelReadiness(), loadSimpleHistory()]);
       setInterval(refreshTelemetry, 1200);
     }
 
+    // =========================================================================
+    // Simple Mode Logic
+    // =========================================================================
+    function getSimpleModelMeta(task = simpleState.task, endpoint = simpleState.modelEndpoint) {
+      const list = SIMPLE_MODELS[task] || [];
+      return list.find(m => m.endpoint === endpoint) || list[0];
+    }
+
+    function initSimplePlayground() {
+      selectSimpleTask(simpleState.task, { preservePrompt: true });
+    }
+
+    function selectSimpleTask(task, opts = {}) {
+      if (!SIMPLE_MODELS[task]) return;
+      simpleState.task = task;
+
+      document.querySelectorAll(".simple-task-pill").forEach(btn => {
+        if (btn.classList) btn.classList.toggle("active", btn.getAttribute("data-simple-task") === task);
+      });
+
+      const models = SIMPLE_MODELS[task];
+      const sel = document.getElementById("simpleModelSelect");
+      if (sel) {
+        sel.innerHTML = "";
+        for (const m of models) {
+          const opt = document.createElement("option");
+          opt.value = m.endpoint;
+          const status = modelStatusMap[m.component];
+          const suffix = status ? (status.installed ? " (Ready)" : " (Weights missing)") : "";
+          opt.textContent = `${m.name}${suffix}`;
+          sel.appendChild(opt);
+        }
+        if (opts.preferredEndpoint && models.some(m => m.endpoint === opts.preferredEndpoint)) {
+          sel.value = opts.preferredEndpoint;
+        }
+        simpleState.modelEndpoint = sel.value || models[0].endpoint;
+      } else {
+        simpleState.modelEndpoint = models[0].endpoint;
+      }
+
+      const promptEl = document.getElementById("simplePrompt");
+      if (promptEl && !opts.preservePrompt && !promptEl.value.trim()) {
+        const meta = getSimpleModelMeta();
+        if (meta && meta.example) promptEl.placeholder = meta.example;
+      }
+      onSimpleModelChange();
+    }
+
+    function onSimpleModelChange() {
+      const sel = document.getElementById("simpleModelSelect");
+      if (sel && sel.value) simpleState.modelEndpoint = sel.value;
+      const meta = getSimpleModelMeta();
+      if (!meta) return;
+
+      const isVideoTask = simpleState.task === "t2v" || simpleState.task === "i2v" || simpleState.task === "animate";
+      const needsMedia = simpleState.task === "i2v" || simpleState.task === "i2i" || simpleState.task === "animate";
+
+      const descEl = document.getElementById("simpleModelDesc");
+      if (descEl) descEl.textContent = meta.desc || "";
+
+      const promptEl = document.getElementById("simplePrompt");
+      if (promptEl && meta.example) promptEl.placeholder = meta.example;
+
+      const mediaSection = document.getElementById("simpleMediaInputs");
+      if (mediaSection) mediaSection.style.display = needsMedia ? "block" : "none";
+
+      const imgLabel = document.getElementById("simpleImageLabel");
+      if (imgLabel) imgLabel.textContent = meta.imageLabel || "Input Image";
+
+      const endGroup = document.getElementById("simpleEndImageGroup");
+      if (endGroup) endGroup.style.display = meta.allowEndImage ? "block" : "none";
+
+      const extraRefsGroup = document.getElementById("simpleExtraRefsGroup");
+      if (extraRefsGroup) extraRefsGroup.style.display = meta.allowExtraRefs ? "block" : "none";
+
+      const videoGroup = document.getElementById("simpleVideoGroup");
+      if (videoGroup) videoGroup.style.display = meta.needsVideo ? "block" : "none";
+
+      const numImagesGroup = document.getElementById("simpleNumImagesGroup");
+      if (numImagesGroup) numImagesGroup.style.display = isVideoTask ? "none" : "block";
+
+      const durationGroup = document.getElementById("simpleDurationGroup");
+      if (durationGroup) durationGroup.style.display = isVideoTask ? "block" : "none";
+
+      const audioGroup = document.getElementById("simpleAudioGroup");
+      if (audioGroup) audioGroup.style.display = meta.hasAudio ? "block" : "none";
+
+      if (isVideoTask) {
+        const maxDur = meta.maxDuration || 15;
+        const durInput = document.getElementById("simpleDuration");
+        const durHint = document.getElementById("simpleDurationHint");
+        if (durInput) {
+          durInput.max = String(maxDur);
+          const curDur = parseFloat(durInput.value || String(meta.defaultDuration || 3));
+          if (curDur > maxDur) {
+            selectSimpleDuration(maxDur);
+          } else if (!durInput.value) {
+            selectSimpleDuration(meta.defaultDuration || 3);
+          }
+        }
+        if (durHint) durHint.textContent = maxDur <= 5 ? `Max ${maxDur}s` : `1–${maxDur}s`;
+        const pillsBox = document.getElementById("simpleDurationPills");
+        if (pillsBox && pillsBox.querySelectorAll) {
+          const choices = maxDur <= 5 ? [2, 3, 5] : [3, 5, 8];
+          const buttons = pillsBox.querySelectorAll("button");
+          buttons.forEach((b, idx) => {
+            if (choices[idx] !== undefined) {
+              b.setAttribute("data-dur", String(choices[idx]));
+              b.textContent = `${choices[idx]}s`;
+              b.setAttribute("onclick", `selectSimpleDuration(${choices[idx]})`);
+            }
+          });
+          syncDurationPills();
+        }
+      }
+
+      updateSimpleModelStatusBadge();
+      updateSimpleApiPreview();
+    }
+
+    function updateSimpleModelStatusBadge() {
+      const badge = document.getElementById("simpleModelStatusBadge");
+      const meta = getSimpleModelMeta();
+      if (!badge || !meta) return;
+      const st = modelStatusMap[meta.component];
+      if (!st) {
+        badge.className = "pill";
+        badge.textContent = "Checking...";
+        return;
+      }
+      if (st.installed) {
+        badge.className = "pill pill-ok";
+        badge.textContent = "● Ready";
+      } else {
+        badge.className = "pill pill-warn";
+        badge.textContent = "○ Weights missing";
+      }
+    }
+
+    async function refreshModelReadiness() {
+      try {
+        const res = await fetch("/v1/models/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        const nextMap = {};
+        let readyCount = 0;
+        const components = data.components || [];
+        for (const c of components) {
+          nextMap[c.component_id] = c;
+          if (c.installed) readyCount++;
+        }
+        modelStatusMap = nextMap;
+        const hwPill = document.getElementById("simpleHwPill");
+        if (hwPill && components.length) {
+          hwPill.style.display = "inline-block";
+          hwPill.textContent = `${readyCount}/${components.length} models installed`;
+        }
+        // Refresh labels in dropdown to include status
+        const sel = document.getElementById("simpleModelSelect");
+        if (sel && sel.options) {
+          const models = SIMPLE_MODELS[simpleState.task] || [];
+          for (let i = 0; i < models.length && i < sel.options.length; i++) {
+            const st = modelStatusMap[models[i].component];
+            const suffix = st ? (st.installed ? " (Ready)" : " (Weights missing)") : "";
+            sel.options[i].textContent = `${models[i].name}${suffix}`;
+          }
+        }
+        updateSimpleModelStatusBadge();
+      } catch (e) {}
+    }
+
+    function fillSimpleExample() {
+      const meta = getSimpleModelMeta();
+      const promptEl = document.getElementById("simplePrompt");
+      if (promptEl && meta && meta.example) {
+        promptEl.value = meta.example;
+        updateSimpleApiPreview();
+      }
+    }
+
+    function clearSimplePrompt() {
+      const promptEl = document.getElementById("simplePrompt");
+      if (promptEl) {
+        promptEl.value = "";
+        updateSimpleApiPreview();
+      }
+    }
+
+    function selectSimpleRatio(ratio) {
+      simpleState.aspectRatio = ratio;
+      document.querySelectorAll("#simpleRatioGrid .ratio-btn").forEach(btn => {
+        if (btn.classList) btn.classList.toggle("active", btn.getAttribute("data-ratio") === ratio);
+      });
+      updateSimpleApiPreview();
+    }
+
+    function selectSimpleNumImages(n) {
+      simpleState.numImages = n;
+      document.querySelectorAll("#simpleNumImagesPills .seg-pill").forEach(btn => {
+        if (btn.classList) btn.classList.toggle("active", Number(btn.getAttribute("data-num")) === n);
+      });
+      updateSimpleApiPreview();
+    }
+
+    function syncDurationPills() {
+      const val = parseFloat(document.getElementById("simpleDuration").value || String(simpleState.duration));
+      document.querySelectorAll("#simpleDurationPills .seg-pill").forEach(btn => {
+        if (btn.classList) btn.classList.toggle("active", Number(btn.getAttribute("data-dur")) === val);
+      });
+    }
+
+    function selectSimpleDuration(sec) {
+      simpleState.duration = sec;
+      const input = document.getElementById("simpleDuration");
+      if (input) input.value = String(sec);
+      syncDurationPills();
+      updateSimpleApiPreview();
+    }
+
+    function onSimpleDurationInput() {
+      const input = document.getElementById("simpleDuration");
+      if (input) simpleState.duration = parseFloat(input.value || "3");
+      syncDurationPills();
+      updateSimpleApiPreview();
+    }
+
+    function randomizeSimpleSeed() {
+      const seedEl = document.getElementById("simpleSeed");
+      if (seedEl) {
+        seedEl.value = String(Math.floor(Math.random() * 2147483647) + 1);
+        updateSimpleApiPreview();
+      }
+    }
+
+    function handleSimpleDragOver(evt, zoneId) {
+      evt.preventDefault();
+      const zone = document.getElementById(zoneId);
+      if (zone && zone.classList) zone.classList.add("dragover");
+    }
+
+    function handleSimpleDragLeave(evt, zoneId) {
+      const zone = document.getElementById(zoneId);
+      if (zone && zone.classList) zone.classList.remove("dragover");
+    }
+
+    async function handleSimpleDrop(evt, kind) {
+      evt.preventDefault();
+      const zoneId = kind === "video" ? "simpleVideoDropzone" : "simpleImageDropzone";
+      const zone = document.getElementById(zoneId);
+      if (zone && zone.classList) zone.classList.remove("dragover");
+      const files = evt.dataTransfer && evt.dataTransfer.files;
+      if (!files || !files.length) return;
+      const file = files[0];
+      if (kind === "video") {
+        await uploadRawFileToField(file, "simpleVideoUrl", "video", file.name);
+      } else {
+        await uploadRawFileToField(file, "simpleImageUrl", "image", file.name);
+      }
+    }
+
+    async function uploadSimpleFile(inputId, urlId, kind) {
+      const input = document.getElementById(inputId);
+      if (!input || !input.files || !input.files.length) return;
+      const file = input.files[0];
+      await uploadRawFileToField(file, urlId, kind, file.name);
+      input.value = "";
+    }
+
+    async function uploadRawFileToField(file, urlId, kind, labelName) {
+      const logEl = document.getElementById("simpleLogBox");
+      try {
+        const res = await fetch("/v1/storage/upload", {
+          method: "POST",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.detail || "Upload failed");
+        const field = document.getElementById(urlId);
+        if (field) field.value = data.url;
+        if (kind === "image") syncSimpleImagePreview(labelName || data.file_name);
+        if (kind === "video") syncSimpleVideoPreview(labelName || data.file_name);
+        if (kind === "endImage") syncSimpleEndPreview();
+        updateSimpleApiPreview();
+      } catch (err) {
+        if (logEl) logEl.textContent += `[ERROR] Upload failed: ${err.message}\n`;
+        setSimpleStatus(`Upload error: ${err.message}`, "err");
+      }
+    }
+
+    async function uploadSimpleExtraRef() {
+      const input = document.getElementById("simpleExtraRefFile");
+      if (!input || !input.files || !input.files.length) return;
+      const file = input.files[0];
+      try {
+        const res = await fetch("/v1/storage/upload", {
+          method: "POST",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.detail || "Upload failed");
+        simpleState.extraRefs.push({ url: data.url, name: file.name || data.file_name || "ref" });
+        renderSimpleExtraRefs();
+        updateSimpleApiPreview();
+      } catch (err) {
+        setSimpleStatus(`Upload error: ${err.message}`, "err");
+      } finally {
+        input.value = "";
+      }
+    }
+
+    function removeSimpleExtraRef(idx) {
+      simpleState.extraRefs.splice(idx, 1);
+      renderSimpleExtraRefs();
+      updateSimpleApiPreview();
+    }
+
+    function renderSimpleExtraRefs() {
+      const box = document.getElementById("simpleExtraRefsList");
+      if (!box) return;
+      box.innerHTML = "";
+      simpleState.extraRefs.forEach((item, idx) => {
+        const chip = document.createElement("div");
+        chip.className = "ref-chip";
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.name;
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = item.name;
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "simple-link-btn";
+        delBtn.style.color = "var(--rose)";
+        delBtn.textContent = "×";
+        delBtn.onclick = () => removeSimpleExtraRef(idx);
+        chip.append(img, nameSpan, delBtn);
+        box.appendChild(chip);
+      });
+    }
+
+    function syncSimpleImagePreview(customName) {
+      const url = (document.getElementById("simpleImageUrl").value || "").trim();
+      const emptyEl = document.getElementById("simpleImageDropEmpty");
+      const prevEl = document.getElementById("simpleImageDropPreview");
+      const thumbEl = document.getElementById("simpleImageThumb");
+      const nameEl = document.getElementById("simpleImageName");
+      const clearBtn = document.getElementById("simpleClearImgBtn");
+
+      if (url) {
+        if (emptyEl) emptyEl.style.display = "none";
+        if (prevEl) prevEl.style.display = "flex";
+        if (thumbEl) thumbEl.src = url;
+        if (nameEl) nameEl.textContent = customName || url.split("/").pop() || url;
+        if (clearBtn) clearBtn.style.display = "inline-block";
+      } else {
+        if (emptyEl) emptyEl.style.display = "block";
+        if (prevEl) prevEl.style.display = "none";
+        if (thumbEl) thumbEl.src = "";
+        if (clearBtn) clearBtn.style.display = "none";
+      }
+      updateSimpleApiPreview();
+    }
+
+    function clearSimplePrimaryImage() {
+      const urlEl = document.getElementById("simpleImageUrl");
+      if (urlEl) urlEl.value = "";
+      syncSimpleImagePreview();
+    }
+
+    function syncSimpleEndPreview() {
+      const url = (document.getElementById("simpleEndImageUrl").value || "").trim();
+      const clearBtn = document.getElementById("simpleClearEndBtn");
+      if (clearBtn) clearBtn.style.display = url ? "inline-block" : "none";
+      updateSimpleApiPreview();
+    }
+
+    function clearSimpleEndImage() {
+      const el = document.getElementById("simpleEndImageUrl");
+      if (el) el.value = "";
+      syncSimpleEndPreview();
+    }
+
+    function syncSimpleVideoPreview(customName) {
+      const url = (document.getElementById("simpleVideoUrl").value || "").trim();
+      const emptyEl = document.getElementById("simpleVideoDropEmpty");
+      const prevEl = document.getElementById("simpleVideoDropPreview");
+      const thumbEl = document.getElementById("simpleVideoThumb");
+      const nameEl = document.getElementById("simpleVideoName");
+      const clearBtn = document.getElementById("simpleClearVidBtn");
+
+      if (url) {
+        if (emptyEl) emptyEl.style.display = "none";
+        if (prevEl) prevEl.style.display = "flex";
+        if (thumbEl) thumbEl.src = url;
+        if (nameEl) nameEl.textContent = customName || url.split("/").pop() || url;
+        if (clearBtn) clearBtn.style.display = "inline-block";
+      } else {
+        if (emptyEl) emptyEl.style.display = "block";
+        if (prevEl) prevEl.style.display = "none";
+        if (thumbEl) thumbEl.src = "";
+        if (clearBtn) clearBtn.style.display = "none";
+      }
+      updateSimpleApiPreview();
+    }
+
+    function clearSimpleVideo() {
+      const el = document.getElementById("simpleVideoUrl");
+      if (el) el.value = "";
+      syncSimpleVideoPreview();
+    }
+
+    function buildSimplePayload() {
+      const meta = getSimpleModelMeta();
+      const ep = meta ? meta.endpoint : simpleState.modelEndpoint;
+      const isVideoTask = simpleState.task === "t2v" || simpleState.task === "i2v" || simpleState.task === "animate";
+
+      const promptVal = (document.getElementById("simplePrompt").value || "").trim();
+      const payload = {
+        prompt: promptVal || (meta && meta.example) || "Cinematic high-definition shot, natural lighting",
+        resolution: document.getElementById("simpleResolution").value || "768P",
+        aspect_ratio: simpleState.aspectRatio || "16:9",
+      };
+
+      if (isVideoTask) {
+        const durEl = document.getElementById("simpleDuration");
+        payload.duration = parseFloat((durEl && durEl.value) || String(simpleState.duration || 3));
+      } else {
+        payload.num_images = simpleState.numImages || 1;
+      }
+
+      if (meta && meta.hasAudio) {
+        const audioEl = document.getElementById("simpleEnableAudio");
+        payload.enable_audio = audioEl ? Boolean(audioEl.checked) : true;
+      }
+
+      const neg = (document.getElementById("simpleNegativePrompt").value || "").trim();
+      if (neg) payload.negative_prompt = neg;
+      const steps = (document.getElementById("simpleSteps").value || "").trim();
+      if (steps) payload.num_inference_steps = parseInt(steps, 10);
+      const cfg = (document.getElementById("simpleCfg").value || "").trim();
+      if (cfg) payload.guidance_scale = parseFloat(cfg);
+      const seed = (document.getElementById("simpleSeed").value || "").trim();
+      if (seed) payload.seed = parseInt(seed, 10);
+
+      const primaryImg = (document.getElementById("simpleImageUrl").value || "").trim();
+      const endImg = (document.getElementById("simpleEndImageUrl").value || "").trim();
+      const drivingVid = (document.getElementById("simpleVideoUrl").value || "").trim();
+
+      if (meta && meta.isWanAnimate) {
+        if (primaryImg) payload.face_image_url = primaryImg;
+        if (drivingVid) payload.driving_video_url = drivingVid;
+      } else if (meta && meta.isMinimaxRecast) {
+        if (primaryImg) {
+          payload.face_image_url = primaryImg;
+          payload.reference_image_urls = [primaryImg];
+        }
+        if (drivingVid) payload.target_video_url = drivingVid;
+      } else if (meta && meta.useReferenceList) {
+        const refs = [];
+        if (primaryImg) refs.push(primaryImg);
+        for (const r of simpleState.extraRefs) {
+          if (r.url && !refs.includes(r.url)) refs.push(r.url);
+        }
+        if (refs.length) payload.reference_image_urls = refs;
+      } else if (simpleState.task === "i2v") {
+        if (primaryImg) payload.start_image_url = primaryImg;
+        if (endImg && meta && meta.allowEndImage) payload.end_image_url = endImg;
+      }
+
+      return { endpoint: ep, payload, meta };
+    }
+
+    function updateSimpleApiPreview() {
+      const jsBox = document.getElementById("simpleJsSnippet");
+      const curlBox = document.getElementById("simpleCurlSnippet");
+      if (!jsBox && !curlBox) return;
+      const { endpoint, payload } = buildSimplePayload();
+      const origin = window.location.origin;
+      if (jsBox) {
+        jsBox.textContent = `import { fal } from "@fal-ai/client";
+fal.config({ proxyUrl: "${origin}" });
+
+const result = await fal.subscribe("${endpoint}", {
+  input: ${JSON.stringify(payload, null, 2)}
+});`;
+      }
+      if (curlBox) {
+        curlBox.textContent = `curl -X POST "${origin}/${endpoint}" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify(payload)}'`;
+      }
+    }
+
+    function copySimpleSnippet(kind) {
+      const id = kind === "curl" ? "simpleCurlSnippet" : "simpleJsSnippet";
+      const el = document.getElementById(id);
+      if (!el || typeof navigator === "undefined" || !navigator.clipboard) return;
+      navigator.clipboard.writeText(el.textContent || "");
+      setSimpleStatus("Copied to clipboard", "ok");
+    }
+
+    function selectSimpleOutputTab(tab) {
+      simpleState.outputTab = tab;
+      document.querySelectorAll(".output-subtab").forEach(btn => {
+        if (btn.classList) btn.classList.toggle("active", btn.getAttribute("data-outtab") === tab);
+      });
+      const r = document.getElementById("simpleTabResult");
+      const l = document.getElementById("simpleTabLogs");
+      const a = document.getElementById("simpleTabApi");
+      if (r) r.style.display = tab === "result" ? "block" : "none";
+      if (l) l.style.display = tab === "logs" ? "block" : "none";
+      if (a) a.style.display = tab === "api" ? "block" : "none";
+    }
+
+    function setSimpleStatus(text, tone = "info") {
+      const badge = document.getElementById("simpleStatusBadge");
+      if (!badge) return;
+      badge.textContent = text;
+      if (tone === "ok") badge.className = "pill pill-ok";
+      else if (tone === "warn") badge.className = "pill pill-warn";
+      else if (tone === "err") badge.className = "pill pill-err";
+      else badge.className = "pill";
+    }
+
+    function resetSimpleForm() {
+      if (simpleState.running) return;
+      document.getElementById("simplePrompt").value = "";
+      document.getElementById("simpleNegativePrompt").value = "";
+      document.getElementById("simpleSteps").value = "";
+      document.getElementById("simpleCfg").value = "";
+      document.getElementById("simpleSeed").value = "";
+      document.getElementById("simpleResolution").value = "768P";
+      simpleState.extraRefs = [];
+      renderSimpleExtraRefs();
+      clearSimplePrimaryImage();
+      clearSimpleEndImage();
+      clearSimpleVideo();
+      selectSimpleRatio("16:9");
+      selectSimpleNumImages(1);
+      const meta = getSimpleModelMeta();
+      selectSimpleDuration((meta && meta.defaultDuration) || 3);
+      updateSimpleApiPreview();
+    }
+
+    function renderSimpleResult(out) {
+      const stage = document.getElementById("simpleMediaStage");
+      const actions = document.getElementById("simpleOutputActions");
+      const dl = document.getElementById("simpleDownloadLink");
+      const openLink = document.getElementById("simpleOpenLink");
+      const toI2vBtn = document.getElementById("simpleToI2vBtn");
+      const toEditBtn = document.getElementById("simpleToEditBtn");
+      const copySeedBtn = document.getElementById("simpleCopySeedBtn");
+      if (!stage) return;
+
+      let primaryUrl = null;
+      let mediaType = null;
+
+      if (out.video && out.video.url) {
+        primaryUrl = out.video.url;
+        mediaType = "video";
+        stage.innerHTML = `<video src="${primaryUrl}" controls autoplay loop playsinline></video>`;
+      } else if (out.images && out.images.length) {
+        primaryUrl = out.images[0].url;
+        mediaType = "image";
+        if (out.images.length === 1) {
+          stage.innerHTML = `<img src="${primaryUrl}" alt="Generated Image" />`;
+        } else {
+          const grid = document.createElement("div");
+          grid.className = "simple-image-grid";
+          out.images.forEach((im, idx) => {
+            const img = document.createElement("img");
+            img.src = im.url;
+            img.alt = `Generated Image ${idx + 1}`;
+            img.title = "Click to open full size";
+            img.onclick = () => {
+              if (dl) dl.href = im.url;
+              if (openLink) openLink.href = im.url;
+              simpleState.lastOutputUrl = im.url;
+            };
+            grid.appendChild(img);
+          });
+          stage.innerHTML = "";
+          stage.appendChild(grid);
+        }
+      }
+
+      simpleState.lastOutputUrl = primaryUrl;
+      simpleState.lastOutputType = mediaType;
+      simpleState.lastSeed = out.seed !== undefined ? out.seed : null;
+
+      if (actions) actions.style.display = primaryUrl ? "flex" : "none";
+      if (dl && primaryUrl) {
+        dl.href = primaryUrl;
+        dl.download = (out.video && out.video.file_name) || (out.images && out.images[0] && out.images[0].file_name) || "openfal-output";
+      }
+      if (openLink && primaryUrl) openLink.href = primaryUrl;
+      if (toI2vBtn) toI2vBtn.style.display = mediaType === "image" ? "inline-block" : "none";
+      if (toEditBtn) toEditBtn.style.display = mediaType === "image" ? "inline-block" : "none";
+      if (copySeedBtn) copySeedBtn.style.display = simpleState.lastSeed !== null ? "inline-block" : "none";
+    }
+
+    function reuseOutputAsInput(targetTask) {
+      if (!simpleState.lastOutputUrl || simpleState.lastOutputType !== "image") return;
+      const url = simpleState.lastOutputUrl;
+      selectSimpleTask(targetTask, { preservePrompt: true });
+      const imgUrlEl = document.getElementById("simpleImageUrl");
+      if (imgUrlEl) {
+        imgUrlEl.value = url;
+        syncSimpleImagePreview("generated.png");
+      }
+    }
+
+    function applyLastSeed() {
+      if (simpleState.lastSeed === null) return;
+      const seedEl = document.getElementById("simpleSeed");
+      if (seedEl) {
+        seedEl.value = String(simpleState.lastSeed);
+        const details = document.getElementById("simpleAdvancedDetails");
+        if (details) details.open = true;
+        updateSimpleApiPreview();
+        setSimpleStatus(`Seed ${simpleState.lastSeed} applied`, "ok");
+      }
+    }
+
+    function addSimpleHistoryItem(item) {
+      if (!item || (!item.url && !(item.result && (item.result.video || (item.result.images && item.result.images.length))))) return;
+      const key = item.request_id || item.url;
+      simpleState.history = [item, ...simpleState.history.filter(x => (x.request_id || x.url) !== key)].slice(0, 12);
+      renderSimpleHistory();
+    }
+
+    function renderSimpleHistory() {
+      const card = document.getElementById("simpleHistoryCard");
+      const strip = document.getElementById("simpleHistoryStrip");
+      const count = document.getElementById("simpleHistoryCount");
+      if (!card || !strip) return;
+      if (!simpleState.history.length) {
+        card.style.display = "none";
+        return;
+      }
+      card.style.display = "block";
+      if (count) count.textContent = `${simpleState.history.length} recent`;
+      strip.innerHTML = "";
+      simpleState.history.forEach(item => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "history-thumb";
+        const out = item.result || {};
+        const isVid = Boolean(out.video && out.video.url);
+        const mediaUrl = isVid ? out.video.url : (out.images && out.images[0] && out.images[0].url) || item.url;
+        if (isVid) {
+          const v = document.createElement("video");
+          v.className = "history-thumb-media";
+          v.src = mediaUrl;
+          v.muted = true;
+          btn.appendChild(v);
+        } else {
+          const im = document.createElement("img");
+          im.className = "history-thumb-media";
+          im.src = mediaUrl;
+          im.alt = item.prompt || "output";
+          btn.appendChild(im);
+        }
+        const title = document.createElement("div");
+        title.className = "history-thumb-title";
+        title.textContent = item.prompt || item.endpoint_id || "Generation";
+        btn.appendChild(title);
+        btn.onclick = () => {
+          renderSimpleResult(out);
+          selectSimpleOutputTab("result");
+          const sec = out.timings && out.timings.inference ? `${out.timings.inference}s` : "";
+          setSimpleStatus(`Loaded${sec ? ` (${sec})` : ""}${out.seed ? ` • Seed ${out.seed}` : ""}`, "ok");
+        };
+        strip.appendChild(btn);
+      });
+    }
+
+    async function loadSimpleHistory() {
+      try {
+        const res = await fetch("/v1/jobs");
+        if (!res.ok) return;
+        const data = await res.json();
+        const completed = (data.jobs || []).filter(j => j.status === "COMPLETED" && j.result);
+        simpleState.history = completed.slice(0, 12);
+        renderSimpleHistory();
+      } catch (e) {}
+    }
+
+    async function cancelSimpleInference() {
+      if (!simpleState.activeRequestId || !simpleState.activeRequestEndpoint) return;
+      try {
+        await fetch(`/${simpleState.activeRequestEndpoint}/requests/${simpleState.activeRequestId}/cancel`, {
+          method: "PUT",
+        });
+        setSimpleStatus("Cancelling...", "warn");
+      } catch (e) {}
+    }
+
+    async function runSimpleInference() {
+      if (simpleState.running) return;
+      const runBtn = document.getElementById("simpleRunBtn");
+      const cancelBtn = document.getElementById("simpleCancelBtn");
+      const logBox = document.getElementById("simpleLogBox");
+      const stage = document.getElementById("simpleMediaStage");
+
+      const { endpoint, payload, meta } = buildSimplePayload();
+
+      // Client-side validation matching backend rules
+      if (meta && meta.isWanAnimate && (!payload.face_image_url || !payload.driving_video_url)) {
+        setSimpleStatus("Image & driving video required", "err");
+        if (logBox) logBox.textContent += "[ERROR] Please provide both a character identity image and a driving video.\n";
+        return;
+      }
+      if (meta && meta.isMinimaxRecast && !payload.target_video_url) {
+        setSimpleStatus("Driving video required", "err");
+        if (logBox) logBox.textContent += "[ERROR] Please provide a driving video.\n";
+        return;
+      }
+      if ((simpleState.task === "i2v" || simpleState.task === "i2i") &&
+          !payload.start_image_url && !(payload.reference_image_urls && payload.reference_image_urls.length)) {
+        setSimpleStatus("Input image required", "err");
+        if (logBox) logBox.textContent += "[ERROR] Please upload or paste an input image first.\n";
+        return;
+      }
+
+      simpleState.running = true;
+      simpleState.activeRequestId = null;
+      simpleState.activeRequestEndpoint = endpoint;
+      const startedAt = Date.now();
+
+      if (runBtn) {
+        runBtn.disabled = true;
+        runBtn.textContent = "Generating... 0.0s";
+      }
+      if (cancelBtn) cancelBtn.style.display = "inline-block";
+      if (logBox) logBox.textContent = `[openfal] Submitting to /queue/${endpoint}...\n`;
+      selectSimpleOutputTab("result");
+      setSimpleStatus("Submitting...", "info");
+
+      const renderLoading = (msg) => {
+        if (!stage) return;
+        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+        if (runBtn) runBtn.textContent = `Generating... ${elapsed}s`;
+        stage.innerHTML = `
+          <div style="text-align:center;color:var(--text-1);padding:24px;max-width:420px;">
+            <div class="simple-spinner"></div>
+            <div style="font-size:14px;font-weight:600;color:var(--text-0);margin-bottom:6px;">Generating with ${meta ? meta.name : endpoint}</div>
+            <div style="font-size:12px;color:var(--accent);margin-bottom:6px;">${elapsed}s elapsed</div>
+            <div style="font-size:11.5px;color:var(--text-1);">${msg || "Preparing model..."}</div>
+          </div>
+        `;
+      };
+
+      renderLoading("Queued...");
+      simpleState.timerHandle = setInterval(() => {
+        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+        if (runBtn) runBtn.textContent = `Generating... ${elapsed}s`;
+      }, 200);
+
+      try {
+        const submitRes = await fetch(`/queue/${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const job = await submitRes.json();
+        if (!submitRes.ok || !job.request_id) {
+          throw new Error(job.detail || job.error || "Generation submission failed.");
+        }
+        simpleState.activeRequestId = job.request_id;
+        setSimpleStatus("In Queue", "info");
+
+        let seenLogs = 0;
+        let lastMsg = "Queued...";
+        while (true) {
+          const stRes = await fetch(`/${endpoint}/requests/${job.request_id}/status?logs=1`);
+          const st = await stRes.json();
+          if (!stRes.ok) throw new Error(st.detail || st.error || "Status polling failed.");
+          const logs = st.logs || [];
+          while (seenLogs < logs.length) {
+            lastMsg = logs[seenLogs].message;
+            if (logBox) {
+              logBox.textContent += `${lastMsg}\n`;
+              logBox.scrollTop = logBox.scrollHeight;
+            }
+            seenLogs++;
+          }
+          if (st.status === "IN_PROGRESS") {
+            setSimpleStatus("Generating", "info");
+            renderLoading(lastMsg);
+          }
+          if (st.status === "COMPLETED") break;
+          if (st.status === "CANCELLED") {
+            throw new Error("Cancelled by user");
+          }
+          if (st.status === "FAILED") {
+            throw new Error(st.error || st.status);
+          }
+          await new Promise(r => setTimeout(r, 180));
+        }
+
+        const finalRes = await fetch(`/${endpoint}/requests/${job.request_id}`);
+        const out = await finalRes.json();
+        if (!finalRes.ok) throw new Error(out.detail || out.error || "Could not read result.");
+
+        const synthetic = out.strata_engine && out.strata_engine.mode === "synthetic";
+        const secs = out.timings && out.timings.inference !== undefined ? `${out.timings.inference}s` : "";
+        setSimpleStatus(`${synthetic ? "Synthetic" : "Completed"}${secs ? ` in ${secs}` : ""} • Seed ${out.seed}`, "ok");
+        renderSimpleResult(out);
+        addSimpleHistoryItem({
+          request_id: job.request_id,
+          endpoint_id: endpoint,
+          prompt: payload.prompt,
+          result: out,
+        });
+      } catch (err) {
+        const cancelled = String(err.message || "").toLowerCase().includes("cancelled");
+        setSimpleStatus(cancelled ? "Cancelled" : "Error", cancelled ? "warn" : "err");
+        if (logBox) logBox.textContent += `[${cancelled ? "CANCELLED" : "ERROR"}] ${err.message}\n`;
+        if (stage) {
+          stage.innerHTML = `
+            <div style="text-align:center;padding:24px;max-width:440px;">
+              <div style="font-size:26px;margin-bottom:8px;">${cancelled ? "⏹️" : "⚠️"}</div>
+              <div style="font-size:14px;font-weight:600;color:${cancelled ? "#fcd34d" : "#fda4af"};margin-bottom:6px;">${cancelled ? "Generation cancelled" : "Generation failed"}</div>
+              <div style="font-size:12px;color:var(--text-1);word-break:break-word;">${err.message}</div>
+            </div>
+          `;
+        }
+      } finally {
+        if (simpleState.timerHandle) {
+          clearInterval(simpleState.timerHandle);
+          simpleState.timerHandle = null;
+        }
+        simpleState.running = false;
+        simpleState.activeRequestId = null;
+        simpleState.activeRequestEndpoint = null;
+        if (runBtn) {
+          runBtn.disabled = false;
+          runBtn.textContent = "▶ Run";
+        }
+        if (cancelBtn) cancelBtn.style.display = "none";
+      }
+    }
+
+    // =========================================================================
+    // Existing Studio (Advanced) Logic — Preserved 100%
+    // =========================================================================
     function isWanAnimate() {
       return currentEndpoint === "wan/v2.2/animate" || currentEndpoint === "wan/v2.2/recast";
     }
@@ -626,9 +2441,11 @@
       const panel = document.getElementById("modelHubPanel");
       if (panel.style.display === "none") {
         panel.style.display = "block";
+        updateSharedBannersVisibility();
         await refreshModelHub();
       } else {
         panel.style.display = "none";
+        updateSharedBannersVisibility();
       }
     }
 
@@ -671,6 +2488,7 @@
         }
         listEl.appendChild(row);
       }
+      await refreshModelReadiness();
     }
 
     async function waitForModelInstall(task, onUpdate) {
