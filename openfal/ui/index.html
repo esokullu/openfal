@@ -19,6 +19,37 @@
       --emerald: #10b981;
       --amber: #f59e0b;
       --rose: #f43f5e;
+      --header-bg: rgba(17, 21, 32, 0.92);
+      --stage-bg: #05070b;
+      --code-bg: #06080d;
+      --code-text: #e2e8f0;
+      --log-text: #a5f3fc;
+      --drop-bg: rgba(9, 11, 16, 0.65);
+      --drop-border: #334155;
+      --accordion-bg: rgba(9, 11, 16, 0.45);
+    }
+    html.light {
+      --bg-0: #f8fafc;
+      --bg-1: #ffffff;
+      --bg-2: #f1f5f9;
+      --bg-3: #e2e8f0;
+      --border: #cbd5e1;
+      --text-0: #0f172a;
+      --text-1: #475569;
+      --accent: #0284c7;
+      --accent-2: #4f46e5;
+      --fal-purple: #4f46e5;
+      --emerald: #059669;
+      --amber: #d97706;
+      --rose: #e11d48;
+      --header-bg: rgba(255, 255, 255, 0.92);
+      --stage-bg: #f1f5f9;
+      --code-bg: #f8fafc;
+      --code-text: #1e293b;
+      --log-text: #0f172a;
+      --drop-bg: #f8fafc;
+      --drop-border: #94a3b8;
+      --accordion-bg: #f8fafc;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -27,6 +58,7 @@
       color: var(--text-0);
       line-height: 1.5;
       min-height: 100vh;
+      transition: background-color 0.15s ease, color 0.15s ease;
     }
     header {
       display: flex;
@@ -35,7 +67,7 @@
       justify-content: space-between;
       gap: 12px;
       padding: 12px 24px;
-      background: rgba(17, 21, 32, 0.92);
+      background: var(--header-bg);
       border-bottom: 1px solid var(--border);
       position: sticky;
       top: 0;
@@ -291,7 +323,7 @@
     .legend span { display: inline-flex; align-items: center; gap: 5px; }
     .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
     .media-stage {
-      background: #05070b;
+      background: var(--stage-bg);
       border: 1px solid var(--border);
       border-radius: 10px;
       min-height: 340px;
@@ -307,25 +339,25 @@
       border-radius: 8px;
     }
     .log-box {
-      background: #06080d;
+      background: var(--code-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 10px 12px;
       font-family: "JetBrains Mono", "Fira Code", monospace;
       font-size: 11.5px;
-      color: #a5f3fc;
+      color: var(--log-text);
       max-height: 170px;
       overflow-y: auto;
       white-space: pre-wrap;
     }
     pre.code-snippet {
-      background: #06080d;
+      background: var(--code-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 12px;
       font-family: "JetBrains Mono", monospace;
       font-size: 11.5px;
-      color: #e2e8f0;
+      color: var(--code-text);
       overflow-x: auto;
     }
     .pill {
@@ -348,6 +380,15 @@
       background: rgba(244, 63, 94, 0.16);
       color: #fda4af;
     }
+    html.light .pill-ok { background: rgba(5, 150, 105, 0.12); color: #047857; }
+    html.light .pill-warn { background: rgba(217, 119, 6, 0.13); color: #b45309; }
+    html.light .pill-err { background: rgba(225, 29, 72, 0.12); color: #be123c; }
+    html.light .view-tab-btn:hover { background: rgba(15, 23, 42, 0.05); }
+    html.light .simple-task-pill:hover,
+    html.light .ratio-btn:hover { border-color: #94a3b8; }
+    html.light .blk-vram-gpu0 { color: #047857; }
+    html.light .blk-vram-gpu1 { color: #0369a1; }
+    html.light .blk-dma-slot { color: #92400e; }
     .upload-row {
       display: flex;
       gap: 8px;
@@ -450,9 +491,9 @@
       border-radius: 10px;
     }
     .simple-dropzone {
-      border: 1.5px dashed #334155;
+      border: 1.5px dashed var(--drop-border);
       border-radius: 10px;
-      background: rgba(9, 11, 16, 0.65);
+      background: var(--drop-bg);
       padding: 14px;
       text-align: center;
       cursor: pointer;
@@ -529,7 +570,7 @@
     details.simple-accordion {
       border: 1px solid var(--border);
       border-radius: 10px;
-      background: rgba(9, 11, 16, 0.45);
+      background: var(--accordion-bg);
       margin-top: 14px;
       margin-bottom: 16px;
     }
@@ -603,7 +644,7 @@
       color: var(--text-0);
     }
     .simple-stage {
-      background: #05070b;
+      background: var(--stage-bg);
       border: 1px solid var(--border);
       border-radius: 12px;
       min-height: 440px;
@@ -630,7 +671,7 @@
       width: 100%;
       max-height: 360px;
       object-fit: contain;
-      background: #0a0e17;
+      background: var(--bg-2);
       cursor: pointer;
     }
     .simple-output-bar {
@@ -674,7 +715,7 @@
       width: 100%;
       height: 70px;
       border-radius: 6px;
-      background: #05070b;
+      background: var(--stage-bg);
       object-fit: cover;
       display: block;
       margin-bottom: 5px;
@@ -739,22 +780,28 @@
       </button>
     </div>
 
-    <div class="header-controls" id="simpleHeaderControls">
-      <span id="simpleHwPill" class="pill" style="display:none;"></span>
-      <button class="btn-secondary" onclick="toggleModelHub()">📦 Models</button>
-      <a href="/docs" target="_blank" style="text-decoration:none;">
-        <button class="btn-secondary">API Docs</button>
-      </a>
-    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div class="header-controls" id="simpleHeaderControls">
+        <span id="simpleHwPill" class="pill" style="display:none;"></span>
+        <button class="btn-secondary" onclick="toggleModelHub()">📦 Models</button>
+        <button class="btn-secondary" id="desktopOutputsBtn" style="display:none;" onclick="desktopOpenOutputs()">📂 Outputs</button>
+        <button class="btn-secondary" id="desktopSetupBtn" style="display:none;" onclick="desktopOpenSetup()">⚙️ Desktop</button>
+        <a href="/docs" target="_blank" style="text-decoration:none;">
+          <button class="btn-secondary">API Docs</button>
+        </a>
+      </div>
 
-    <div class="header-controls" id="studioHeaderControls" style="display:none;">
-      <label style="font-size:12px;color:var(--text-1);">Hardware Profile:</label>
-      <select id="profileSelect" onchange="switchProfile()" style="width:auto;min-width:270px;"></select>
-      <button class="btn-secondary" onclick="toggleModelHub()">📦 HF Model Hub &amp; Installer</button>
-      <button id="sleepWakeBtn" class="btn-sleep" onclick="toggleSleepWake()">VRAM Sleep (Evict to RAM)</button>
-      <a href="/docs" target="_blank" style="text-decoration:none;">
-        <button class="btn-secondary">OpenAPI / Swagger</button>
-      </a>
+      <div class="header-controls" id="studioHeaderControls" style="display:none;">
+        <label style="font-size:12px;color:var(--text-1);">Hardware Profile:</label>
+        <select id="profileSelect" onchange="switchProfile()" style="width:auto;min-width:270px;"></select>
+        <button class="btn-secondary" onclick="toggleModelHub()">📦 HF Model Hub &amp; Installer</button>
+        <button id="sleepWakeBtn" class="btn-sleep" onclick="toggleSleepWake()">VRAM Sleep (Evict to RAM)</button>
+        <a href="/docs" target="_blank" style="text-decoration:none;">
+          <button class="btn-secondary">OpenAPI / Swagger</button>
+        </a>
+      </div>
+
+      <button type="button" id="themeToggleBtn" class="btn-secondary" onclick="toggleTheme()" title="Switch Light / Dark theme">☀️ Light</button>
     </div>
   </header>
 
@@ -764,6 +811,16 @@
         <span>📦 Hugging Face Model Assets &amp; Installer</span>
         <button class="btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="toggleModelHub()">Close</button>
       </div>
+      <div id="desktopSettingsBar" style="display:none;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div>
+          <span style="color:var(--text-1);">Weights folder:</span>
+          <code id="desktopWeightsPath" style="font-size:11.5px;color:var(--text-0);"></code>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="desktopChooseWeightsDir()">📁 Change Weights Folder</button>
+          <button type="button" class="btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="desktopRestartBackend()">🔄 Restart Engine</button>
+        </div>
+      </div>
       <div id="hwDetectSummary" style="font-size:12px;color:var(--text-1);margin-bottom:10px;">Detecting host hardware...</div>
       <p style="font-size:12px;color:var(--text-1);margin-bottom:10px;">Installed assets indicate the required local files are complete. Generation quality and hardware capacity require separate checks.</p>
       <div class="form-group">
@@ -771,14 +828,21 @@
         <input type="text" id="hfTokenInput" placeholder="hf_..." />
       </div>
       <div id="modelComponentsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
         <button class="btn-primary" onclick="triggerModelInstall('alibaba-only', 'hf_hub', 'fp8_e4m3')">⚡ Install ONLY Alibaba (~94GB FP8)</button>
         <button class="btn-secondary" style="border-color:var(--accent);" onclick="triggerModelInstall('minimax-only', 'hf_hub', 'fp8_e4m3')">🎵 Install ONLY MiniMax-H3 (~88GB FP8)</button>
         <button class="btn-secondary" onclick="triggerModelInstall('minimax-omni-compact', 'hf_hub', 'fp8_e4m3')">💾 MiniMax Ref2VA (~48GB FP8/INT8)</button>
       </div>
+      <div id="modelHubProgressWrap" style="display:none;margin-top:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:11.5px;font-weight:700;color:var(--text-0);">Model Installer Progress</span>
+          <span id="modelHubProgressStatus" class="pill">Running...</span>
+        </div>
+        <div class="log-box" id="modelHubLogBox" style="max-height:140px;"></div>
+      </div>
     </div>
 
-    <div id="syntheticModeNotice" class="card" style="display:none;color:#fda4af;">
+    <div id="syntheticModeNotice" class="card" style="display:none;color:var(--rose);">
       Development mode: outputs are synthetic placeholders, not model inference. Unset <code>OPENFAL_SYNTHETIC_FALLBACK</code> and restart the server for real generation.
     </div>
   </div>
@@ -811,7 +875,7 @@
         <div class="form-group">
           <div class="simple-section-head">
             <label class="simple-label" for="simpleModelSelect">Model</label>
-            <span id="simpleModelStatusBadge" class="pill">Checking...</span>
+            <button type="button" id="simpleModelStatusBadge" class="pill" style="border:none;cursor:pointer;" onclick="openModelHubFromSimple()" title="Click to open Model Installer">Checking...</button>
           </div>
           <div class="simple-model-row">
             <select id="simpleModelSelect" onchange="onSimpleModelChange()"></select>
@@ -1447,6 +1511,39 @@
       timerHandle: null,
     };
 
+    function getSavedTheme() {
+      try {
+        if (typeof localStorage !== "undefined") {
+          const saved = localStorage.getItem("openfal_theme");
+          if (saved === "light" || saved === "dark") return saved;
+        }
+      } catch (e) {}
+      return "dark";
+    }
+
+    function applyTheme(theme) {
+      const next = theme === "light" ? "light" : "dark";
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("openfal_theme", next);
+        }
+      } catch (e) {}
+      const root = document.documentElement;
+      if (root && root.classList) {
+        root.classList.toggle("light", next === "light");
+        root.classList.toggle("dark", next === "dark");
+      }
+      const btn = document.getElementById("themeToggleBtn");
+      if (btn) {
+        btn.textContent = next === "light" ? "🌙 Dark" : "☀️ Light";
+      }
+    }
+
+    function toggleTheme() {
+      const isLight = document.documentElement && document.documentElement.classList && document.documentElement.classList.contains("light");
+      applyTheme(isLight ? "dark" : "light");
+    }
+
     function getSavedView() {
       try {
         if (typeof localStorage !== "undefined") {
@@ -1496,9 +1593,48 @@
       banners.style.display = show ? "block" : "none";
     }
 
+    async function initDesktopIntegration() {
+      const bridge = typeof window !== "undefined" ? window.openfalDesktop : null;
+      if (!bridge) return;
+      const outBtn = document.getElementById("desktopOutputsBtn");
+      const setupBtn = document.getElementById("desktopSetupBtn");
+      const bar = document.getElementById("desktopSettingsBar");
+      if (outBtn) outBtn.style.display = "inline-block";
+      if (setupBtn) setupBtn.style.display = "inline-block";
+      if (bar) bar.style.display = "flex";
+      try {
+        const info = await bridge.getInfo();
+        const pathEl = document.getElementById("desktopWeightsPath");
+        if (pathEl && info && info.weightsDir) pathEl.textContent = info.weightsDir;
+      } catch (e) {}
+    }
+
+    async function desktopOpenOutputs() {
+      if (window.openfalDesktop) await window.openfalDesktop.openOutputs();
+    }
+
+    async function desktopOpenSetup() {
+      if (window.openfalDesktop) await window.openfalDesktop.openSetup();
+    }
+
+    async function desktopChooseWeightsDir() {
+      if (!window.openfalDesktop) return;
+      const res = await window.openfalDesktop.chooseWeightsDir();
+      if (res && res.weightsDir) {
+        const pathEl = document.getElementById("desktopWeightsPath");
+        if (pathEl) pathEl.textContent = res.weightsDir;
+      }
+    }
+
+    async function desktopRestartBackend() {
+      if (window.openfalDesktop) await window.openfalDesktop.restartBackend();
+    }
+
     async function initStudio() {
+      applyTheme(getSavedTheme());
       switchMainView(getSavedView());
       initSimplePlayground();
+      await initDesktopIntegration();
 
       try {
         const healthRes = await fetch("/health");
@@ -2437,6 +2573,16 @@ const result = await fal.subscribe("${endpoint}", {
       await refreshTelemetry();
     }
 
+    async function openModelHubFromSimple() {
+      const panel = document.getElementById("modelHubPanel");
+      if (panel && panel.style.display === "none") {
+        await toggleModelHub();
+      }
+      if (panel && typeof panel.scrollIntoView === "function") {
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
     async function toggleModelHub() {
       const panel = document.getElementById("modelHubPanel");
       if (panel.style.display === "none") {
@@ -2446,6 +2592,37 @@ const result = await fal.subscribe("${endpoint}", {
       } else {
         panel.style.display = "none";
         updateSharedBannersVisibility();
+      }
+    }
+
+    async function removeModelComponent(component_id) {
+      if (typeof confirm === "function" && !confirm(`Remove downloaded weights for '${component_id}'?`)) {
+        return;
+      }
+      const hubLogBox = document.getElementById("modelHubLogBox");
+      const hubWrap = document.getElementById("modelHubProgressWrap");
+      const hubStatus = document.getElementById("modelHubProgressStatus");
+      if (hubWrap) hubWrap.style.display = "block";
+      if (hubStatus) {
+        hubStatus.className = "pill";
+        hubStatus.textContent = `Removing ${component_id}...`;
+      }
+      try {
+        const res = await fetch(`/v1/models/${encodeURIComponent(component_id)}`, { method: "DELETE" });
+        const out = await res.json();
+        if (!res.ok) throw new Error(out.detail || "Could not remove component");
+        if (hubLogBox) hubLogBox.textContent += `[Model Hub] Removed '${component_id}'.\n`;
+        if (hubStatus) {
+          hubStatus.className = "pill pill-ok";
+          hubStatus.textContent = "Removed";
+        }
+        await refreshModelHub();
+      } catch (err) {
+        if (hubLogBox) hubLogBox.textContent += `[ERROR] ${err.message}\n`;
+        if (hubStatus) {
+          hubStatus.className = "pill pill-err";
+          hubStatus.textContent = "Error";
+        }
       }
     }
 
@@ -2460,20 +2637,24 @@ const result = await fal.subscribe("${endpoint}", {
       listEl.innerHTML = "";
       for (const c of data.components) {
         const row = document.createElement("div");
-        row.style.cssText = "background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;";
+        row.style.cssText = "background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;";
         const badge = c.installed
-          ? `<span class="pill">Assets installed (${c.disk_size_mb} MB)</span>`
-          : `<span class="pill" style="background:rgba(244,63,94,0.15);color:#fda4af;">${c.weights_present ? "Incomplete assets" : "Assets missing"}</span>`;
+          ? `<span class="pill pill-ok">Assets installed (${c.disk_size_mb} MB)</span>`
+          : `<span class="pill pill-err">${c.weights_present ? "Incomplete assets" : "Assets missing"}</span>`;
+        const removeBtn = c.weights_present
+          ? `<button class="btn-secondary" style="padding:4px 8px;font-size:11px;color:var(--rose);" onclick="removeModelComponent('${c.component_id}')">Remove</button>`
+          : "";
         row.innerHTML = `
           <div style="font-size:11.5px;">
             <div style="font-weight:700;color:var(--text-0);">${c.display_name}</div>
             <div style="color:var(--text-1);font-size:10.5px;">HF: ${c.hf_repo_id} (${c.subdir}) &bull; FP8/INT8: ~${c.approx_fp8_gb}GB</div>
-            ${c.runtime_supported === false ? '<div style="color:#fda4af;">Generation unavailable for this component.</div>' : ''}
+            ${c.runtime_supported === false ? '<div style="color:var(--rose);">Generation unavailable for this component.</div>' : ''}
           </div>
-          <div style="display:flex;align-items:center;gap:6px;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             ${badge}
-            <button class="btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="triggerModelInstall('${c.component_id}', 'hf_hub')">HF Pull</button>
-            <button class="btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="triggerModelInstall('${c.component_id}', 'runtime_assets')">Repair supporting assets</button>
+            <button class="btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="triggerModelInstall('${c.component_id}', 'hf_hub')">${c.installed ? "Re-check / Pull" : "Install from HF"}</button>
+            <button class="btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="triggerModelInstall('${c.component_id}', 'runtime_assets')">Repair assets</button>
+            ${removeBtn}
           </div>
         `;
         if (c.missing_assets && c.missing_assets.length) {
@@ -2510,8 +2691,26 @@ const result = await fal.subscribe("${endpoint}", {
     async function triggerModelInstall(component_id, mode, quantization = "fp8_e4m3") {
       const hf_token = document.getElementById("hfTokenInput").value.trim() || null;
       const logBox = document.getElementById("logBox");
+      const hubWrap = document.getElementById("modelHubProgressWrap");
+      const hubLogBox = document.getElementById("modelHubLogBox");
+      const hubStatus = document.getElementById("modelHubProgressStatus");
       const runAsync = (mode !== "strata_repack");
-      logBox.textContent += `[Strata-Installer] Starting ${mode} (${quantization}) for '${component_id}'...\n`;
+
+      const appendHubLog = (line) => {
+        logBox.textContent += line;
+        logBox.scrollTop = logBox.scrollHeight;
+        if (hubLogBox) {
+          hubLogBox.textContent += line;
+          hubLogBox.scrollTop = hubLogBox.scrollHeight;
+        }
+      };
+
+      if (hubWrap) hubWrap.style.display = "block";
+      if (hubStatus) {
+        hubStatus.className = "pill";
+        hubStatus.textContent = `Installing ${component_id}...`;
+      }
+      appendHubLog(`[Strata-Installer] Starting ${mode} (${quantization}) for '${component_id}'...\n`);
       try {
         const res = await fetch("/v1/models/download", {
           method: "POST",
@@ -2525,17 +2724,24 @@ const result = await fal.subscribe("${endpoint}", {
         let seenLogs = 0;
         await waitForModelInstall(out.task, task => {
           const logs = task.logs || [];
-          while (seenLogs < logs.length) logBox.textContent += `${logs[seenLogs++]}\n`;
-          logBox.scrollTop = logBox.scrollHeight;
+          while (seenLogs < logs.length) appendHubLog(`${logs[seenLogs++]}\n`);
         });
-        logBox.textContent += `[Strata-Installer] Completed '${component_id}'. Model inventory refreshed below.\n`;
+        if (hubStatus) {
+          hubStatus.className = "pill pill-ok";
+          hubStatus.textContent = `Installed '${component_id}'`;
+        }
+        appendHubLog(`[Strata-Installer] Completed '${component_id}'. Model inventory refreshed below.\n`);
       } catch (error) {
-        logBox.textContent += `[ERROR] ${error.message}\n`;
+        if (hubStatus) {
+          hubStatus.className = "pill pill-err";
+          hubStatus.textContent = "Install failed";
+        }
+        appendHubLog(`[ERROR] ${error.message}\n`);
       } finally {
         try {
           await refreshModelHub();
         } catch (error) {
-          logBox.textContent += `[ERROR] Could not refresh model inventory: ${error.message}\n`;
+          appendHubLog(`[ERROR] Could not refresh model inventory: ${error.message}\n`);
         }
       }
     }

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>openfal Desktop — Setup &amp; Launcher</title>
+  <style>
+    :root {
+      --bg-0: #090b10;
+      --bg-1: #111520;
+      --bg-2: #171c2b;
+      --border: #283149;
+      --text-0: #f1f5f9;
+      --text-1: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #818cf8;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --code-bg: #06080d;
+    }
+    html.light {
+      --bg-0: #f8fafc;
+      --bg-1: #ffffff;
+      --bg-2: #f1f5f9;
+      --border: #cbd5e1;
+      --text-0: #0f172a;
+      --text-1: #475569;
+      --accent: #0284c7;
+      --accent-2: #4f46e5;
+      --emerald: #059669;
+      --amber: #d97706;
+      --rose: #e11d48;
+      --code-bg: #f8fafc;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-0);
+      color: var(--text-0);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .shell {
+      width: 100%;
+      max-width: 780px;
+    }
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #090b10;
+      font-weight: 800;
+      font-size: 18px;
+    }
+    .card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 16px;
+    }
+    h2 {
+      font-size: 16px;
+      margin-bottom: 6px;
+    }
+    p.sub {
+      font-size: 13px;
+      color: var(--text-1);
+      margin-bottom: 14px;
+    }
+    label.field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-1);
+      margin-bottom: 5px;
+    }
+    input[type="text"], select {
+      width: 100%;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--text-0);
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    button {
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 9px 15px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-2), var(--accent));
+      color: #ffffff;
+    }
+    .btn-secondary {
+      background: var(--bg-2);
+      border-color: var(--border);
+      color: var(--text-0);
+    }
+    .pill {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+    }
+    .pill-ok { background: rgba(16, 185, 129, 0.15); color: var(--emerald); }
+    .pill-warn { background: rgba(245, 158, 11, 0.16); color: var(--amber); }
+    .pill-err { background: rgba(244, 63, 94, 0.16); color: var(--rose); }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    .log-box {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 11.5px;
+      max-height: 190px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      margin-top: 12px;
+      color: var(--text-0);
+    }
+    .spinner {
+      width: 34px;
+      height: 34px;
+      border: 3px solid rgba(56, 189, 248, 0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="header-row">
+      <div class="brand">
+        <div class="logo">of</div>
+        <div>
+          <div style="font-size:18px;font-weight:700;">openfal Desktop</div>
+          <div style="font-size:12px;color:var(--text-1);">Local AI Image &amp; Video Studio</div>
+        </div>
+      </div>
+      <button type="button" id="themeBtn" class="btn-secondary" onclick="toggleSetupTheme()">☀️ Light</button>
+    </div>
+
+    <!-- Booting View -->
+    <div class="card" id="bootCard" style="display:none;text-align:center;padding:34px 24px;">
+      <div class="spinner"></div>
+      <h2 id="bootTitle">Starting local openfal engine...</h2>
+      <p class="sub" id="bootSubtitle">Preparing server and hardware profile. Models can be downloaded inside the GUI.</p>
+      <div class="log-box" id="bootLogBox" style="text-align:left;display:none;"></div>
+      <div style="margin-top:16px;">
+        <button type="button" class="btn-secondary" onclick="showSetupView()">Configure / Connect to Server</button>
+      </div>
+    </div>
+
+    <!-- Setup View -->
+    <div id="setupCards">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
+          <h2>Local Desktop Engine</h2>
+          <span id="runtimeBadge" class="pill">Checking Python...</span>
+        </div>
+        <p class="sub">Run openfal directly on this computer without using the terminal. Once started, you can download models from the <b>📦 Models</b> menu in the GUI.</p>
+
+        <div style="margin-bottom:12px;">
+          <label class="field-label" for="weightsDirInput">Model Weights Folder</label>
+          <div class="row">
+            <input type="text" id="weightsDirInput" readonly />
+            <button type="button" class="btn-secondary" onclick="pickWeightsDir()">Browse</button>
+          </div>
+        </div>
+
+        <div id="pythonInstallOptions" style="display:none;margin-bottom:12px;">
+          <label class="field-label" for="pythonSelect">Python 3.10+ Runtime</label>
+          <div class="row">
+            <select id="pythonSelect"></select>
+            <button type="button" class="btn-secondary" onclick="pickPythonExe()">Browse python.exe</button>
+          </div>
+          <label class="check-row">
+            <input type="checkbox" id="includeInferenceCheck" checked />
+            <span>Install full PyTorch &amp; Diffusers inference stack (recommended for real GPU generation)</span>
+          </label>
+        </div>
+
+        <label class="check-row">
+          <input type="checkbox" id="syntheticCheck" />
+          <span>Preview in synthetic mode (for UI testing without GPU or downloaded weights)</span>
+        </label>
+
+        <div class="row" style="margin-top:16px;">
+          <button type="button" id="launchBtn" class="btn-primary" style="flex:1;" onclick="launchOrInstall()">
+            ▶ Start openfal Studio
+          </button>
+        </div>
+
+        <div id="setupLogBox" class="log-box" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <h2>Connect to an Existing Server</h2>
+        <p class="sub">Already running <code>openfal serve</code> locally or on another machine? Connect directly to its URL.</p>
+        <div class="row">
+          <input type="text" id="remoteUrlInput" value="http://127.0.0.1:8000" placeholder="http://127.0.0.1:8000" />
+          <button type="button" class="btn-secondary" onclick="connectRemote()">Connect</button>
+        </div>
+        <div id="remoteError" style="font-size:12px;color:var(--rose);margin-top:8px;display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let detected = null;
+
+    function applySetupTheme(theme) {
+      const next = theme === "light" ? "light" : "dark";
+      try { localStorage.setItem("openfal_theme", next); } catch (e) {}
+      document.documentElement.classList.toggle("light", next === "light");
+      document.getElementById("themeBtn").textContent = next === "light" ? "🌙 Dark" : "☀️ Light";
+    }
+
+    function toggleSetupTheme() {
+      applySetupTheme(document.documentElement.classList.contains("light") ? "dark" : "light");
+    }
+
+    function showSetupView() {
+      document.getElementById("bootCard").style.display = "none";
+      document.getElementById("setupCards").style.display = "block";
+    }
+
+    async function refreshEnv() {
+      if (!window.openfalDesktop) return;
+      detected = await window.openfalDesktop.detectEnvironment();
+      const { config, env } = detected;
+
+      document.getElementById("weightsDirInput").value = config.weightsDir || "";
+      document.getElementById("remoteUrlInput").value = config.remoteUrl || "http://127.0.0.1:8000";
+      document.getElementById("syntheticCheck").checked = Boolean(config.syntheticFallback);
+
+      const badge = document.getElementById("runtimeBadge");
+      const installOpts = document.getElementById("pythonInstallOptions");
+      const launchBtn = document.getElementById("launchBtn");
+      const pySel = document.getElementById("pythonSelect");
+      pySel.innerHTML = "";
+
+      for (const py of env.availablePythons || []) {
+        const opt = document.createElement("option");
+        opt.value = py.executable;
+        opt.textContent = `${py.label} — Python ${py.version} (${py.executable})`;
+        pySel.appendChild(opt);
+      }
+
+      if (env.readyRuntime) {
+        badge.className = "pill pill-ok";
+        badge.textContent = env.readyRuntime.hasInferenceStack ? "● Engine & PyTorch Ready" : "● Server Ready (UI / CPU)";
+        installOpts.style.display = "none";
+        launchBtn.textContent = "▶ Start openfal Studio";
+        launchBtn.disabled = false;
+      } else if ((env.availablePythons || []).length > 0) {
+        badge.className = "pill pill-warn";
+        badge.textContent = "○ First-time Setup Needed";
+        installOpts.style.display = "block";
+        launchBtn.textContent = "⚡ Install Engine & Launch";
+        launchBtn.disabled = false;
+      } else {
+        badge.className = "pill pill-err";
+        badge.textContent = "Python 3.10+ Not Found";
+        installOpts.style.display = "block";
+        launchBtn.textContent = "Browse python.exe to continue";
+      }
+    }
+
+    async function pickWeightsDir() {
+      const res = await window.openfalDesktop.chooseWeightsDir();
+      if (res && !res.canceled && res.weightsDir) {
+        document.getElementById("weightsDirInput").value = res.weightsDir;
+      }
+    }
+
+    async function pickPythonExe() {
+      const res = await window.openfalDesktop.choosePythonExe();
+      if (res && !res.canceled) {
+        await refreshEnv();
+      }
+    }
+
+    async function launchOrInstall() {
+      const launchBtn = document.getElementById("launchBtn");
+      const logBox = document.getElementById("setupLogBox");
+      const weightsDir = document.getElementById("weightsDirInput").value;
+      const syntheticFallback = document.getElementById("syntheticCheck").checked;
+
+      launchBtn.disabled = true;
+      logBox.style.display = "block";
+
+      try {
+        if (detected && detected.env && detected.env.readyRuntime) {
+          logBox.textContent = "Starting local openfal server...\n";
+          await window.openfalDesktop.launchLocalEngine({ weightsDir, syntheticFallback });
+        } else {
+          const basePythonExecutable = document.getElementById("pythonSelect").value;
+          const includeInference = document.getElementById("includeInferenceCheck").checked;
+          logBox.textContent = "Setting up local Python environment...\n";
+          await window.openfalDesktop.installRuntime({
+            weightsDir,
+            syntheticFallback,
+            basePythonExecutable,
+            includeInference,
+          });
+        }
+      } catch (err) {
+        logBox.textContent += `\n[ERROR] ${err.message}\n`;
+        launchBtn.disabled = false;
+      }
+    }
+
+    async function connectRemote() {
+      const errEl = document.getElementById("remoteError");
+      errEl.style.display = "none";
+      const url = document.getElementById("remoteUrlInput").value.trim();
+      try {
+        await window.openfalDesktop.connectRemoteServer(url);
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = "block";
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      try { applySetupTheme(localStorage.getItem("openfal_theme") || "dark"); } catch (e) {}
+
+      const params = new URLSearchParams(window.location.search);
+      const isBooting = params.get("booting") === "1";
+      if (isBooting) {
+        document.getElementById("bootCard").style.display = "block";
+        document.getElementById("setupCards").style.display = "none";
+      }
+
+      if (window.openfalDesktop) {
+        window.openfalDesktop.onInstallLog(({ line }) => {
+          const box = document.getElementById("setupLogBox");
+          box.style.display = "block";
+          box.textContent += line;
+          box.scrollTop = box.scrollHeight;
+        });
+
+        window.openfalDesktop.onBootStatus(({ state, message, log }) => {
+          const bootLog = document.getElementById("bootLogBox");
+          if (log) {
+            bootLog.style.display = "block";
+            bootLog.textContent += log;
+            bootLog.scrollTop = bootLog.scrollHeight;
+          }
+          if (state === "error") {
+            document.getElementById("bootTitle").textContent = "Could not start local engine";
+            document.getElementById("bootSubtitle").textContent = message || "Check logs below or configure Python / remote server.";
+            bootLog.style.display = "block";
+          }
+        });
+      }
+
+      await refreshEnv();
+    });
+  </script>
+</body>
+</html>

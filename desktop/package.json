@@ -1,0 +1,92 @@
+{
+  "name": "openfal-desktop",
+  "productName": "openfal",
+  "version": "0.1.0",
+  "description": "Desktop app and installer for openfal Studio (Qwen-Image-2.1, Wan 2.2 MoE & MiniMax-H3)",
+  "main": "main.js",
+  "author": "openfal Contributors",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^35.1.5",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "ai.openfal.desktop",
+    "productName": "openfal",
+    "copyright": "Copyright (c) 2026 openfal Contributors",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "runtime.js",
+      "setup.html",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../openfal",
+        "to": "openfal-src/openfal",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../pyproject.toml",
+        "to": "openfal-src/pyproject.toml"
+      },
+      {
+        "from": "../README.md",
+        "to": "openfal-src/README.md"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "openfal-src/LICENSE"
+      }
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "openfal Studio"
+    },
+    "mac": {
+      "icon": "assets/icon.png",
+      "category": "public.app-category.graphics-design",
+      "target": ["dmg", "zip"]
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Graphics",
+      "target": ["AppImage", "deb"]
+    }
+  }
+}

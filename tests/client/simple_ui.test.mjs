@@ -73,6 +73,7 @@ function createSimpleContext(responses = []) {
 
   const context = vm.createContext({
     document: {
+      documentElement: makeElement("html"),
       getElementById: getEl,
       querySelectorAll: () => [],
       createElement: tag => makeElement(tag),
@@ -211,4 +212,33 @@ test("Simple Animate validates driving video and identity image", async () => {
   assert.equal(built.endpoint, "wan/v2.2/animate");
   assert.equal(built.payload.face_image_url, "/files/face.png");
   assert.equal(built.payload.driving_video_url, "/files/driver.mp4");
+});
+
+test("Theme toggle switches between dark and light classes and updates button", () => {
+  const { context, getEl } = createSimpleContext();
+  const root = context.document.documentElement;
+  context.applyTheme("dark");
+  assert.equal(root.classList.contains("dark"), true);
+  assert.equal(root.classList.contains("light"), false);
+  assert.match(getEl("themeToggleBtn").textContent, /Light/);
+
+  context.toggleTheme();
+  assert.equal(root.classList.contains("light"), true);
+  assert.equal(root.classList.contains("dark"), false);
+  assert.match(getEl("themeToggleBtn").textContent, /Dark/);
+  assert.match(html, /html\.light\s*\{/);
+});
+
+test("Model Hub installer updates inline progress box for Simple & Desktop users", async () => {
+  const task = { task_id: "dl-1", status: "RUNNING", logs: ["pulling weights"] };
+  const { context, getEl } = createSimpleContext([
+    { task },
+    { active_tasks: [{ ...task, status: "COMPLETED", logs: ["pulling weights", "done"] }] },
+  ]);
+  context.refreshModelHub = async () => {};
+  await context.triggerModelInstall("qwen_image_21", "hf_hub");
+  assert.equal(getEl("modelHubProgressWrap").style.display, "block");
+  assert.match(getEl("modelHubLogBox").textContent, /pulling weights/);
+  assert.match(getEl("modelHubLogBox").textContent, /Completed 'qwen_image_21'/);
+  assert.match(getEl("modelHubProgressStatus").textContent, /Installed 'qwen_image_21'/);
 });

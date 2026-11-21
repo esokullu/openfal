@@ -17,9 +17,12 @@ weights/
 *.png
 *.webp
 !tests/client/samples/*.png
+!desktop/assets/*.png
 !tests/client/samples/sample_driving_portrait.mp4
 tests/client/*/outputs/
 tests/client/api/node_modules/
+desktop/node_modules/
+desktop/dist/
 benchmark/.env
 benchmark/.runpod_pod.json
 benchmark/comfy_extra_model_paths.yaml
