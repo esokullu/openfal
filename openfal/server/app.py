@@ -294,6 +294,13 @@ def create_app(config: Optional[EngineConfig] = None) -> FastAPI:
             return HTMLResponse("<h1>openfal UI not found</h1>", status_code=404)
         return HTMLResponse(ui_path.read_text(encoding="utf-8"))
 
+    @app.get("/memory-profile", response_class=HTMLResponse)
+    async def serve_memory_profile() -> HTMLResponse:
+        page_path = Path(__file__).resolve().parent.parent / "ui" / "memory_profile.html"
+        if not page_path.exists():
+            return HTMLResponse("<h1>Memory profile page not found</h1>", status_code=404)
+        return HTMLResponse(page_path.read_text(encoding="utf-8"))
+
     @app.get("/health")
     async def health() -> dict:
         from openfal.runtime.common import use_synthetic_fallback

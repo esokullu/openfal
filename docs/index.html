@@ -13,92 +13,91 @@
     (function () {
       try {
         var saved = localStorage.getItem("openfal-docs-theme");
-        var prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
-        var theme = saved === "light" || saved === "dark" ? saved : (prefersLight ? "light" : "dark");
+        var theme = saved === "dark" || saved === "light" ? saved : "light";
         document.documentElement.setAttribute("data-theme", theme);
       } catch (_) {}
     })();
   </script>
   <style>
     :root {
-      --bg-0: #090b10;
-      --bg-1: #111520;
-      --bg-2: #171c2b;
-      --bg-3: #1f263a;
-      --border: #283149;
-      --border-soft: rgba(40, 49, 73, 0.7);
-      --text-0: #f1f5f9;
-      --text-1: #94a3b8;
-      --text-2: #64748b;
-      --accent: #38bdf8;
-      --accent-2: #818cf8;
-      --emerald: #10b981;
-      --amber: #f59e0b;
-      --header-bg: rgba(9, 11, 16, 0.85);
-      --glow-1: rgba(56, 189, 248, 0.12);
-      --glow-2: rgba(129, 140, 248, 0.11);
-      --code-inline-bg: rgba(31, 38, 58, 0.85);
-      --code-inline-text: #e2e8f0;
-      --code-block-bg: #07090e;
-      --code-block-text: #e2e8f0;
-      --terminal-bg: #111520;
-      --terminal-text: #cbd5e1;
-      --terminal-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-      --hero-grad: linear-gradient(135deg, #f8fafc 20%, var(--accent) 68%, var(--accent-2) 100%);
-      --btn-primary-text: #090b10;
-      --callout-bg: rgba(23, 28, 43, 0.72);
-      --callout-title: #fde68a;
-      --eyebrow-bg: rgba(56, 189, 248, 0.1);
-      --eyebrow-border: rgba(56, 189, 248, 0.28);
+      --bg-0: #09090b;
+      --bg-1: #111113;
+      --bg-2: #18181b;
+      --bg-3: #27272a;
+      --border: #27272a;
+      --border-soft: #27272a;
+      --text-0: #fafafa;
+      --text-1: #a1a1aa;
+      --text-2: #71717a;
+      --accent: #3b82f6;
+      --accent-2: #60a5fa;
+      --emerald: #22c55e;
+      --amber: #eab308;
+      --header-bg: rgba(9, 9, 11, 0.88);
+      --code-inline-bg: #18181b;
+      --code-inline-text: #93c5fd;
+      --code-block-bg: #0c0c0e;
+      --code-block-text: #e4e4e7;
+      --terminal-bg: #0c0c0e;
+      --terminal-text: #d4d4d8;
+      --btn-primary-bg: #2563eb;
+      --btn-primary-hover: #1d4ed8;
+      --btn-primary-text: #ffffff;
+      --callout-bg: #111113;
+      --callout-title: #fbbf24;
+      --tok-kw: #c084fc;
+      --tok-str: #86efac;
+      --tok-fn: #60a5fa;
+      --tok-num: #fbbf24;
+      --tok-cmt: #71717a;
+      --tok-flag: #38bdf8;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-      --max-w: 1120px;
+      --max-w: 1080px;
     }
 
     :root[data-theme="light"] {
-      --bg-0: #f8fafc;
-      --bg-1: #ffffff;
-      --bg-2: #f1f5f9;
-      --bg-3: #e2e8f0;
-      --border: #cbd5e1;
-      --border-soft: rgba(148, 163, 184, 0.45);
-      --text-0: #0f172a;
-      --text-1: #475569;
-      --text-2: #64748b;
-      --accent: #0284c7;
-      --accent-2: #4f46e5;
-      --emerald: #059669;
-      --amber: #d97706;
-      --header-bg: rgba(248, 250, 252, 0.88);
-      --glow-1: rgba(2, 132, 199, 0.08);
-      --glow-2: rgba(79, 70, 229, 0.07);
-      --code-inline-bg: #e2e8f0;
-      --code-inline-text: #0f172a;
-      --code-block-bg: #f1f5f9;
-      --code-block-text: #0f172a;
-      --terminal-bg: #0f172a;
-      --terminal-text: #e2e8f0;
-      --terminal-shadow: 0 20px 50px rgba(15, 23, 42, 0.14);
-      --hero-grad: linear-gradient(135deg, #0f172a 18%, var(--accent) 68%, var(--accent-2) 100%);
+      --bg-0: #ffffff;
+      --bg-1: #fafafa;
+      --bg-2: #f4f4f5;
+      --bg-3: #e4e4e7;
+      --border: #e4e4e7;
+      --border-soft: #e4e4e7;
+      --text-0: #09090b;
+      --text-1: #52525b;
+      --text-2: #71717a;
+      --accent: #2563eb;
+      --accent-2: #1d4ed8;
+      --emerald: #16a34a;
+      --amber: #ca8a04;
+      --header-bg: rgba(255, 255, 255, 0.9);
+      --code-inline-bg: #f1f5f9;
+      --code-inline-text: #1d4ed8;
+      --code-block-bg: #f8fafc;
+      --code-block-text: #18181b;
+      --terminal-bg: #111113;
+      --terminal-text: #e4e4e7;
+      --btn-primary-bg: #2563eb;
+      --btn-primary-hover: #1d4ed8;
       --btn-primary-text: #ffffff;
       --callout-bg: #fffbeb;
       --callout-title: #92400e;
-      --eyebrow-bg: rgba(2, 132, 199, 0.08);
-      --eyebrow-border: rgba(2, 132, 199, 0.28);
+      --tok-kw: #7c3aed;
+      --tok-str: #15803d;
+      --tok-fn: #2563eb;
+      --tok-num: #b45309;
+      --tok-cmt: #64748b;
+      --tok-flag: #0369a1;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
     body {
       font-family: var(--sans);
-      background:
-        radial-gradient(900px 480px at 15% -5%, var(--glow-1), transparent 60%),
-        radial-gradient(800px 460px at 88% 4%, var(--glow-2), transparent 58%),
-        var(--bg-0);
+      background: var(--bg-0);
       color: var(--text-0);
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
-      transition: background-color 0.2s ease, color 0.2s ease;
     }
 
     a { color: var(--accent); text-decoration: none; }
@@ -175,37 +174,38 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      padding: 10px 18px;
-      border-radius: 9px;
-      font-size: 14px;
-      font-weight: 600;
+      padding: 9px 16px;
+      border-radius: 6px;
+      font-size: 13.5px;
+      font-weight: 500;
       border: 1px solid var(--border);
       background: var(--bg-2);
       color: var(--text-0);
       cursor: pointer;
-      transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease;
+      transition: border-color 0.12s ease, background-color 0.12s ease;
     }
     .btn:hover {
       text-decoration: none;
-      border-color: var(--accent);
+      border-color: var(--text-2);
       background: var(--bg-3);
-      transform: translateY(-1px);
     }
     .btn-primary {
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      background: var(--btn-primary-bg);
       color: var(--btn-primary-text);
       border-color: transparent;
+      font-weight: 600;
     }
     .btn-primary:hover {
-      filter: brightness(1.08);
+      background: var(--btn-primary-hover);
       border-color: transparent;
       color: var(--btn-primary-text);
     }
-    .btn-sm { padding: 7px 13px; font-size: 13px; }
+    .btn-sm { padding: 6px 12px; font-size: 12.5px; }
 
     /* Hero */
     .hero {
-      padding: 68px 0 54px;
+      padding: 56px 0 44px;
+      border-bottom: 1px solid var(--border);
     }
     .hero-grid {
       display: grid;
@@ -214,38 +214,23 @@
       align-items: center;
     }
     .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      font-weight: 600;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      font-weight: 500;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: var(--accent);
-      background: var(--eyebrow-bg);
-      border: 1px solid var(--eyebrow-border);
-      padding: 5px 11px;
-      border-radius: 999px;
-      margin-bottom: 18px;
-    }
-    .eyebrow-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--emerald);
-      box-shadow: 0 0 8px var(--emerald);
+      color: var(--text-2);
+      margin-bottom: 14px;
     }
     h1 {
-      font-size: clamp(32px, 4.4vw, 48px);
+      font-size: clamp(30px, 4vw, 44px);
       line-height: 1.12;
       letter-spacing: -0.03em;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
+      font-weight: 700;
     }
     .gradient-text {
-      background: var(--hero-grad);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
+      color: var(--text-0);
     }
     .hero-sub {
       color: var(--text-1);
@@ -272,41 +257,39 @@
     .terminal {
       background: var(--terminal-bg);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 8px;
       overflow: hidden;
-      box-shadow: var(--terminal-shadow);
     }
     .terminal-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 14px;
-      background: #171c2b;
-      border-bottom: 1px solid #283149;
-      font-size: 12px;
-      color: #94a3b8;
+      padding: 8px 12px;
+      background: #18181b;
+      border-bottom: 1px solid #27272a;
+      font-size: 11.5px;
+      color: #a1a1aa;
       font-family: var(--mono);
-    }
-    .dots { display: flex; gap: 6px; }
-    .dots i {
-      display: block;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #1f263a;
-      border: 1px solid #334155;
     }
     .terminal pre {
-      padding: 18px;
+      padding: 16px;
       font-family: var(--mono);
-      font-size: 12.8px;
+      font-size: 12.5px;
       line-height: 1.65;
       overflow-x: auto;
       color: var(--terminal-text);
     }
-    .t-cmd { color: #38bdf8; }
-    .t-dim { color: #64748b; }
-    .t-ok { color: #10b981; }
+    .t-cmd { color: #60a5fa; font-weight: 600; }
+    .t-dim { color: #71717a; }
+    .t-ok { color: #22c55e; }
+    .t-flag { color: #38bdf8; }
+    .t-url { color: #a5b4fc; }
+    .tok-kw { color: var(--tok-kw); }
+    .tok-str { color: var(--tok-str); }
+    .tok-fn { color: var(--tok-fn); }
+    .tok-num { color: var(--tok-num); }
+    .tok-cmt { color: var(--tok-cmt); }
+    .tok-flag { color: var(--tok-flag); }
 
     /* Sections */
     section { padding: 54px 0; }
@@ -345,13 +328,8 @@
     .card {
       background: var(--bg-1);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 22px;
-      transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
-    }
-    .card:hover {
-      border-color: rgba(56, 189, 248, 0.35);
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+      border-radius: 8px;
+      padding: 20px;
     }
     .card-num {
       font-family: var(--mono);
@@ -419,8 +397,8 @@
     .bundle {
       background: var(--bg-1);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px;
+      border-radius: 6px;
+      padding: 13px 15px;
     }
     .bundle-top {
       display: flex;
@@ -444,7 +422,7 @@
     .tabs-wrap {
       background: var(--bg-1);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 8px;
       overflow: hidden;
     }
     .tab-bar {
@@ -486,7 +464,7 @@
     .table-wrap {
       background: var(--bg-1);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 8px;
       overflow-x: auto;
     }
     table {
@@ -509,7 +487,7 @@
       font-weight: 700;
     }
     tr:last-child td { border-bottom: none; }
-    tr.row-openfal td { background: rgba(56, 189, 248, 0.045); }
+    tr.row-openfal td { background: rgba(59, 130, 246, 0.06); }
     td strong { color: var(--text-0); }
     td.muted { color: var(--text-1); }
 
@@ -589,12 +567,12 @@
         <a href="#benchmarks">Benchmarks</a>
       </nav>
       <div class="nav-actions">
-        <button class="btn btn-sm" id="theme-toggle" type="button" aria-label="Toggle color theme">
-          <span id="theme-icon" aria-hidden="true">☀</span>
-          <span id="theme-label">Light</span>
+        <button class="btn btn-sm" id="theme-toggle" type="button" aria-label="Switch to dark theme" title="Switch to dark theme" style="padding:7px 9px;">
+          <span id="theme-icon" aria-hidden="true" style="display:inline-flex;align-items:center;"></span>
         </button>
         <a class="btn btn-sm" href="https://github.com/esokullu/openfal" target="_blank" rel="noopener noreferrer">
-          GitHub Repo
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span>GitHub Repo</span>
         </a>
       </div>
     </div>
@@ -605,8 +583,7 @@
       <div class="container hero-grid">
         <div>
           <div class="eyebrow">
-            <span class="eyebrow-dot"></span>
-            MIT Licensed · Local PyTorch Inference · fal-Style API
+            MIT Licensed · Local PyTorch Inference · fal-Compatible API
           </div>
           <h1>
             <span class="gradient-text">Local image &amp; video generation</span> with a fal-compatible API and one-CLI setup.
@@ -628,7 +605,6 @@
 
         <div class="terminal" aria-label="Quickstart CLI session">
           <div class="terminal-bar">
-            <div class="dots"><i></i><i></i><i></i></div>
             <span>openfal cli — v0.1.0</span>
             <button class="copy-btn" style="position:static;" type="button" data-copy="openfal detect&#10;openfal autosetup --tier minimal -y&#10;openfal serve --port 8008">Copy</button>
           </div>
@@ -637,13 +613,13 @@
 <span class="t-ok">✓</span> Detected compute GPU, host RAM &amp; recommended profile
 
 <span class="t-dim"># 2. Install smallest supported image setup (~16.1 GB)</span>
-<span class="t-cmd">$ openfal autosetup --tier minimal -y</span>
+<span class="t-cmd">$ openfal autosetup</span> <span class="t-flag">--tier minimal -y</span>
 <span class="t-ok">✓</span> Checkpoints, encoders, VAE &amp; tokenizers verified
 
 <span class="t-dim"># 3. Serve fal-compatible API, queue &amp; Studio (127.0.0.1 default)</span>
-<span class="t-cmd">$ openfal serve --port 8008</span>
-<span class="t-ok">✓</span> Studio: http://127.0.0.1:8008/
-<span class="t-ok">✓</span> OpenAPI: http://127.0.0.1:8008/docs</pre>
+<span class="t-cmd">$ openfal serve</span> <span class="t-flag">--port 8008</span>
+<span class="t-ok">✓</span> Studio:  <span class="t-url">http://127.0.0.1:8008/</span>
+<span class="t-ok">✓</span> OpenAPI: <span class="t-url">http://127.0.0.1:8008/docs</span></pre>
         </div>
       </div>
     </section>
@@ -660,7 +636,6 @@
 
         <div class="grid-3">
           <article class="card">
-            <div class="card-num">01 / API COMPATIBILITY</div>
             <h3>Drop-in fal-style API &amp; SDK</h3>
             <p>
               Exposes fal-compatible route names, <code>/queue/*</code> submission, SSE status streaming, and a
@@ -673,7 +648,6 @@
           </article>
 
           <article class="card">
-            <div class="card-num">02 / ZERO NODE GRAPHS</div>
             <h3>No ComfyUI GUI or graph UX</h3>
             <p>
               Consumes supported Comfy-Org single-file FP8/INT8 checkpoints under the hood and verifies supporting
@@ -685,7 +659,6 @@
           </article>
 
           <article class="card">
-            <div class="card-num">03 / UNIFIED CLI</div>
             <h3>One CLI beyond just serving</h3>
             <p>
               <code>detect</code>, <code>autosetup</code>, <code>download</code> (including <code>--runtime-assets-only</code>
@@ -715,11 +688,11 @@
             <h3>Install CUDA PyTorch &amp; openfal</h3>
             <div class="code-box">
               <button class="copy-btn" type="button" data-copy="git clone https://github.com/esokullu/openfal.git&#10;cd openfal&#10;pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128&#10;pip install -e &quot;.[inference]&quot;&#10;openfal detect">Copy</button>
-              git clone https://github.com/esokullu/openfal.git<br />
-              cd openfal<br />
-              pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128<br />
-              pip install -e ".[inference]"<br />
-              openfal detect
+              <span class="tok-fn">git</span> clone <span class="tok-str">https://github.com/esokullu/openfal.git</span><br />
+              <span class="tok-fn">cd</span> openfal<br />
+              <span class="tok-fn">pip</span> install torch torchvision <span class="tok-flag">--index-url</span> <span class="tok-str">https://download.pytorch.org/whl/cu128</span><br />
+              <span class="tok-fn">pip</span> install <span class="tok-flag">-e</span> <span class="tok-str">".[inference]"</span><br />
+              <span class="tok-fn">openfal</span> detect
             </div>
             <p style="font-size:13px; color:var(--text-1); margin:0;">
               Install CUDA PyTorch first on Windows/Linux NVIDIA GPUs (macOS/CPU can skip the index-url line).
@@ -731,8 +704,8 @@
             <h3>Pick a tier or component</h3>
             <div class="code-box">
               <button class="copy-btn" type="button" data-copy="openfal autosetup --dry-run&#10;openfal autosetup --tier minimal -y">Copy</button>
-              openfal autosetup --dry-run<br />
-              openfal autosetup --tier minimal -y
+              <span class="tok-fn">openfal</span> autosetup <span class="tok-flag">--dry-run</span><br />
+              <span class="tok-fn">openfal</span> autosetup <span class="tok-flag">--tier</span> <span class="tok-str">minimal</span> <span class="tok-flag">-y</span>
             </div>
             <p style="font-size:13px; color:var(--text-1); margin:0;">
               Or target a model directly with <code>openfal download --component qwen_image_21 --quant fp8_e4m3</code>.
@@ -744,7 +717,7 @@
             <h3>Start API, queue &amp; Studio</h3>
             <div class="code-box">
               <button class="copy-btn" type="button" data-copy="openfal serve --port 8008">Copy</button>
-              openfal serve --port 8008
+              <span class="tok-fn">openfal</span> serve <span class="tok-flag">--port</span> <span class="tok-num">8008</span>
             </div>
             <p style="font-size:13px; color:var(--text-1); margin:0;">
               Binds <code>127.0.0.1</code> by default. For LAN access, pass <code>--host 0.0.0.0 --api-key &lt;secret&gt;</code>. Open <code>http://127.0.0.1:8008/</code> for Studio or <code>/docs</code> for OpenAPI.
@@ -801,68 +774,68 @@
 
           <div class="tab-panel active" data-panel="sdk">
             <button class="copy-btn" type="button" data-copy="import openfal&#10;&#10;server = &quot;http://127.0.0.1:8008&quot;&#10;reference = openfal.upload_file(&quot;portrait.png&quot;, base_url=server)&#10;result = openfal.subscribe(&#10;    &quot;qwen/image-2.1/edit&quot;,&#10;    arguments={&#10;        &quot;prompt&quot;: &quot;Keep the person recognizable and change the lighting to warm evening light&quot;,&#10;        &quot;reference_image_urls&quot;: [reference],&#10;        &quot;resolution&quot;: &quot;768P&quot;,&#10;        &quot;aspect_ratio&quot;: &quot;1:1&quot;,&#10;        &quot;seed&quot;: 20261117,&#10;    },&#10;    base_url=server,&#10;)&#10;print(result[&quot;images&quot;][0][&quot;url&quot;])">Copy</button>
-            <pre>import openfal
+            <pre><span class="tok-kw">import</span> openfal
 
-server = "http://127.0.0.1:8008"
-reference = openfal.upload_file("portrait.png", base_url=server)
-result = openfal.subscribe(
-    "qwen/image-2.1/edit",
+server = <span class="tok-str">"http://127.0.0.1:8008"</span>
+reference = openfal.<span class="tok-fn">upload_file</span>(<span class="tok-str">"portrait.png"</span>, base_url=server)
+result = openfal.<span class="tok-fn">subscribe</span>(
+    <span class="tok-str">"qwen/image-2.1/edit"</span>,
     arguments={
-        "prompt": "Keep the person recognizable and change the lighting to warm evening light",
-        "reference_image_urls": [reference],
-        "resolution": "768P",
-        "aspect_ratio": "1:1",
-        "seed": 20261117,
+        <span class="tok-str">"prompt"</span>: <span class="tok-str">"Keep the person recognizable and change the lighting to warm evening light"</span>,
+        <span class="tok-str">"reference_image_urls"</span>: [reference],
+        <span class="tok-str">"resolution"</span>: <span class="tok-str">"768P"</span>,
+        <span class="tok-str">"aspect_ratio"</span>: <span class="tok-str">"1:1"</span>,
+        <span class="tok-str">"seed"</span>: <span class="tok-num">20261117</span>,
     },
     base_url=server,
 )
-print(result["images"][0]["url"])</pre>
+<span class="tok-fn">print</span>(result[<span class="tok-str">"images"</span>][<span class="tok-num">0</span>][<span class="tok-str">"url"</span>])</pre>
           </div>
 
           <div class="tab-panel" data-panel="animate">
             <button class="copy-btn" type="button" data-copy="import openfal&#10;&#10;server = &quot;http://127.0.0.1:8008&quot;&#10;identity = openfal.upload_file(&quot;character.png&quot;, base_url=server)&#10;driver = openfal.upload_file(&quot;performance.mp4&quot;, base_url=server)&#10;result = openfal.subscribe(&#10;    &quot;wan/v2.2/animate&quot;,&#10;    arguments={&#10;        &quot;prompt&quot;: &quot;The reference character follows the driving performance naturally&quot;,&#10;        &quot;face_image_url&quot;: identity,&#10;        &quot;driving_video_url&quot;: driver,&#10;        &quot;resolution&quot;: &quot;480P&quot;,&#10;        &quot;duration&quot;: 3,&#10;        &quot;fps&quot;: 16,&#10;        &quot;seed&quot;: 20261117,&#10;    },&#10;    base_url=server,&#10;)&#10;print(result[&quot;video&quot;][&quot;url&quot;])">Copy</button>
-            <pre>import openfal
+            <pre><span class="tok-kw">import</span> openfal
 
-server = "http://127.0.0.1:8008"
-identity = openfal.upload_file("character.png", base_url=server)
-driver = openfal.upload_file("performance.mp4", base_url=server)
-result = openfal.subscribe(
-    "wan/v2.2/animate",
+server = <span class="tok-str">"http://127.0.0.1:8008"</span>
+identity = openfal.<span class="tok-fn">upload_file</span>(<span class="tok-str">"character.png"</span>, base_url=server)
+driver = openfal.<span class="tok-fn">upload_file</span>(<span class="tok-str">"performance.mp4"</span>, base_url=server)
+result = openfal.<span class="tok-fn">subscribe</span>(
+    <span class="tok-str">"wan/v2.2/animate"</span>,
     arguments={
-        "prompt": "The reference character follows the driving performance naturally",
-        "face_image_url": identity,
-        "driving_video_url": driver,
-        "resolution": "480P",
-        "duration": 3,
-        "fps": 16,
-        "seed": 20261117,
+        <span class="tok-str">"prompt"</span>: <span class="tok-str">"The reference character follows the driving performance naturally"</span>,
+        <span class="tok-str">"face_image_url"</span>: identity,
+        <span class="tok-str">"driving_video_url"</span>: driver,
+        <span class="tok-str">"resolution"</span>: <span class="tok-str">"480P"</span>,
+        <span class="tok-str">"duration"</span>: <span class="tok-num">3</span>,
+        <span class="tok-str">"fps"</span>: <span class="tok-num">16</span>,
+        <span class="tok-str">"seed"</span>: <span class="tok-num">20261117</span>,
     },
     base_url=server,
 )
-print(result["video"]["url"])</pre>
+<span class="tok-fn">print</span>(result[<span class="tok-str">"video"</span>][<span class="tok-str">"url"</span>])</pre>
           </div>
 
           <div class="tab-panel" data-panel="http">
             <button class="copy-btn" type="button" data-copy="curl -X POST http://127.0.0.1:8008/qwen/image-2.1/text-to-image \&#10;  -H &quot;Content-Type: application/json&quot; \&#10;  -d '{&quot;prompt&quot;:&quot;A golden poodle running on an Istanbul cobblestone street&quot;,&quot;resolution&quot;:&quot;768P&quot;,&quot;aspect_ratio&quot;:&quot;16:9&quot;,&quot;seed&quot;:20261117}'">Copy</button>
-            <pre>curl -X POST http://127.0.0.1:8008/qwen/image-2.1/text-to-image \
-  -H "Content-Type: application/json" \
-  -d '{
+            <pre><span class="tok-fn">curl</span> <span class="tok-flag">-X POST</span> http://127.0.0.1:8008/qwen/image-2.1/text-to-image \
+  <span class="tok-flag">-H</span> <span class="tok-str">"Content-Type: application/json"</span> \
+  <span class="tok-flag">-d</span> <span class="tok-str">'{
     "prompt": "A golden poodle running on an Istanbul cobblestone street",
     "resolution": "768P",
     "aspect_ratio": "16:9",
     "seed": 20261117
-  }'</pre>
+  }'</span></pre>
           </div>
 
           <div class="tab-panel" data-panel="queue">
             <button class="copy-btn" type="button" data-copy="curl -X POST http://127.0.0.1:8008/queue/wan/v2.2/text-to-video \&#10;  -H &quot;Content-Type: application/json&quot; \&#10;  -d '{&quot;prompt&quot;:&quot;A dog walking down a quiet street&quot;,&quot;resolution&quot;:&quot;480P&quot;,&quot;duration&quot;:2,&quot;seed&quot;:20261117}'">Copy</button>
-            <pre># Submit to queue (returns request_id, status_url, response_url, cancel_url)
-curl -X POST http://127.0.0.1:8008/queue/wan/v2.2/text-to-video \
-  -H "Content-Type: application/json" \
-  -d '{"prompt":"A dog walking down a quiet street","resolution":"480P","duration":2,"seed":20261117}'
+            <pre><span class="tok-cmt"># Submit to queue (returns request_id, status_url, response_url, cancel_url)</span>
+<span class="tok-fn">curl</span> <span class="tok-flag">-X POST</span> http://127.0.0.1:8008/queue/wan/v2.2/text-to-video \
+  <span class="tok-flag">-H</span> <span class="tok-str">"Content-Type: application/json"</span> \
+  <span class="tok-flag">-d</span> <span class="tok-str">'{"prompt":"A dog walking down a quiet street","resolution":"480P","duration":2,"seed":20261117}'</span>
 
-# Optional: stream live status updates via SSE
-curl -N http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;/status/stream</pre>
+<span class="tok-cmt"># Optional: stream live status updates via SSE</span>
+<span class="tok-fn">curl</span> <span class="tok-flag">-N</span> http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;/status/stream</pre>
           </div>
         </div>
       </div>
@@ -1196,16 +1169,18 @@ curl -N http://127.0.0.1:8008/wan/v2.2/text-to-video/requests/&lt;request_id&gt;
       const root = document.documentElement;
       const themeToggle = document.getElementById("theme-toggle");
       const themeIcon = document.getElementById("theme-icon");
-      const themeLabel = document.getElementById("theme-label");
+      const sunSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
+      const moonSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 
       function syncThemeButton(theme) {
         const isLight = theme === "light";
-        themeIcon.textContent = isLight ? "☾" : "☀";
-        themeLabel.textContent = isLight ? "Dark" : "Light";
-        themeToggle.setAttribute("aria-label", isLight ? "Switch to dark theme" : "Switch to light theme");
+        themeIcon.innerHTML = isLight ? moonSvg : sunSvg;
+        const label = isLight ? "Switch to dark theme" : "Switch to light theme";
+        themeToggle.setAttribute("aria-label", label);
+        themeToggle.setAttribute("title", label);
       }
 
-      const initialTheme = root.getAttribute("data-theme") === "light" ? "light" : "dark";
+      const initialTheme = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
       syncThemeButton(initialTheme);
 
       themeToggle.addEventListener("click", () => {

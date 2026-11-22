@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>openfal — Estimated Memory Profile (50-Block Reference Model)</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='0' y2='64' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%2318203f'/%3E%3Cstop offset='1' stop-color='%23090c18'/%3E%3C/linearGradient%3E%3ClinearGradient id='r' x1='110' y1='410' x2='410' y2='110' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%2322d3ee'/%3E%3Cstop offset='0.5' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%23c084fc'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23bg)'/%3E%3Cg transform='translate(32 32) scale(0.1287) translate(-270 -242)'%3E%3Cpath d='M387.5 267.5A132 132 0 1 1 260.6 124.1' fill='none' stroke='url(%23r)' stroke-width='56' stroke-linecap='round'/%3E%3Cpath d='M372.0 68.0Q385.0 127.0 444.0 140.0Q385.0 153.0 372.0 212.0Q359.0 153.0 300.0 140.0Q359.0 127.0 372.0 68.0Z' fill='%23fff'/%3E%3C/g%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg-0: #09090b;
+      --bg-1: #111113;
+      --bg-2: #18181b;
+      --bg-3: #27272a;
+      --border: #27272a;
+      --border-strong: #3f3f46;
+      --text-0: #fafafa;
+      --text-1: #a1a1aa;
+      --text-2: #71717a;
+      --accent: #3b82f6;
+      --emerald: #22c55e;
+      --amber: #eab308;
+      --header-bg: rgba(9, 9, 11, 0.9);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    }
+    html.light {
+      --bg-0: #f4f4f5;
+      --bg-1: #ffffff;
+      --bg-2: #f4f4f5;
+      --bg-3: #e4e4e7;
+      --border: #e4e4e7;
+      --border-strong: #d4d4d8;
+      --text-0: #09090b;
+      --text-1: #52525b;
+      --text-2: #71717a;
+      --accent: #2563eb;
+      --emerald: #16a34a;
+      --amber: #ca8a04;
+      --header-bg: rgba(255, 255, 255, 0.92);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--sans);
+      background: var(--bg-0);
+      color: var(--text-0);
+      line-height: 1.5;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 24px;
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(10px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-0);
+    }
+    .brand h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+    .brand span.sub { font-size: 12px; color: var(--text-1); display: block; }
+    .header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    select, button, a.btn-link {
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-2);
+      color: var(--text-0);
+      padding: 7px 12px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    button:hover, a.btn-link:hover { background: var(--bg-3); border-color: var(--border-strong); }
+    .btn-sleep {
+      background: rgba(234, 179, 8, 0.12);
+      border-color: rgba(234, 179, 8, 0.4);
+      color: var(--amber);
+    }
+    .btn-wake {
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.4);
+      color: var(--emerald);
+    }
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-1);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pill {
+      padding: 3px 9px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--accent);
+    }
+    .tier-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+    @media (max-width: 820px) {
+      .tier-grid { grid-template-columns: 1fr; }
+    }
+    .tier-box {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+    }
+    .tier-box h4 {
+      font-size: 11px;
+      color: var(--text-1);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .tier-box .metric {
+      font-size: 18px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-0);
+    }
+    .tier-box .submetric {
+      font-size: 11.5px;
+      color: var(--text-1);
+      margin-top: 3px;
+    }
+    .blocks-grid {
+      display: grid;
+      grid-template-columns: repeat(25, 1fr);
+      gap: 4px;
+      margin-top: 10px;
+    }
+    @media (max-width: 820px) {
+      .blocks-grid { grid-template-columns: repeat(10, 1fr); }
+    }
+    .blk-cell {
+      height: 28px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+    }
+    .blk-vram-gpu0 { background: rgba(34, 197, 94, 0.22); color: #16a34a; border-color: #22c55e; }
+    .blk-vram-gpu1 { background: rgba(59, 130, 246, 0.22); color: #2563eb; border-color: #3b82f6; }
+    .blk-dma-slot  { background: rgba(234, 179, 8, 0.32); color: #a16207; border-color: #eab308; }
+    .blk-ram-pantry { background: var(--bg-2); color: var(--text-1); }
+    html:not(.light) .blk-vram-gpu0 { color: #86efac; }
+    html:not(.light) .blk-vram-gpu1 { color: #93c5fd; }
+    html:not(.light) .blk-dma-slot  { color: #fde68a; }
+    .legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 11.5px;
+      color: var(--text-1);
+      margin-top: 12px;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">
+      <svg width="26" height="26" viewBox="88 60 364 364" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="mp-ring" x1="110" y1="410" x2="410" y2="110" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#22d3ee"/>
+            <stop offset="0.5" stop-color="#6366f1"/>
+            <stop offset="1" stop-color="#c084fc"/>
+          </linearGradient>
+        </defs>
+        <path d="M387.5 267.5A132 132 0 1 1 171.2 154.9" stroke="url(#mp-ring)" stroke-width="56" stroke-linecap="round"/>
+        <circle cx="219.6" cy="129.1" r="16" fill="#8b8cf8"/>
+        <circle cx="253.7" cy="124.0" r="11" fill="#a78bfa"/>
+        <circle cx="281.2" cy="126.4" r="6.5" fill="#c084fc"/>
+        <path d="M372.0 68.0Q385.0 127.0 444.0 140.0Q385.0 153.0 372.0 212.0Q359.0 153.0 300.0 140.0Q359.0 127.0 372.0 68.0Z" fill="#8b5cf6"/>
+      </svg>
+      <div>
+        <h1>openfal <span class="pill">Memory Profile</span></h1>
+        <span class="sub">Estimated 3-Tier Residency &amp; 50-Block Reference Model</span>
+      </div>
+    </a>
+
+    <div class="header-controls">
+      <label for="profileSelect" style="font-size:12px;color:var(--text-1);">Hardware Profile:</label>
+      <select id="profileSelect" onchange="switchProfile()" style="min-width:260px;"></select>
+      <button id="sleepWakeBtn" class="btn-sleep" onclick="toggleSleepWake()">VRAM Sleep (Evict to RAM)</button>
+      <a href="/" class="btn-link">Back to Studio</a>
+      <button type="button" id="themeToggleBtn" onclick="toggleTheme()" aria-label="Switch to dark theme" title="Switch to dark theme" style="padding:7px 9px;display:inline-flex;align-items:center;justify-content:center;"></button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <div class="card-title">
+        <span>Estimated Memory Profile (50-Block Reference Model)</span>
+        <span id="engineStageBadge" class="pill">Stage: idle</span>
+      </div>
+
+      <p style="font-size:12.5px;color:var(--text-1);">
+        Memory, block placement, bandwidth and overlap below are profile estimates (<code>telemetry_kind: "profile_estimate"</code>), not live hardware measurements. Actual usage varies by model and request.
+      </p>
+
+      <div class="tier-grid">
+        <div class="tier-box">
+          <h4>Tier 1 &mdash; GPU VRAM ("The Counter")</h4>
+          <div class="metric" id="tier1Metric">-- / -- GB</div>
+          <div class="submetric" id="tier1Sub">Resident DiT Blocks + 2 Ping-Pong DMA Slots</div>
+        </div>
+        <div class="tier-box">
+          <h4>Tier 2 &mdash; Pinned DDR5 ("The Pantry")</h4>
+          <div class="metric" id="tier2Metric">-- GB Pinned</div>
+          <div class="submetric" id="tier2Sub">Async PCIe 5.0 H2D Streamer</div>
+        </div>
+        <div class="tier-box">
+          <h4>Tier 3 &mdash; NVMe SSD ("The Storeroom")</h4>
+          <div class="metric" id="tier3Metric">-- GB mmap</div>
+          <div class="submetric" id="tier3Sub">Qwen3-VL Layer-50 Cache &amp; Partitions</div>
+        </div>
+      </div>
+
+      <div style="font-size:12px;font-weight:600;color:var(--text-1);">
+        Estimated 50-Block Placement:
+      </div>
+      <div class="blocks-grid" id="blocksGrid"></div>
+      <div class="legend">
+        <span><i class="dot" style="background:#22c55e;"></i> GPU 0 VRAM Counter (Pinned)</span>
+        <span><i class="dot" style="background:#3b82f6;"></i> GPU 1 VRAM Counter (Pinned)</span>
+        <span><i class="dot" style="background:#eab308;"></i> Active Ping-Pong DMA Slot A/B</span>
+        <span><i class="dot" style="background:#52525b;"></i> Pinned Host RAM Pantry (Streamed)</span>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let isSleeping = false;
+
+    function applyTheme(theme) {
+      const next = theme === "dark" ? "dark" : "light";
+      try { localStorage.setItem("openfal_theme", next); } catch (e) {}
+      document.documentElement.classList.toggle("light", next === "light");
+      document.documentElement.classList.toggle("dark", next === "dark");
+      const btn = document.getElementById("themeToggleBtn");
+      if (btn) {
+        const sunSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
+        const moonSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+        const label = next === "light" ? "Switch to dark theme" : "Switch to light theme";
+        btn.innerHTML = next === "light" ? moonSvg : sunSvg;
+        btn.setAttribute("aria-label", label);
+        btn.setAttribute("title", label);
+      }
+    }
+
+    function toggleTheme() {
+      applyTheme(document.documentElement.classList.contains("light") ? "dark" : "light");
+    }
+
+    async function switchProfile() {
+      const profile_id = document.getElementById("profileSelect").value;
+      await fetch("/v1/engine/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id })
+      });
+      await refreshTelemetry();
+    }
+
+    async function toggleSleepWake() {
+      const route = isSleeping ? "/v1/engine/wake" : "/v1/engine/sleep";
+      await fetch(route, { method: "POST" });
+      await refreshTelemetry();
+    }
+
+    async function refreshTelemetry() {
+      try {
+        const res = await fetch("/v1/engine/status");
+        const t = await res.json();
+        isSleeping = t.sleeping;
+        const btn = document.getElementById("sleepWakeBtn");
+        if (isSleeping) {
+          btn.textContent = "Wake Engine (Restore VRAM)";
+          btn.className = "btn-wake";
+        } else {
+          btn.textContent = "VRAM Sleep (Evict to RAM)";
+          btn.className = "btn-sleep";
+        }
+
+        document.getElementById("engineStageBadge").textContent = `Stage: ${t.active_stage} (${t.active_partition})`;
+        const t1 = t.tiers.tier1_vram_counter;
+        const t2 = t.tiers.tier2_ram_pantry;
+        const t3 = t.tiers.tier3_nvme_storeroom;
+
+        document.getElementById("tier1Metric").textContent = `Est. ${t1.used_gb} / ${t1.budget_gb} GB (${t1.utilization_pct}%)`;
+        document.getElementById("tier1Sub").textContent = `${t1.resident_dit_blocks}/50 Resident Blocks + ${t1.ping_pong_slots} DMA Slots`;
+        document.getElementById("tier2Metric").textContent = `Est. ${t2.used_gb} GB Host RAM`;
+        document.getElementById("tier2Sub").textContent = `Profile: ${t2.streamed_dit_blocks} streamed blocks; ${t2.pcie_dma_bandwidth_gbps} GB/s, ${t2.compute_dma_overlap_pct}% overlap (estimates)`;
+        document.getElementById("tier3Metric").textContent = `Est. ${t3.mapped_gb} GB NVMe`;
+        document.getElementById("tier3Sub").textContent = `Qwen3-VL Cache Hits: ${t.text_encoder_cache.hits} | Standby: ${t3.inactive_partitions.join(", ")}`;
+
+        const grid = document.getElementById("blocksGrid");
+        grid.innerHTML = "";
+        for (const b of t.blocks) {
+          const cell = document.createElement("div");
+          let cls = "blk-cell blk-ram-pantry";
+          if (b.tier === "vram_prefetch_slot_a" || b.tier === "vram_prefetch_slot_b" || b.block_id === t.active_block_id) {
+            cls = "blk-cell blk-dma-slot";
+          } else if (b.tier === "vram_counter") {
+            cls = b.assigned_gpu === 0 ? "blk-cell blk-vram-gpu0" : "blk-cell blk-vram-gpu1";
+          }
+          cell.className = cls;
+          cell.title = `Estimated block ${b.block_id} | GPU ${b.assigned_gpu} | Tier: ${b.tier} (${b.size_mb} MB)`;
+          cell.textContent = b.block_id;
+          grid.appendChild(cell);
+        }
+      } catch (e) {}
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      try { applyTheme(localStorage.getItem("openfal_theme") || "light"); } catch (e) { applyTheme("light"); }
+      try {
+        const profRes = await fetch("/v1/engine/profiles");
+        const profData = await profRes.json();
+        const sel = document.getElementById("profileSelect");
+        sel.innerHTML = "";
+        for (const p of profData.profiles) {
+          const opt = document.createElement("option");
+          opt.value = p.profile_id;
+          opt.textContent = `${p.display_name} [${p.quantization}]`;
+          if (p.profile_id === profData.active_profile_id) opt.selected = true;
+          sel.appendChild(opt);
+        }
+      } catch (e) {}
+      await refreshTelemetry();
+      setInterval(refreshTelemetry, 1200);
+    });
+  </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,69 +7,79 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='0' y2='64' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%2318203f'/%3E%3Cstop offset='1' stop-color='%23090c18'/%3E%3C/linearGradient%3E%3ClinearGradient id='r' x1='110' y1='410' x2='410' y2='110' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%2322d3ee'/%3E%3Cstop offset='0.5' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%23c084fc'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23bg)'/%3E%3Cg transform='translate(32 32) scale(0.1287) translate(-270 -242)'%3E%3Cpath d='M387.5 267.5A132 132 0 1 1 260.6 124.1' fill='none' stroke='url(%23r)' stroke-width='56' stroke-linecap='round'/%3E%3Cpath d='M372.0 68.0Q385.0 127.0 444.0 140.0Q385.0 153.0 372.0 212.0Q359.0 153.0 300.0 140.0Q359.0 127.0 372.0 68.0Z' fill='%23fff'/%3E%3C/g%3E%3C/svg%3E" />
   <style>
     :root {
-      --bg-0: #090b10;
-      --bg-1: #111520;
-      --bg-2: #171c2b;
-      --bg-3: #1f263a;
-      --border: #283149;
-      --text-0: #f1f5f9;
-      --text-1: #94a3b8;
-      --accent: #38bdf8;
-      --accent-2: #818cf8;
-      --fal-purple: #6366f1;
-      --emerald: #10b981;
-      --amber: #f59e0b;
-      --rose: #f43f5e;
-      --header-bg: rgba(17, 21, 32, 0.92);
-      --stage-bg: #05070b;
-      --code-bg: #06080d;
-      --code-text: #e2e8f0;
-      --log-text: #a5f3fc;
-      --drop-bg: rgba(9, 11, 16, 0.65);
-      --drop-border: #334155;
-      --accordion-bg: rgba(9, 11, 16, 0.45);
+      --bg-0: #09090b;
+      --bg-1: #111113;
+      --bg-2: #18181b;
+      --bg-3: #27272a;
+      --border: #27272a;
+      --border-strong: #3f3f46;
+      --text-0: #fafafa;
+      --text-1: #a1a1aa;
+      --text-2: #71717a;
+      --accent: #3b82f6;
+      --accent-2: #60a5fa;
+      --btn-primary-bg: #2563eb;
+      --btn-primary-hover: #1d4ed8;
+      --btn-primary-fg: #ffffff;
+      --tok-kw: #c084fc;
+      --tok-str: #86efac;
+      --tok-fn: #60a5fa;
+      --tok-num: #fbbf24;
+      --tok-cmt: #71717a;
+      --tok-flag: #38bdf8;
+      --emerald: #22c55e;
+      --amber: #eab308;
+      --rose: #ef4444;
+      --header-bg: rgba(9, 9, 11, 0.9);
+      --stage-bg: #0c0c0e;
+      --code-bg: #0c0c0e;
+      --code-text: #e4e4e7;
+      --log-text: #d4d4d8;
+      --drop-bg: #0c0c0e;
+      --drop-border: #3f3f46;
+      --accordion-bg: #0c0c0e;
     }
     html.light {
-      --bg-0: #f8fafc;
+      --bg-0: #f4f4f5;
       --bg-1: #ffffff;
-      --bg-2: #f1f5f9;
-      --bg-3: #e2e8f0;
-      --border: #cbd5e1;
-      --text-0: #0f172a;
-      --text-1: #475569;
-      --accent: #0284c7;
-      --accent-2: #4f46e5;
-      --fal-purple: #4f46e5;
-      --emerald: #059669;
-      --amber: #d97706;
-      --rose: #e11d48;
+      --bg-2: #f4f4f5;
+      --bg-3: #e4e4e7;
+      --border: #e4e4e7;
+      --border-strong: #d4d4d8;
+      --text-0: #09090b;
+      --text-1: #52525b;
+      --text-2: #71717a;
+      --accent: #2563eb;
+      --accent-2: #1d4ed8;
+      --btn-primary-bg: #2563eb;
+      --btn-primary-hover: #1d4ed8;
+      --btn-primary-fg: #ffffff;
+      --tok-kw: #7c3aed;
+      --tok-str: #15803d;
+      --tok-fn: #2563eb;
+      --tok-num: #b45309;
+      --tok-cmt: #64748b;
+      --tok-flag: #0369a1;
+      --emerald: #16a34a;
+      --amber: #ca8a04;
+      --rose: #dc2626;
       --header-bg: rgba(255, 255, 255, 0.92);
-      --stage-bg: #f1f5f9;
-      --code-bg: #f8fafc;
-      --code-text: #1e293b;
-      --log-text: #0f172a;
-      --drop-bg: #f8fafc;
-      --drop-border: #94a3b8;
-      --accordion-bg: #f8fafc;
+      --stage-bg: #fafafa;
+      --code-bg: #fafafa;
+      --code-text: #18181b;
+      --log-text: #18181b;
+      --drop-bg: #fafafa;
+      --drop-border: #d4d4d8;
+      --accordion-bg: #fafafa;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-      background:
-        radial-gradient(900px 440px at 12% -6%, rgba(56, 189, 248, 0.08), transparent 60%),
-        radial-gradient(820px 420px at 90% 2%, rgba(129, 140, 248, 0.08), transparent 58%),
-        var(--bg-0);
+      background: var(--bg-0);
       color: var(--text-0);
       line-height: 1.5;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
-      transition: background-color 0.15s ease, color 0.15s ease;
-    }
-    html.light body {
-      background:
-        radial-gradient(900px 440px at 12% -6%, rgba(2, 132, 199, 0.06), transparent 60%),
-        radial-gradient(820px 420px at 90% 2%, rgba(79, 70, 229, 0.05), transparent 58%),
-        var(--bg-0);
     }
     header {
       display: flex;
@@ -91,15 +101,9 @@
       gap: 12px;
     }
     .logo-badge {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      background: linear-gradient(180deg, #18203f 0%, #090c18 100%);
-      border: 1px solid rgba(255, 255, 255, 0.12);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 14px rgba(2, 8, 23, 0.3);
       flex-shrink: 0;
     }
     .brand h1 {
@@ -114,32 +118,31 @@
     }
     .view-switcher {
       display: inline-flex;
-      background: var(--bg-0);
+      background: var(--bg-2);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 3px;
-      gap: 4px;
+      border-radius: 6px;
+      padding: 2px;
+      gap: 2px;
     }
     .view-tab-btn {
       background: transparent;
       border: none;
       color: var(--text-1);
-      padding: 6px 14px;
-      border-radius: 7px;
+      padding: 5px 12px;
+      border-radius: 4px;
       font-size: 12.5px;
-      font-weight: 600;
+      font-weight: 500;
       display: inline-flex;
       align-items: center;
       gap: 6px;
     }
     .view-tab-btn:hover {
       color: var(--text-0);
-      background: rgba(255, 255, 255, 0.04);
     }
     .view-tab-btn.active {
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(129, 140, 248, 0.22));
+      background: var(--bg-1);
       color: var(--text-0);
-      border: 1px solid rgba(56, 189, 248, 0.35);
+      border: 1px solid var(--border-strong);
     }
     .header-controls {
       display: flex;
@@ -158,30 +161,28 @@
       font-family: inherit;
     }
     select:focus, input:focus, textarea:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.16);
+      border-color: var(--text-1);
     }
     button {
       cursor: pointer;
       border: 1px solid transparent;
-      border-radius: 8px;
-      padding: 8px 14px;
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.15s ease;
+      border-radius: 6px;
+      padding: 7px 13px;
+      font-size: 12.5px;
+      font-weight: 500;
+      transition: background-color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
       font-family: inherit;
     }
     button:disabled {
-      opacity: 0.55;
+      opacity: 0.5;
       cursor: not-allowed;
-      transform: none !important;
     }
     .btn-primary {
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      color: #090b10;
-      font-weight: 700;
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-fg);
+      font-weight: 600;
     }
-    .btn-primary:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
+    .btn-primary:hover:not(:disabled) { opacity: 0.9; }
     .btn-secondary {
       background: var(--bg-2);
       border-color: var(--border);
@@ -217,7 +218,7 @@
     .card {
       background: var(--bg-1);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 8px;
       padding: 18px;
       margin-bottom: 16px;
     }
@@ -426,24 +427,24 @@
       background: var(--bg-1);
       border: 1px solid var(--border);
       color: var(--text-1);
-      padding: 9px 15px;
-      border-radius: 999px;
-      font-size: 13px;
-      font-weight: 600;
+      padding: 7px 13px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
       display: inline-flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
     }
     .simple-task-pill:hover {
-      border-color: #3d4b6e;
+      border-color: var(--border-strong);
       color: var(--text-0);
       background: var(--bg-2);
     }
     .simple-task-pill.active {
-      background: rgba(99, 102, 241, 0.18);
-      border-color: var(--accent-2);
+      background: var(--bg-2);
+      border-color: var(--text-0);
       color: var(--text-0);
-      box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.25);
+      font-weight: 600;
     }
     .simple-grid {
       display: grid;
@@ -457,8 +458,8 @@
     .simple-panel {
       background: var(--bg-1);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 20px;
+      border-radius: 8px;
+      padding: 18px;
     }
     .simple-section-head {
       display: flex;
@@ -612,18 +613,23 @@
     }
     .simple-run-btn {
       flex: 1;
-      padding: 11px 18px;
-      font-size: 14px;
-      border-radius: 10px;
-      background: linear-gradient(135deg, #6366f1, #38bdf8);
-      color: #ffffff;
-      font-weight: 700;
+      padding: 9px 16px;
+      font-size: 13px;
+      border-radius: 6px;
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-fg);
+      font-weight: 600;
       border: none;
     }
     .simple-run-btn:hover:not(:disabled) {
-      filter: brightness(1.08);
-      transform: translateY(-1px);
+      background: var(--btn-primary-hover);
     }
+    .tok-kw { color: var(--tok-kw); }
+    .tok-str { color: var(--tok-str); }
+    .tok-fn { color: var(--tok-fn); }
+    .tok-num { color: var(--tok-num); }
+    .tok-cmt { color: var(--tok-cmt); }
+    .tok-flag { color: var(--tok-flag); }
     .simple-output-header {
       display: flex;
       align-items: center;
@@ -855,21 +861,21 @@
       </div>
     </div>
 
-    <div class="view-switcher" role="tablist" aria-label="Dashboard Mode">
+    <div class="view-switcher" role="tablist" aria-label="Dashboard Mode" style="display:none;">
       <button id="tabBtnSimple" class="view-tab-btn active" onclick="switchMainView('simple')" role="tab" aria-selected="true">
-        ✨ Simple
+        Simple
       </button>
       <button id="tabBtnStudio" class="view-tab-btn" onclick="switchMainView('studio')" role="tab" aria-selected="false">
-        🎛️ Studio (Advanced)
+        Studio (Advanced)
       </button>
     </div>
 
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <div class="header-controls" id="simpleHeaderControls">
         <span id="simpleHwPill" class="pill" style="display:none;"></span>
-        <button class="btn-secondary" onclick="toggleModelHub()">📦 Models</button>
-        <button class="btn-secondary" id="desktopOutputsBtn" style="display:none;" onclick="desktopOpenOutputs()">📂 Outputs</button>
-        <button class="btn-secondary" id="desktopSetupBtn" style="display:none;" onclick="desktopOpenSetup()">⚙️ Desktop</button>
+        <button class="btn-secondary" onclick="toggleModelHub()">Models</button>
+        <button class="btn-secondary" id="desktopOutputsBtn" style="display:none;" onclick="desktopOpenOutputs()">Outputs</button>
+        <button class="btn-secondary" id="desktopSetupBtn" style="display:none;" onclick="desktopOpenSetup()">Desktop</button>
         <a href="/docs" target="_blank" style="text-decoration:none;">
           <button class="btn-secondary">API Docs</button>
         </a>
@@ -878,21 +884,21 @@
       <div class="header-controls" id="studioHeaderControls" style="display:none;">
         <label style="font-size:12px;color:var(--text-1);">Hardware Profile:</label>
         <select id="profileSelect" onchange="switchProfile()" style="width:auto;min-width:270px;"></select>
-        <button class="btn-secondary" onclick="toggleModelHub()">📦 HF Model Hub &amp; Installer</button>
+        <button class="btn-secondary" onclick="toggleModelHub()">HF Model Hub</button>
         <button id="sleepWakeBtn" class="btn-sleep" onclick="toggleSleepWake()">VRAM Sleep (Evict to RAM)</button>
         <a href="/docs" target="_blank" style="text-decoration:none;">
           <button class="btn-secondary">OpenAPI / Swagger</button>
         </a>
       </div>
 
-      <button type="button" id="themeToggleBtn" class="btn-secondary" onclick="toggleTheme()" title="Switch Light / Dark theme">☀️ Light</button>
+      <button type="button" id="themeToggleBtn" class="btn-secondary" onclick="toggleTheme()" aria-label="Switch to dark theme" title="Switch to dark theme" style="padding:7px 9px;display:inline-flex;align-items:center;justify-content:center;"></button>
     </div>
   </header>
 
   <div class="shared-container" id="sharedBanners" style="display:none;">
     <div class="card" id="modelHubPanel" style="display:none;border-color:var(--accent);">
       <div class="card-title">
-        <span>📦 Hugging Face Model Assets &amp; Installer</span>
+        <span>Hugging Face Model Assets &amp; Installer</span>
         <button class="btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="toggleModelHub()">Close</button>
       </div>
       <div id="desktopSettingsBar" style="display:none;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -901,8 +907,8 @@
           <code id="desktopWeightsPath" style="font-size:11.5px;color:var(--text-0);"></code>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button type="button" class="btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="desktopChooseWeightsDir()">📁 Change Weights Folder</button>
-          <button type="button" class="btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="desktopRestartBackend()">🔄 Restart Engine</button>
+          <button type="button" class="btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="desktopChooseWeightsDir()">Change Weights Folder</button>
+          <button type="button" class="btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="desktopRestartBackend()">Restart Engine</button>
         </div>
       </div>
       <div id="hwDetectSummary" style="font-size:12px;color:var(--text-1);margin-bottom:10px;">Detecting host hardware...</div>
@@ -913,9 +919,9 @@
       </div>
       <div id="modelComponentsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
-        <button class="btn-primary" onclick="triggerModelInstall('alibaba-only', 'hf_hub', 'fp8_e4m3')">⚡ Install ONLY Alibaba (~94GB FP8)</button>
-        <button class="btn-secondary" style="border-color:var(--accent);" onclick="triggerModelInstall('minimax-only', 'hf_hub', 'fp8_e4m3')">🎵 Install ONLY MiniMax-H3 (~88GB FP8)</button>
-        <button class="btn-secondary" onclick="triggerModelInstall('minimax-omni-compact', 'hf_hub', 'fp8_e4m3')">💾 MiniMax Ref2VA (~48GB FP8/INT8)</button>
+        <button class="btn-primary" onclick="triggerModelInstall('alibaba-only', 'hf_hub', 'fp8_e4m3')">Install ONLY Alibaba (~94GB FP8)</button>
+        <button class="btn-secondary" style="border-color:var(--accent);" onclick="triggerModelInstall('minimax-only', 'hf_hub', 'fp8_e4m3')">Install ONLY MiniMax-H3 (~88GB FP8)</button>
+        <button class="btn-secondary" onclick="triggerModelInstall('minimax-omni-compact', 'hf_hub', 'fp8_e4m3')">MiniMax Ref2VA (~48GB FP8/INT8)</button>
       </div>
       <div id="modelHubProgressWrap" style="display:none;margin-top:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -937,19 +943,19 @@
   <section id="simpleView" class="simple-shell">
     <div class="simple-task-bar" id="simpleTaskBar">
       <button class="simple-task-pill active" data-simple-task="t2i" onclick="selectSimpleTask('t2i')">
-        🖼️ Text to Image
+        Text to Image
       </button>
       <button class="simple-task-pill" data-simple-task="t2v" onclick="selectSimpleTask('t2v')">
-        🎬 Text to Video
+        Text to Video
       </button>
       <button class="simple-task-pill" data-simple-task="i2v" onclick="selectSimpleTask('i2v')">
-        🎞️ Image to Video
+        Image to Video
       </button>
       <button class="simple-task-pill" data-simple-task="i2i" onclick="selectSimpleTask('i2i')">
-        🪄 Image Edit
+        Image Edit
       </button>
       <button class="simple-task-pill" data-simple-task="animate" onclick="selectSimpleTask('animate')">
-        🎭 Animate / Replace
+        Animate / Replace
       </button>
     </div>
 
@@ -1156,7 +1162,7 @@
                 <label style="font-size:11px;color:var(--text-1);" for="simpleSeed">Seed</label>
                 <div style="display:flex;gap:4px;">
                   <input type="text" id="simpleSeed" placeholder="Random" oninput="updateSimpleApiPreview()" />
-                  <button type="button" class="btn-secondary" style="padding:6px 8px;" title="Randomize seed" onclick="randomizeSimpleSeed()">🎲</button>
+                  <button type="button" class="btn-secondary" style="padding:6px 9px;" title="Randomize seed" onclick="randomizeSimpleSeed()">Rand</button>
                 </div>
               </div>
             </div>
@@ -1165,8 +1171,8 @@
 
         <div class="simple-actions">
           <button type="button" class="btn-secondary" onclick="resetSimpleForm()">Reset</button>
-          <button type="button" id="simpleCancelBtn" class="btn-secondary" style="display:none;border-color:rgba(244,63,94,0.45);color:#fda4af;" onclick="cancelSimpleInference()">Cancel</button>
-          <button type="button" id="simpleRunBtn" class="simple-run-btn" onclick="runSimpleInference()" title="Shortcut: Cmd/Ctrl + Enter">▶ Run <span class="kbd-hint">⌘↵</span></button>
+          <button type="button" id="simpleCancelBtn" class="btn-secondary" style="display:none;border-color:rgba(239,68,68,0.45);color:var(--rose);" onclick="cancelSimpleInference()">Cancel</button>
+          <button type="button" id="simpleRunBtn" class="simple-run-btn" onclick="runSimpleInference()" title="Shortcut: Cmd/Ctrl + Enter">Run <span class="kbd-hint" style="background:rgba(127,127,127,0.2);">⌘↵</span></button>
         </div>
       </div>
 
@@ -1186,19 +1192,18 @@
           <div id="simpleTabResult">
             <div class="simple-stage" id="simpleMediaStage">
               <div style="text-align:center;color:var(--text-1);padding:28px;max-width:400px;">
-                <div style="font-size:32px;margin-bottom:8px;">✨</div>
-                <p style="font-size:15px;font-weight:600;color:var(--text-0);margin-bottom:6px;">Ready to create</p>
-                <p style="font-size:12.5px;margin-bottom:14px;">Write a prompt on the left (or press <b>Cmd/Ctrl + Enter</b>) and click <b>Run</b>. Your generated image or video will appear here.</p>
-                <button type="button" class="btn-secondary" style="font-size:12px;padding:7px 13px;" onclick="fillSimpleExample()">✨ Load Example Prompt</button>
+                <p style="font-size:14.5px;font-weight:600;color:var(--text-0);margin-bottom:6px;">No output yet</p>
+                <p style="font-size:12.5px;margin-bottom:14px;">Enter a prompt on the left (or press <b>Cmd/Ctrl + Enter</b>) and click <b>Run</b>.</p>
+                <button type="button" class="btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="fillSimpleExample()">Load Example Prompt</button>
               </div>
             </div>
 
             <div class="simple-output-bar" id="simpleOutputActions" style="display:none;">
-              <a id="simpleDownloadLink" href="#" download class="btn-secondary" style="text-decoration:none;font-size:12px;padding:7px 12px;border-radius:8px;">⬇ Download</a>
-              <a id="simpleOpenLink" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;font-size:12px;padding:7px 12px;border-radius:8px;">↗ Open</a>
-              <button type="button" id="simpleToI2vBtn" class="btn-secondary" style="display:none;font-size:12px;padding:7px 12px;" onclick="reuseOutputAsInput('i2v')">🎞️ Animate (Image → Video)</button>
-              <button type="button" id="simpleToEditBtn" class="btn-secondary" style="display:none;font-size:12px;padding:7px 12px;" onclick="reuseOutputAsInput('i2i')">🪄 Edit Image</button>
-              <button type="button" id="simpleCopySeedBtn" class="btn-secondary" style="display:none;font-size:12px;padding:7px 12px;" onclick="applyLastSeed()">🎲 Use Seed</button>
+              <a id="simpleDownloadLink" href="#" download class="btn-secondary" style="text-decoration:none;font-size:12px;padding:6px 11px;border-radius:6px;">Download</a>
+              <a id="simpleOpenLink" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;font-size:12px;padding:6px 11px;border-radius:6px;">Open</a>
+              <button type="button" id="simpleToI2vBtn" class="btn-secondary" style="display:none;font-size:12px;padding:6px 11px;" onclick="reuseOutputAsInput('i2v')">Animate (Image to Video)</button>
+              <button type="button" id="simpleToEditBtn" class="btn-secondary" style="display:none;font-size:12px;padding:6px 11px;" onclick="reuseOutputAsInput('i2i')">Edit Image</button>
+              <button type="button" id="simpleCopySeedBtn" class="btn-secondary" style="display:none;font-size:12px;padding:6px 11px;" onclick="applyLastSeed()">Use Seed</button>
             </div>
           </div>
 
@@ -1233,6 +1238,14 @@
         </div>
       </div>
     </div>
+
+    <footer style="margin-top:28px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-2);">
+      <span>openfal — Local fal-Compatible Inference Server</span>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <a href="/memory-profile" style="color:var(--text-1);text-decoration:none;font-weight:500;">Memory Profile</a>
+        <a href="/docs" target="_blank" style="color:var(--text-1);text-decoration:none;font-weight:500;">API Docs</a>
+      </div>
+    </footer>
   </section>
 
   <!-- =================================================================== -->
@@ -1609,11 +1622,11 @@
           if (saved === "light" || saved === "dark") return saved;
         }
       } catch (e) {}
-      return "dark";
+      return "light";
     }
 
     function applyTheme(theme) {
-      const next = theme === "light" ? "light" : "dark";
+      const next = theme === "dark" ? "dark" : "light";
       try {
         if (typeof localStorage !== "undefined") {
           localStorage.setItem("openfal_theme", next);
@@ -1626,7 +1639,14 @@
       }
       const btn = document.getElementById("themeToggleBtn");
       if (btn) {
-        btn.textContent = next === "light" ? "🌙 Dark" : "☀️ Light";
+        const sunSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
+        const moonSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+        const label = next === "light" ? "Switch to dark theme" : "Switch to light theme";
+        btn.innerHTML = next === "light" ? moonSvg : sunSvg;
+        if (typeof btn.setAttribute === "function") {
+          btn.setAttribute("aria-label", label);
+          btn.setAttribute("title", label);
+        }
       }
     }
 
@@ -1636,12 +1656,6 @@
     }
 
     function getSavedView() {
-      try {
-        if (typeof localStorage !== "undefined") {
-          const saved = localStorage.getItem("openfal_active_view");
-          if (saved === "simple" || saved === "studio") return saved;
-        }
-      } catch (e) {}
       return "simple";
     }
 
@@ -2289,6 +2303,25 @@
       return { endpoint: ep, payload, meta };
     }
 
+    function highlightCode(src, lang) {
+      const esc = String(src)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      if (lang === "curl") {
+        return esc
+          .replace(/(#.*)$/gm, '<span class="tok-cmt">$1</span>')
+          .replace(/(\s)(-[A-Za-z-]+)(\b)/g, '$1<span class="tok-flag">$2</span>$3')
+          .replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, '<span class="tok-str">$1</span>')
+          .replace(/\b(curl)\b/g, '<span class="tok-fn">$1</span>');
+      }
+      return esc
+        .replace(/(\/\/.*)$/gm, '<span class="tok-cmt">$1</span>')
+        .replace(/("(?:[^"\\]|\\.)*")/g, '<span class="tok-str">$1</span>')
+        .replace(/\b(import|from|const|let|await|async|console)\b/g, '<span class="tok-kw">$1</span>')
+        .replace(/\b(fal|config|subscribe|log)\b/g, '<span class="tok-fn">$1</span>');
+    }
+
     function updateSimpleApiPreview() {
       const jsBox = document.getElementById("simpleJsSnippet");
       const curlBox = document.getElementById("simpleCurlSnippet");
@@ -2296,17 +2329,19 @@
       const { endpoint, payload } = buildSimplePayload();
       const origin = window.location.origin;
       if (jsBox) {
-        jsBox.textContent = `import { fal } from "@fal-ai/client";
+        const jsCode = `import { fal } from "@fal-ai/client";
 fal.config({ proxyUrl: "${origin}" });
 
 const result = await fal.subscribe("${endpoint}", {
   input: ${JSON.stringify(payload, null, 2)}
 });`;
+        jsBox.innerHTML = highlightCode(jsCode, "js");
       }
       if (curlBox) {
-        curlBox.textContent = `curl -X POST "${origin}/${endpoint}" \\
+        const curlCode = `curl -X POST "${origin}/${endpoint}" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify(payload)}'`;
+        curlBox.innerHTML = highlightCode(curlCode, "curl");
       }
     }
 
@@ -2658,7 +2693,7 @@ const result = await fal.subscribe("${endpoint}", {
         simpleState.activeRequestEndpoint = null;
         if (runBtn) {
           runBtn.disabled = false;
-          runBtn.textContent = "▶ Run";
+          runBtn.textContent = "Run";
         }
         if (cancelBtn) cancelBtn.style.display = "none";
       }
@@ -3013,7 +3048,7 @@ const result = await fal.subscribe("${currentEndpoint}", {
   input: ${JSON.stringify(payload, null, 2)}
 });
 console.log(result);`;
-      document.getElementById("sdkSnippetBox").textContent = snippet;
+      document.getElementById("sdkSnippetBox").innerHTML = highlightCode(snippet, "js");
     }
 
     async function runInference() {

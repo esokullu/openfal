@@ -220,12 +220,14 @@ test("Theme toggle switches between dark and light classes and updates button", 
   context.applyTheme("dark");
   assert.equal(root.classList.contains("dark"), true);
   assert.equal(root.classList.contains("light"), false);
-  assert.match(getEl("themeToggleBtn").textContent, /Light/);
+  assert.match(getEl("themeToggleBtn").getAttribute("aria-label"), /light/i);
+  assert.match(getEl("themeToggleBtn").innerHTML, /<svg/);
 
   context.toggleTheme();
   assert.equal(root.classList.contains("light"), true);
   assert.equal(root.classList.contains("dark"), false);
-  assert.match(getEl("themeToggleBtn").textContent, /Dark/);
+  assert.match(getEl("themeToggleBtn").getAttribute("aria-label"), /dark/i);
+  assert.match(getEl("themeToggleBtn").innerHTML, /<svg/);
   assert.match(html, /html\.light\s*\{/);
 });
 
