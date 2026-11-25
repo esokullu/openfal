@@ -156,19 +156,6 @@
       display: block;
       flex-shrink: 0;
     }
-    nav {
-      display: flex;
-      align-items: center;
-      gap: 22px;
-      flex-wrap: wrap;
-    }
-    nav a {
-      color: var(--text-1);
-      font-size: 14px;
-      font-weight: 500;
-    }
-    nav a:hover { color: var(--text-0); text-decoration: none; }
-
     .btn {
       display: inline-flex;
       align-items: center;
@@ -244,15 +231,6 @@
       gap: 12px;
       margin-bottom: 22px;
     }
-    .hero-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      font-size: 13px;
-      color: var(--text-2);
-    }
-    .hero-meta span strong { color: var(--text-1); font-weight: 600; }
-
     /* Terminal Card */
     .terminal {
       background: var(--terminal-bg);
@@ -313,6 +291,7 @@
       margin-bottom: 10px;
     }
     .section-desc { color: var(--text-1); font-size: 15.5px; }
+    #benchmarks .section-head { max-width: none; }
 
     /* Cards Grid */
     .grid-3 {
@@ -527,27 +506,11 @@
       align-items: center;
       gap: 14px;
     }
-    .footer-links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 18px;
-    }
-
     @media (max-width: 920px) {
       .hero-grid, .grid-3, .grid-2, .bundle-grid {
         grid-template-columns: 1fr;
       }
       .nav-inner { flex-wrap: wrap; padding: 10px 0; }
-      nav {
-        order: 3;
-        width: 100%;
-        gap: 14px;
-        overflow-x: auto;
-        flex-wrap: nowrap;
-        padding-top: 6px;
-        border-top: 1px solid var(--border-soft);
-      }
-      nav a { white-space: nowrap; font-size: 13px; }
     }
   </style>
 </head>
@@ -558,14 +521,6 @@
         <img class="brand-logo" src="./assets/logo-mark.svg" alt="" width="32" height="32" />
         <span>openfal</span>
       </a>
-      <nav aria-label="Primary">
-        <a href="#why">Why openfal</a>
-        <a href="#quickstart">Quickstart</a>
-        <a href="#api">API &amp; SDK</a>
-        <a href="#workflows">Workflows</a>
-        <a href="#compare">Comparison</a>
-        <a href="#benchmarks">Benchmarks</a>
-      </nav>
       <div class="nav-actions">
         <button class="btn btn-sm" id="theme-toggle" type="button" aria-label="Switch to dark theme" title="Switch to dark theme" style="padding:7px 9px;">
           <span id="theme-icon" aria-hidden="true" style="display:inline-flex;align-items:center;"></span>
@@ -595,11 +550,6 @@
           <div class="hero-actions">
             <a class="btn btn-primary" href="#quickstart">Start in 3 commands</a>
             <a class="btn" href="#api">See fal-style SDK</a>
-          </div>
-          <div class="hero-meta">
-            <span><strong>Models:</strong> FP8 / INT8 single-file checkpoints</span>
-            <span><strong>UI:</strong> Built-in Studio + <code>/docs</code></span>
-            <span><strong>Queue:</strong> Polling + SSE streams</span>
           </div>
         </div>
 
@@ -976,15 +926,6 @@ result = openfal.<span class="tok-fn">subscribe</span>(
           </table>
         </div>
 
-        <div class="callout">
-          <h3>Verified engineering limits to know before deploying</h3>
-          <ul>
-            <li><strong>Single compute device:</strong> Runners execute on logical <code>cuda:0</code> (or MPS/CPU fallback). Profiles named <code>dual_*</code> are memory-planning configs and do not perform multi-GPU tensor parallelism.</li>
-            <li><strong>Profile telemetry is estimated:</strong> Studio's block map and <code>/v1/engine/status</code> report profile estimates (<code>telemetry_kind: "profile_estimate"</code>), not live hardware measurements.</li>
-            <li><strong>macOS status:</strong> MPS and CPU fallback branches have host regression coverage, but actual Apple Silicon inference and unified-memory headroom have not been benchmarked yet.</li>
-            <li><strong>Local trust boundary:</strong> Binds <code>127.0.0.1</code> by default with an in-memory queue (lost on restart). Pass <code>--api-key</code> (or set <code>OPENFAL_API_KEY</code>) whenever exposing <code>--host 0.0.0.0</code> on a LAN.</li>
-          </ul>
-        </div>
       </div>
     </section>
 
@@ -1154,13 +1095,6 @@ result = openfal.<span class="tok-fn">subscribe</span>(
   <footer>
     <div class="container footer-inner">
       <div><strong>openfal</strong> · MIT Licensed source code (model weights retain upstream licenses).</div>
-      <div class="footer-links">
-        <a href="https://github.com/esokullu/openfal" target="_blank" rel="noopener noreferrer">GitHub</a>
-        <a href="https://github.com/esokullu/openfal/blob/main/README.md" target="_blank" rel="noopener noreferrer">README</a>
-        <a href="https://github.com/esokullu/openfal/blob/main/docs/benchmark-rtx-5090-2026-11-18.md" target="_blank" rel="noopener noreferrer">RTX 5090 Benchmarks</a>
-        <a href="https://github.com/esokullu/openfal/blob/main/docs/validation-2026-11-17.md" target="_blank" rel="noopener noreferrer">Windows Validation Record</a>
-        <a href="https://github.com/esokullu/openfal/blob/main/docs/macos-validation.md" target="_blank" rel="noopener noreferrer">macOS Validation Guide</a>
-      </div>
     </div>
   </footer>
 
