@@ -1,5 +1,7 @@
 # openfal
 
+> **Independent project:** openfal is not affiliated with, endorsed by, or sponsored by fal.ai.
+
 Local PyTorch inference for Qwen-Image-2.1, Wan 2.2 and MiniMax H3, with an HTTP API, a request queue, and a browser Studio. Model checkpoints stay on the Windows/Linux/macOS host running the server; clients can connect from another machine.
 
 The runtime loads supported single-file FP8/INT8 checkpoints and moves model blocks between host memory and the selected compute device. Hardware profiles guide offloading. They do not establish measured memory use, multi-GPU execution, or a performance advantage over other engines.
