@@ -31,11 +31,11 @@ class OpenFalClient:
     def __init__(
         self,
         base_url: Optional[str] = None,
-        timeout: float = 120.0,
+        timeout: Optional[float] = None,
         api_key: Optional[str] = None,
     ):
         self.base_url = (base_url or os.environ.get("OPENFAL_BASE_URL", "http://127.0.0.1:8000")).rstrip("/")
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else float(os.environ.get("OPENFAL_TIMEOUT", "120"))
         self.api_key = api_key if api_key is not None else (
             os.environ.get("OPENFAL_API_KEY") or os.environ.get("FAL_KEY") or None
         )
@@ -49,11 +49,7 @@ class OpenFalClient:
         return headers
 
     def run(self, endpoint_id: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        ep = endpoint_id.lstrip("/")
-        with httpx.Client(base_url=self.base_url, timeout=self.timeout, headers=self._headers()) as client:
-            resp = client.post(f"/{ep}", json=arguments)
-            resp.raise_for_status()
-            return resp.json()
+        return self.subscribe(endpoint_id, arguments, with_logs=False)
 
     def submit(self, endpoint_id: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         ep = endpoint_id.lstrip("/")
