@@ -2537,9 +2537,14 @@ const result = await fal.subscribe("${endpoint}", {
         const res = await fetch("/v1/jobs");
         if (!res.ok) return;
         const data = await res.json();
-        const completed = (data.jobs || []).filter(j => j.status === "COMPLETED" && j.result);
+        const jobs = data.jobs || [];
+        const completed = jobs.filter(j => j.status === "COMPLETED" && j.result);
         simpleState.history = completed.slice(0, 12);
         renderSimpleHistory();
+        const active = jobs.find(j => j.status === "IN_PROGRESS" && j.request_id);
+        if (active && !simpleState.running) {
+          attachSimpleJob(active);
+        }
       } catch (e) {}
     }
 
@@ -2553,14 +2558,151 @@ const result = await fal.subscribe("${endpoint}", {
       } catch (e) {}
     }
 
+    function simpleRunEls() {
+      return {
+        runBtn: document.getElementById("simpleRunBtn"),
+        cancelBtn: document.getElementById("simpleCancelBtn"),
+        logBox: document.getElementById("simpleLogBox"),
+        stage: document.getElementById("simpleMediaStage"),
+      };
+    }
+
+    function beginSimpleRunUi(startedAt, message) {
+      const { runBtn, cancelBtn, logBox } = simpleRunEls();
+      simpleState.running = true;
+      if (runBtn) {
+        runBtn.disabled = true;
+        runBtn.textContent = "Generating... 0.0s";
+      }
+      if (cancelBtn) cancelBtn.style.display = "inline-block";
+      if (logBox) logBox.textContent = message;
+      selectSimpleOutputTab("result");
+      if (simpleState.timerHandle) clearInterval(simpleState.timerHandle);
+      simpleState.timerHandle = setInterval(() => {
+        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+        if (runBtn) runBtn.textContent = `Generating... ${elapsed}s`;
+      }, 200);
+    }
+
+    function finishSimpleRunUi() {
+      const { runBtn, cancelBtn } = simpleRunEls();
+      if (simpleState.timerHandle) {
+        clearInterval(simpleState.timerHandle);
+        simpleState.timerHandle = null;
+      }
+      simpleState.running = false;
+      simpleState.activeRequestId = null;
+      simpleState.activeRequestEndpoint = null;
+      if (runBtn) {
+        runBtn.disabled = false;
+        runBtn.textContent = "Run";
+      }
+      if (cancelBtn) cancelBtn.style.display = "none";
+    }
+
+    function simpleLoadingRenderer(startedAt, title) {
+      return (msg) => {
+        const { runBtn, stage } = simpleRunEls();
+        if (!stage) return;
+        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+        if (runBtn) runBtn.textContent = `Generating... ${elapsed}s`;
+        stage.innerHTML = `
+          <div style="text-align:center;color:var(--text-1);padding:24px;max-width:420px;">
+            <div class="simple-spinner"></div>
+            <div style="font-size:14px;font-weight:600;color:var(--text-0);margin-bottom:6px;">Generating with ${title}</div>
+            <div style="font-size:12px;color:var(--accent);margin-bottom:6px;">${elapsed}s elapsed</div>
+            <div style="font-size:11.5px;color:var(--text-1);">${msg || "Preparing model..."}</div>
+          </div>
+        `;
+      };
+    }
+
+    function showSimpleFailure(err) {
+      const { logBox, stage } = simpleRunEls();
+      const cancelled = String(err.message || "").toLowerCase().includes("cancelled");
+      setSimpleStatus(cancelled ? "Cancelled" : "Error", cancelled ? "warn" : "err");
+      if (logBox) logBox.textContent += `[${cancelled ? "CANCELLED" : "ERROR"}] ${err.message}\n`;
+      if (stage) {
+        stage.innerHTML = `
+          <div style="text-align:center;padding:24px;max-width:440px;">
+            <div style="font-size:26px;margin-bottom:8px;">${cancelled ? "⏹️" : "⚠️"}</div>
+            <div style="font-size:14px;font-weight:600;color:${cancelled ? "#fcd34d" : "#fda4af"};margin-bottom:6px;">${cancelled ? "Generation cancelled" : "Generation failed"}</div>
+            <div style="font-size:12px;color:var(--text-1);word-break:break-word;">${err.message}</div>
+          </div>
+        `;
+      }
+    }
+
+    async function trackSimpleJob(endpoint, requestId, prompt, renderLoading) {
+      const { logBox } = simpleRunEls();
+      let seenLogs = 0;
+      let lastMsg = "Queued...";
+      while (true) {
+        const stRes = await fetch(`/${endpoint}/requests/${requestId}/status?logs=1`);
+        const st = await stRes.json();
+        if (!stRes.ok) throw new Error(st.detail || st.error || "Status polling failed.");
+        const logs = st.logs || [];
+        while (seenLogs < logs.length) {
+          lastMsg = logs[seenLogs].message;
+          if (logBox) {
+            logBox.textContent += `${lastMsg}\n`;
+            logBox.scrollTop = logBox.scrollHeight;
+          }
+          seenLogs++;
+        }
+        if (st.status === "IN_PROGRESS") {
+          setSimpleStatus("Generating", "info");
+          renderLoading(lastMsg);
+        }
+        if (st.status === "COMPLETED") break;
+        if (st.status === "CANCELLED") {
+          throw new Error("Cancelled by user");
+        }
+        if (st.status === "FAILED") {
+          throw new Error(st.error || st.status);
+        }
+        await new Promise(r => setTimeout(r, 180));
+      }
+
+      const finalRes = await fetch(`/${endpoint}/requests/${requestId}`);
+      const out = await finalRes.json();
+      if (!finalRes.ok) throw new Error(out.detail || out.error || "Could not read result.");
+
+      const synthetic = out.strata_engine && out.strata_engine.mode === "synthetic";
+      const secs = out.timings && out.timings.inference !== undefined ? `${out.timings.inference}s` : "";
+      setSimpleStatus(`${synthetic ? "Synthetic" : "Completed"}${secs ? ` in ${secs}` : ""} • Seed ${out.seed}`, "ok");
+      renderSimpleResult(out);
+      addSimpleHistoryItem({
+        request_id: requestId,
+        endpoint_id: endpoint,
+        prompt,
+        result: out,
+      });
+      return out;
+    }
+
+    async function attachSimpleJob(job) {
+      const endpoint = job.endpoint_id;
+      const startedAt = job.created_at ? job.created_at * 1000 : Date.now();
+      simpleState.activeRequestId = job.request_id;
+      simpleState.activeRequestEndpoint = endpoint;
+      beginSimpleRunUi(startedAt, `[openfal] Attached to running request ${job.request_id} (${endpoint})\n`);
+      setSimpleStatus("Attached to running job", "info");
+      const renderLoading = simpleLoadingRenderer(startedAt, endpoint);
+      renderLoading("Resuming status stream...");
+      try {
+        await trackSimpleJob(endpoint, job.request_id, job.prompt, renderLoading);
+      } catch (err) {
+        showSimpleFailure(err);
+      } finally {
+        finishSimpleRunUi();
+      }
+    }
+
     async function runSimpleInference() {
       if (simpleState.running) return;
-      const runBtn = document.getElementById("simpleRunBtn");
-      const cancelBtn = document.getElementById("simpleCancelBtn");
-      const logBox = document.getElementById("simpleLogBox");
-      const stage = document.getElementById("simpleMediaStage");
-
       const { endpoint, payload, meta } = buildSimplePayload();
+      const { logBox } = simpleRunEls();
 
       // Client-side validation matching backend rules
       if (meta && meta.isWanAnimate && (!payload.face_image_url || !payload.driving_video_url)) {
@@ -2580,39 +2722,14 @@ const result = await fal.subscribe("${endpoint}", {
         return;
       }
 
-      simpleState.running = true;
+      const startedAt = Date.now();
       simpleState.activeRequestId = null;
       simpleState.activeRequestEndpoint = endpoint;
-      const startedAt = Date.now();
-
-      if (runBtn) {
-        runBtn.disabled = true;
-        runBtn.textContent = "Generating... 0.0s";
-      }
-      if (cancelBtn) cancelBtn.style.display = "inline-block";
-      if (logBox) logBox.textContent = `[openfal] Submitting to /queue/${endpoint}...\n`;
-      selectSimpleOutputTab("result");
+      beginSimpleRunUi(startedAt, `[openfal] Submitting to /queue/${endpoint}...\n`);
       setSimpleStatus("Submitting...", "info");
 
-      const renderLoading = (msg) => {
-        if (!stage) return;
-        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-        if (runBtn) runBtn.textContent = `Generating... ${elapsed}s`;
-        stage.innerHTML = `
-          <div style="text-align:center;color:var(--text-1);padding:24px;max-width:420px;">
-            <div class="simple-spinner"></div>
-            <div style="font-size:14px;font-weight:600;color:var(--text-0);margin-bottom:6px;">Generating with ${meta ? meta.name : endpoint}</div>
-            <div style="font-size:12px;color:var(--accent);margin-bottom:6px;">${elapsed}s elapsed</div>
-            <div style="font-size:11.5px;color:var(--text-1);">${msg || "Preparing model..."}</div>
-          </div>
-        `;
-      };
-
+      const renderLoading = simpleLoadingRenderer(startedAt, meta ? meta.name : endpoint);
       renderLoading("Queued...");
-      simpleState.timerHandle = setInterval(() => {
-        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-        if (runBtn) runBtn.textContent = `Generating... ${elapsed}s`;
-      }, 200);
 
       try {
         const submitRes = await fetch(`/queue/${endpoint}`, {
@@ -2626,76 +2743,11 @@ const result = await fal.subscribe("${endpoint}", {
         }
         simpleState.activeRequestId = job.request_id;
         setSimpleStatus("In Queue", "info");
-
-        let seenLogs = 0;
-        let lastMsg = "Queued...";
-        while (true) {
-          const stRes = await fetch(`/${endpoint}/requests/${job.request_id}/status?logs=1`);
-          const st = await stRes.json();
-          if (!stRes.ok) throw new Error(st.detail || st.error || "Status polling failed.");
-          const logs = st.logs || [];
-          while (seenLogs < logs.length) {
-            lastMsg = logs[seenLogs].message;
-            if (logBox) {
-              logBox.textContent += `${lastMsg}\n`;
-              logBox.scrollTop = logBox.scrollHeight;
-            }
-            seenLogs++;
-          }
-          if (st.status === "IN_PROGRESS") {
-            setSimpleStatus("Generating", "info");
-            renderLoading(lastMsg);
-          }
-          if (st.status === "COMPLETED") break;
-          if (st.status === "CANCELLED") {
-            throw new Error("Cancelled by user");
-          }
-          if (st.status === "FAILED") {
-            throw new Error(st.error || st.status);
-          }
-          await new Promise(r => setTimeout(r, 180));
-        }
-
-        const finalRes = await fetch(`/${endpoint}/requests/${job.request_id}`);
-        const out = await finalRes.json();
-        if (!finalRes.ok) throw new Error(out.detail || out.error || "Could not read result.");
-
-        const synthetic = out.strata_engine && out.strata_engine.mode === "synthetic";
-        const secs = out.timings && out.timings.inference !== undefined ? `${out.timings.inference}s` : "";
-        setSimpleStatus(`${synthetic ? "Synthetic" : "Completed"}${secs ? ` in ${secs}` : ""} • Seed ${out.seed}`, "ok");
-        renderSimpleResult(out);
-        addSimpleHistoryItem({
-          request_id: job.request_id,
-          endpoint_id: endpoint,
-          prompt: payload.prompt,
-          result: out,
-        });
+        await trackSimpleJob(endpoint, job.request_id, payload.prompt, renderLoading);
       } catch (err) {
-        const cancelled = String(err.message || "").toLowerCase().includes("cancelled");
-        setSimpleStatus(cancelled ? "Cancelled" : "Error", cancelled ? "warn" : "err");
-        if (logBox) logBox.textContent += `[${cancelled ? "CANCELLED" : "ERROR"}] ${err.message}\n`;
-        if (stage) {
-          stage.innerHTML = `
-            <div style="text-align:center;padding:24px;max-width:440px;">
-              <div style="font-size:26px;margin-bottom:8px;">${cancelled ? "⏹️" : "⚠️"}</div>
-              <div style="font-size:14px;font-weight:600;color:${cancelled ? "#fcd34d" : "#fda4af"};margin-bottom:6px;">${cancelled ? "Generation cancelled" : "Generation failed"}</div>
-              <div style="font-size:12px;color:var(--text-1);word-break:break-word;">${err.message}</div>
-            </div>
-          `;
-        }
+        showSimpleFailure(err);
       } finally {
-        if (simpleState.timerHandle) {
-          clearInterval(simpleState.timerHandle);
-          simpleState.timerHandle = null;
-        }
-        simpleState.running = false;
-        simpleState.activeRequestId = null;
-        simpleState.activeRequestEndpoint = null;
-        if (runBtn) {
-          runBtn.disabled = false;
-          runBtn.textContent = "Run";
-        }
-        if (cancelBtn) cancelBtn.style.display = "none";
+        finishSimpleRunUi();
       }
     }
 
